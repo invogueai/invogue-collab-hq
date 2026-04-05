@@ -1100,6 +1100,8 @@ if(!loggedIn) {
 
 // ═══════════════════════════ MAIN APP RENDER ═══════════════════════════
 const loggedRC = ROLE_CFG[role]||ROLE_CFG.viewer;
+const recentNotifs = getRecentNotifications();
+const unreads = recentNotifs.filter(n => new Date(n.time) > new Date(lastSeenTime)).length;
 return (
   <div style={{fontFamily:"'DM Sans',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&family=Newsreader:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet"/>

@@ -591,11 +591,12 @@ export default function InvogueCollabHQ() {
         avg_rate:nDeal.amount,
         rating:"A",
         notes:"Auto-created from deal",
-        tags:"[]",
+        tags:[],
         created_at:ts
       };
-      await supabase.from('influencers').insert(infData);
-      setInfluencers(prev=>[{...infData,tags:[],...infData,added:ts.slice(0,10)},...prev]);
+      const {error:infErr} = await supabase.from('influencers').insert(infData);
+      if(infErr) console.error("Influencer insert failed:",infErr);
+      else setInfluencers(prev=>[{...infData,added:ts.slice(0,10)},...prev]);
     }
 
     await supabase.from('audit_log').insert({
@@ -1974,9 +1975,10 @@ return (
                   if(!nInf.name||!nInf.phone) { notify("Name and phone required","err"); return; }
                   const infId = uid();
                   const parsedTags = nInf.tags?nInf.tags.split(",").map(t=>t.trim().toLowerCase()).filter(Boolean):[];
-                  supabase.from('influencers').insert({id:infId,name:nInf.name,platform:nInf.platform,handle:nInf.handle,profile:nInf.profile,followers:nInf.followers,category:nInf.category,city:nInf.city,phone:nInf.phone,email:nInf.email,address:nInf.address,poc:nInf.poc,avg_rate:+nInf.avgRate||0,rating:nInf.rating,notes:nInf.notes,tags:parsedTags});
+                  supabase.from('influencers').insert({id:infId,name:nInf.name,platform:nInf.platform,handle:nInf.handle,profile:nInf.profile,followers:nInf.followers,category:nInf.category,city:nInf.city,phone:nInf.phone,email:nInf.email,address:nInf.address,poc:nInf.poc,avg_rate:+nInf.avgRate||0,rating:nInf.rating,notes:nInf.notes,tags:parsedTags}).then(({error})=>{if(error){console.error("Add influencer failed:",error);notify("Failed to save: "+error.message,"err");}});
                   setInfluencers(prev=>[...prev,{id:infId,name:nInf.name,platform:nInf.platform,handle:nInf.handle,profile:nInf.profile,followers:nInf.followers,category:nInf.category,city:nInf.city,phone:nInf.phone,email:nInf.email,address:nInf.address,poc:nInf.poc,avgRate:+nInf.avgRate||0,rating:nInf.rating,notes:nInf.notes,tags:parsedTags,added:new Date().toISOString().slice(0,10)}]);
                   setModal(null);
+                  setNInf({name:"",platform:"Instagram",handle:"",profile:"",followers:"",category:"",city:"",phone:"",email:"",address:"",poc:"",avgRate:"",rating:"B+",notes:"",tags:""});
                   notify(`${nInf.name} added to database!`);
                 }}>Add Influencer</Btn>
               </div>

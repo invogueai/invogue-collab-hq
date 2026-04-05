@@ -8,20 +8,14 @@ import { supabase } from '../lib/supabase';
 
 // ─── DESIGN SYSTEM ───
 const T = {
-  bg: "#0F0F1A", surface: "#1A1A2E", surfaceAlt: "#16213E", brand: "#E94560", gold: "#FFD700",
-  goldSoft: "rgba(255,215,0,.12)", goldMid: "#FFA500", border: "rgba(255,255,255,.08)",
-  text: "#F5F5F5", sub: "#8B8FA3", faint: "#5C5F73",
-  ok: "#00D68F", okBg: "rgba(0,214,143,.12)", warn: "#FFAA00", warnBg: "rgba(255,170,0,.12)",
-  err: "#FF3D71", errBg: "rgba(255,61,113,.12)", info: "#0095FF", infoBg: "rgba(0,149,255,.12)",
-  purple: "#7C3AED", purpleBg: "rgba(124,58,237,.12)", teal: "#06B6D4", tealBg: "rgba(6,182,212,.12)",
-  gradient1: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-  gradient2: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-  gradient3: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
-  gradient4: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
-  gradient5: "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
-  gradientGold: "linear-gradient(135deg, #FFD700 0%, #FFA500 100%)",
-  cardShadow: "0 8px 32px rgba(0,0,0,.3)",
-  cardShadowHover: "0 12px 40px rgba(233,69,96,.2)",
+  bg: "#F6F4F0", surface: "#FFFFFF", surfaceAlt: "#FAF9F7", brand: "#770A1C", gold: "#B08D42",
+  goldSoft: "#EDE7D6", goldMid: "#D4C49A", border: "rgba(26,26,26,.12)",
+  text: "#1A1A1A", sub: "#7D766A", faint: "#B5AFA4",
+  ok: "#1B7A3D", okBg: "#E2F3E8", warn: "#C27A08", warnBg: "#FEF4DD",
+  err: "#B42318", errBg: "#FDE8E8", info: "#0F5BA7", infoBg: "#E0EDFA",
+  purple: "#6527BE", purpleBg: "#EFE4FF", teal: "#0E7A71", tealBg: "#E0F5F3",
+  cardShadow: "0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04)",
+  cardShadowHover: "0 4px 12px rgba(0,0,0,.08)",
 };
 
 const STATUS_CFG = {
@@ -144,36 +138,36 @@ const ROLE_CFG = {
 };
 
 // ─── REUSABLE COMPONENTS ───
-const Badge = ({s,sm}) => { const x=STATUS_CFG[s]||{l:s,c:T.sub,bg:"rgba(255,255,255,.1)",i:"?"}; return <span style={{display:"inline-flex",alignItems:"center",gap:"4px",padding:sm?"3px 8px":"4px 12px",borderRadius:"20px",fontSize:sm?"10px":"11px",fontWeight:700,color:x.c,background:x.bg,whiteSpace:"nowrap",letterSpacing:".3px",border:`1px solid ${x.c}22`,backdropFilter:"blur(4px)"}}>{x.i} {x.l}</span>; };
+const Badge = ({s,sm}) => { const x=STATUS_CFG[s]||{l:s,c:T.sub,bg:T.goldSoft,i:"?"}; return <span style={{display:"inline-flex",alignItems:"center",gap:"4px",padding:sm?"3px 8px":"4px 12px",borderRadius:"4px",fontSize:sm?"9px":"10px",fontWeight:600,color:x.c,background:x.bg,whiteSpace:"nowrap",letterSpacing:".5px",textTransform:"uppercase",border:"none",fontFamily:"Barlow,sans-serif"}}>{x.i} {x.l}</span>; };
 const DBadge = ({s}) => { const m={pending:{l:"Pending",c:T.warn,bg:T.warnBg},live:{l:"Delivered",c:T.ok,bg:T.okBg}}; const x=m[s]||m.pending; return <span style={{padding:"2px 6px",borderRadius:"8px",fontSize:"9.5px",fontWeight:700,color:x.c,background:x.bg}}>{x.l}</span>; };
 
 const Btn = ({children,onClick,v="primary",sm,disabled,sx})=>{
   const vs={
-    primary:{bg:"linear-gradient(135deg, #E94560, #c62a47)",c:"#fff",border:"none"},
-    gold:{bg:"linear-gradient(135deg, #FFD700, #FFA500)",c:"#1a1a2e",border:"none"},
-    outline:{bg:"transparent",c:T.text,border:`1.5px solid ${T.border}`},
-    danger:{bg:"linear-gradient(135deg, #FF3D71, #DB2777)",c:"#fff",border:"none"},
-    ok:{bg:"linear-gradient(135deg, #00D68F, #06B6D4)",c:"#fff",border:"none"},
-    purple:{bg:"linear-gradient(135deg, #7C3AED, #A855F7)",c:"#fff",border:"none"},
+    primary:{bg:T.brand,c:"#F6DFC1",border:"none"},
+    gold:{bg:T.gold,c:"#fff",border:"none"},
+    outline:{bg:"transparent",c:T.text,border:`1px solid ${T.border}`},
+    danger:{bg:T.err,c:"#fff",border:"none"},
+    ok:{bg:T.ok,c:"#fff",border:"none"},
+    purple:{bg:T.purple,c:"#fff",border:"none"},
     ghost:{bg:"transparent",c:T.sub,border:"none"}
   };
   const vv=vs[v]||vs.primary;
-  return <button onClick={onClick} disabled={disabled} style={{border:vv.border,borderRadius:"10px",padding:sm?"6px 12px":"9px 18px",fontSize:sm?"11px":"12px",fontWeight:700,cursor:disabled?"not-allowed":"pointer",fontFamily:"inherit",opacity:disabled?.35:1,background:vv.bg,color:vv.c,display:"inline-flex",alignItems:"center",gap:"5px",whiteSpace:"nowrap",letterSpacing:".3px",boxShadow:v==="primary"||v==="gold"?"0 4px 14px rgba(0,0,0,.25)":"none",...sx}}>{children}</button>;
+  return <button onClick={onClick} disabled={disabled} style={{border:vv.border,borderRadius:"4px",padding:sm?"6px 12px":"9px 18px",fontSize:sm?"10px":"11px",fontWeight:600,cursor:disabled?"not-allowed":"pointer",fontFamily:"Barlow,sans-serif",textTransform:"uppercase",letterSpacing:"0.5px",opacity:disabled?.5:1,background:vv.bg,color:vv.c,display:"inline-flex",alignItems:"center",gap:"5px",whiteSpace:"nowrap",transition:"all .2s ease",...sx}}>{children}</button>;
 };
 
 const Inp = ({value,onChange,type="text",disabled,placeholder,prefix,error})=>(
   <div style={{display:"flex"}}>
-    {prefix&&<span style={{padding:"9px 10px",background:"rgba(255,255,255,.06)",border:`1.5px solid ${T.border}`,borderRight:"none",borderRadius:"10px 0 0 10px",fontSize:"11px",color:T.sub,lineHeight:"1.3"}}>{prefix}</span>}
-    <input type={type} value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} style={{width:"100%",padding:"9px 12px",border:`1.5px solid ${error?T.err:T.border}`,borderRadius:prefix?"0 10px 10px 0":"10px",fontSize:"12px",fontFamily:"inherit",color:T.text,background:disabled?"rgba(255,255,255,.03)":"rgba(255,255,255,.06)",outline:"none",boxSizing:"border-box",transition:"all .2s"}}/>
+    {prefix&&<span style={{padding:"9px 10px",background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRight:"none",borderRadius:"4px 0 0 4px",fontSize:"11px",color:T.sub,lineHeight:"1.3",fontFamily:"Archivo,sans-serif"}}>{prefix}</span>}
+    <input type={type} value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} style={{width:"100%",padding:"9px 12px",border:`1px solid ${error?T.err:T.border}`,borderRadius:prefix?"0 4px 4px 0":"4px",fontSize:"12px",fontFamily:"Archivo,sans-serif",color:T.text,background:disabled?T.surfaceAlt:T.surface,outline:"none",boxSizing:"border-box",transition:"all .2s"}}/>
   </div>
 );
 
 const Textarea = ({value,onChange,disabled,placeholder,rows=3,error})=>(
-  <textarea value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} rows={rows} style={{width:"100%",padding:"9px 12px",border:`1.5px solid ${error?T.err:T.border}`,borderRadius:"10px",fontSize:"12px",fontFamily:"inherit",color:T.text,background:disabled?"rgba(255,255,255,.03)":"rgba(255,255,255,.06)",outline:"none",boxSizing:"border-box",resize:"vertical",transition:"all .2s"}}/>
+  <textarea value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} rows={rows} style={{width:"100%",padding:"9px 12px",border:`1px solid ${error?T.err:T.border}`,borderRadius:"4px",fontSize:"12px",fontFamily:"Archivo,sans-serif",color:T.text,background:disabled?T.surfaceAlt:T.surface,outline:"none",boxSizing:"border-box",resize:"vertical",transition:"all .2s"}}/>
 );
 
 const Sel = ({value,onChange,options})=>(
-  <select value={value} onChange={onChange} style={{width:"100%",padding:"9px 12px",border:`1.5px solid ${T.border}`,borderRadius:"10px",fontSize:"12px",fontFamily:"inherit",color:T.text,background:T.surface,outline:"none",boxSizing:"border-box",cursor:"pointer",transition:"all .2s"}}>
+  <select value={value} onChange={onChange} style={{width:"100%",padding:"9px 12px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"12px",fontFamily:"Archivo,sans-serif",color:T.text,background:T.surface,outline:"none",boxSizing:"border-box",cursor:"pointer",transition:"all .2s"}}>
     {options.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
   </select>
 );
@@ -182,25 +176,24 @@ const Field = ({label,children,span,error,required})=>(<div style={{gridColumn:s
 
 const Modal = ({open,onClose,title,children,w=540})=>{
   if(!open) return null;
-  return <div role="presentation" style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"12px",animation:"fadeIn .2s ease"}} onClick={onClose}>
-    <div role="dialog" aria-modal="true" aria-label={title} onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:"20px",width:`${w}px`,maxWidth:"96vw",minWidth:"280px",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 80px rgba(0,0,0,.5)",border:`1px solid ${T.border}`,animation:"fadeUp .25s ease"}}>
+  return <div role="presentation" style={{position:"fixed",inset:0,background:"rgba(0,0,0,.25)",backdropFilter:"none",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"12px",animation:"fadeIn .2s ease"}} onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label={title} onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:"8px",width:`${w}px`,maxWidth:"96vw",minWidth:"280px",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 25px 50px rgba(0,0,0,.12)",border:`1px solid ${T.border}`,animation:"fadeUp .25s ease"}}>
       <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-        <span style={{fontWeight:800,fontSize:"15px",color:T.text,letterSpacing:".2px"}}>{title}</span>
-        <button onClick={onClose} style={{background:"rgba(255,255,255,.06)",border:`1px solid ${T.border}`,borderRadius:"8px",fontSize:"14px",cursor:"pointer",color:T.sub,padding:"4px 8px",lineHeight:1,transition:"all .15s"}}>✕</button>
+        <span style={{fontWeight:700,fontSize:"15px",color:T.text,letterSpacing:".5px",fontFamily:"Barlow,sans-serif",textTransform:"uppercase"}}>{title}</span>
+        <button onClick={onClose} style={{background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"14px",cursor:"pointer",color:T.sub,padding:"4px 8px",lineHeight:1,transition:"all .15s"}}>✕</button>
       </div>
       <div style={{padding:"20px",overflowY:"auto",flex:1}}>{children}</div>
     </div>
   </div>;
 };
 
-const StatBox = ({l,v,c,sub,gradient})=>(<div className="stat-hover" style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"16px",padding:"16px 18px",position:"relative",overflow:"hidden",transition:"all .25s ease",cursor:"default"}}>
-  {gradient&&<div style={{position:"absolute",top:0,left:0,right:0,height:"3px",background:gradient,borderRadius:"16px 16px 0 0"}}/>}
-  <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".8px",marginBottom:"6px"}}>{l}</div>
-  <div style={{fontSize:"24px",fontWeight:900,color:c||T.text,lineHeight:1.1,fontFamily:"inherit"}}>{v}</div>
-  {sub&&<div style={{fontSize:"10px",color:T.sub,marginTop:"4px"}}>{sub}</div>}
+const StatBox = ({l,v,c,sub,gradient})=>(<div className="stat-hover" style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"16px 18px",position:"relative",overflow:"hidden",transition:"all .25s ease",cursor:"default",borderLeft:`3px solid ${c||T.brand}`}}>
+  <div style={{fontSize:"9px",fontWeight:600,color:T.sub,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"8px",fontFamily:"Barlow,sans-serif"}}>{l}</div>
+  <div style={{fontSize:"20px",fontWeight:700,color:c||T.text,lineHeight:1.1,fontFamily:"Barlow,sans-serif"}}>{v}</div>
+  {sub&&<div style={{fontSize:"11px",color:T.sub,marginTop:"6px",fontFamily:"Archivo,sans-serif"}}>{sub}</div>}
 </div>);
 
-const Section = ({title,icon,children,action})=>(<div style={{marginBottom:"20px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}><span style={{fontSize:"12px",fontWeight:800,color:T.text,textTransform:"uppercase",letterSpacing:".8px"}}>{icon} {title}</span>{action}</div>{children}</div>);
+const Section = ({title,icon,children,action})=>(<div style={{marginBottom:"20px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",paddingBottom:"10px",borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:"11px",fontWeight:700,color:T.text,textTransform:"uppercase",letterSpacing:"1px",fontFamily:"Barlow,sans-serif"}}>{icon} {title}</span>{action}</div>{children}</div>);
 export default function InvogueCollabHQ() {
   const [loaded, setLoaded] = useState(false);
   const [campaigns, setCampaigns] = useState([]);
@@ -1138,93 +1131,88 @@ export default function InvogueCollabHQ() {
 if(!loggedIn) {
   const rc = (r) => ROLE_CFG[r]||ROLE_CFG.viewer;
   return (
-    <div style={{fontFamily:"'DM Sans',sans-serif",background:"linear-gradient(135deg, #0F0F1A 0%, #1A1A2E 30%, #16213E 60%, #0F0F1A 100%)",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",position:"relative",overflow:"hidden"}}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&family=Newsreader:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet"/>
-          <style>{`
+    <div style={{fontFamily:"'Archivo',sans-serif",background:"#F6F4F0",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",position:"relative",overflow:"hidden"}}>
+      <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@600;700;800&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet"/>
+      <style>{`
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@600;700;800&family=Archivo:wght@400;500;600&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#F6F4F0;color:#1A1A1A;font-family:'Archivo',sans-serif}
 ::-webkit-scrollbar{width:6px}
-::-webkit-scrollbar-track{background:rgba(255,255,255,.03)}
-::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:3px}
-::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.25)}
-@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+::-webkit-scrollbar-track{background:#F6F4F0}
+::-webkit-scrollbar-thumb{background:#D4C49A;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#B08D42}
+::selection{background:#770A1C;color:#F6DFC1}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
-@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
-@keyframes slideIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
-@keyframes glow{0%,100%{box-shadow:0 0 5px rgba(233,69,96,.3)}50%{box-shadow:0 0 20px rgba(233,69,96,.6)}}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
-@keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
 button{transition:all .2s ease!important}
-button:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.1)}
-button:active:not(:disabled){transform:translateY(0);filter:brightness(.95)}
-input:focus,select:focus,textarea:focus{border-color:#E94560!important;box-shadow:0 0 0 3px rgba(233,69,96,.15)!important;outline:none}
-.stat-hover:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(233,69,96,.15)!important}
-.card-hover:hover{transform:translateY(-1px);border-color:rgba(233,69,96,.3)!important;box-shadow:0 8px 32px rgba(0,0,0,.4)!important}
-.row-hover:hover{background:rgba(255,255,255,.04)!important}
+button:hover:not(:disabled){transform:translateY(-1px)}
+button:active:not(:disabled){transform:translateY(0)}
+input:focus,select:focus,textarea:focus{border-color:#770A1C!important;outline:none}
+.stat-hover:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.08)!important}
+.card-hover:hover{transform:translateY(-1px);border-color:rgba(119,10,28,.2)!important;box-shadow:0 4px 12px rgba(0,0,0,.08)!important}
+.row-hover:hover{background:rgba(119,10,28,.02)!important}
 @media(max-width:768px){.mobile-grid-1{grid-template-columns:1fr!important}.mobile-hide{display:none!important}.mobile-stack{flex-direction:column!important}.mobile-full{width:100%!important;max-width:100%!important}}
 @media(max-width:480px){.mobile-xs-hide{display:none!important}}
 `}</style>
-      {/* Animated background blobs */}
-      <div style={{position:"absolute",top:"-20%",left:"-10%",width:"400px",height:"400px",borderRadius:"50%",background:"radial-gradient(circle, rgba(233,69,96,.15) 0%, transparent 70%)",animation:"float 8s ease-in-out infinite",pointerEvents:"none"}}/>
-      <div style={{position:"absolute",bottom:"-15%",right:"-5%",width:"350px",height:"350px",borderRadius:"50%",background:"radial-gradient(circle, rgba(124,58,237,.15) 0%, transparent 70%)",animation:"float 10s ease-in-out infinite 2s",pointerEvents:"none"}}/>
-      <div style={{position:"absolute",top:"40%",right:"10%",width:"200px",height:"200px",borderRadius:"50%",background:"radial-gradient(circle, rgba(0,149,255,.1) 0%, transparent 70%)",animation:"float 6s ease-in-out infinite 1s",pointerEvents:"none"}}/>
-      <div style={{width:"100%",maxWidth:"400px",animation:"fadeUp .5s ease"}}>
-        {/* Logo */}
-        <div style={{textAlign:"center",marginBottom:"32px"}}>
-          <div style={{fontFamily:"'Newsreader',serif",fontSize:"28px",fontWeight:700,color:"#fff",letterSpacing:"6px",marginBottom:"6px"}}>INVOGUE</div>
-          <div style={{fontSize:"10px",color:"#E94560",fontWeight:800,letterSpacing:"4px"}}>COLLAB HQ</div>
-          <div style={{width:"40px",height:"3px",background:"linear-gradient(90deg, #E94560, #FFD700)",margin:"14px auto 0",borderRadius:"2px"}}/>
+      <div style={{width:"100%",maxWidth:"380px",animation:"fadeUp .5s ease"}}>
+        {/* Brand Header */}
+        <div style={{textAlign:"center",marginBottom:"48px"}}>
+          <div style={{fontFamily:"'Barlow',sans-serif",fontSize:"32px",fontWeight:800,color:"#1A1A1A",letterSpacing:"8px",marginBottom:"4px",textTransform:"uppercase"}}>INVOGUE</div>
+          <div style={{fontFamily:"'Barlow',sans-serif",fontSize:"12px",fontWeight:700,color:"#770A1C",letterSpacing:"4px",marginBottom:"12px",textTransform:"uppercase"}}>COLLAB HQ</div>
+          <div style={{width:"30px",height:"2px",background:"#B08D42",margin:"0 auto"}}/>
         </div>
 
         {/* Login Card */}
-        <div style={{background:"rgba(26,26,46,.8)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderRadius:"20px",padding:"32px 28px",boxShadow:"0 24px 80px rgba(0,0,0,.4)",border:"1px solid rgba(255,255,255,.08)"}}>
-          <div style={{fontSize:"20px",fontWeight:900,color:"#F5F5F5",marginBottom:"6px"}}>Welcome back</div>
-          <div style={{fontSize:"13px",color:"#8B8FA3",marginBottom:"24px"}}>Sign in to your workspace</div>
+        <div style={{background:"#FFFFFF",borderRadius:"8px",padding:"32px",boxShadow:"0 4px 24px rgba(0,0,0,.06)",border:"1px solid rgba(26,26,26,.08)"}}>
+          <div style={{fontFamily:"'Barlow',sans-serif",fontSize:"18px",fontWeight:700,color:"#1A1A1A",marginBottom:"8px",textTransform:"uppercase"}}>Welcome back</div>
+          <div style={{fontFamily:"'Archivo',sans-serif",fontSize:"12px",color:"#7D766A",marginBottom:"28px"}}>Sign in to your workspace</div>
 
           {/* Email */}
-          <div style={{marginBottom:"14px"}}>
-            <label style={{display:"block",fontSize:"10px",fontWeight:700,color:"#8B8FA3",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"5px"}}>Email</label>
+          <div style={{marginBottom:"18px"}}>
+            <label style={{fontFamily:"'Barlow',sans-serif",display:"block",fontSize:"9px",fontWeight:600,color:"#7D766A",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:"8px"}}>Email</label>
             <input type="email" aria-label="Email address" value={loginEmail} onChange={e=>{setLoginEmail(e.target.value);setLoginErr("")}}
               onKeyDown={e=>e.key==="Enter"&&handleLogin()}
               placeholder="your@invogue.in"
-              style={{width:"100%",padding:"12px 16px",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:"12px",fontSize:"13px",fontFamily:"inherit",color:"#F5F5F5",outline:"none",background:"rgba(255,255,255,.06)",transition:"all .2s",boxSizing:"border-box"}}/>
+              style={{width:"100%",padding:"12px 14px",border:"1px solid rgba(26,26,26,.12)",borderRadius:"4px",fontSize:"13px",fontFamily:"'Archivo',sans-serif",color:"#1A1A1A",outline:"none",background:"#FFFFFF",transition:"border .2s",boxSizing:"border-box"}}/>
           </div>
 
           {/* PIN */}
-          <div style={{marginBottom:"18px"}}>
-            <label style={{display:"block",fontSize:"10px",fontWeight:700,color:"#8B8FA3",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"5px"}}>PIN</label>
+          <div style={{marginBottom:"22px"}}>
+            <label style={{fontFamily:"'Barlow',sans-serif",display:"block",fontSize:"9px",fontWeight:600,color:"#7D766A",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:"8px"}}>PIN</label>
             <input type="password" aria-label="PIN" value={loginPin} onChange={e=>{setLoginPin(e.target.value);setLoginErr("")}}
               onKeyDown={e=>e.key==="Enter"&&handleLogin()}
               placeholder="••••" maxLength={6}
-              style={{width:"100%",padding:"12px 16px",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:"12px",fontSize:"13px",fontFamily:"inherit",color:"#F5F5F5",outline:"none",background:"rgba(255,255,255,.06)",letterSpacing:"4px",transition:"all .2s",boxSizing:"border-box"}}/>
+              style={{width:"100%",padding:"12px 14px",border:"1px solid rgba(26,26,26,.12)",borderRadius:"4px",fontSize:"13px",fontFamily:"'Archivo',sans-serif",color:"#1A1A1A",outline:"none",background:"#FFFFFF",letterSpacing:"4px",transition:"border .2s",boxSizing:"border-box"}}/>
           </div>
 
           {/* Error */}
-          {loginErr&&<div style={{padding:"8px 12px",background:T.errBg,borderRadius:"6px",fontSize:"11px",color:T.err,fontWeight:600,marginBottom:"14px"}}>{loginErr}</div>}
+          {loginErr&&<div style={{padding:"10px 12px",background:"#FEE2E2",borderRadius:"4px",fontSize:"11px",color:"#991B1B",fontWeight:600,marginBottom:"18px",fontFamily:"'Archivo',sans-serif"}}>{loginErr}</div>}
 
           {/* Login Button */}
-          <button onClick={handleLogin} style={{width:"100%",padding:"14px",background:"linear-gradient(135deg, #E94560, #c62a47)",color:"#fff",border:"none",borderRadius:"12px",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px",transition:"all .2s",boxShadow:"0 4px 20px rgba(233,69,96,.3)"}}>Sign In</button>
+          <button onClick={handleLogin} style={{width:"100%",padding:"12px 16px",background:"#770A1C",color:"#F6DFC1",border:"none",borderRadius:"4px",fontFamily:"'Barlow',sans-serif",fontSize:"12px",fontWeight:700,cursor:"pointer",letterSpacing:"1px",textTransform:"uppercase",transition:"all .2s",boxSizing:"border-box"}} onMouseEnter={e=>{e.currentTarget.style.background="#5A0814"}} onMouseLeave={e=>{e.currentTarget.style.background="#770A1C"}}>Sign In</button>
         </div>
 
-        {/* Quick login cards */}
-        <div style={{marginTop:"24px",textAlign:"center"}}>
-          <button onClick={()=>setDemoMode(!demoMode)} style={{background:"rgba(233,69,96,.1)",border:"1px solid rgba(233,69,96,.3)",borderRadius:"10px",padding:"8px 16px",color:"#E94560",fontSize:"10px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",letterSpacing:"1px",textTransform:"uppercase",transition:"all .2s"}}>
+        {/* Demo access toggle */}
+        <div style={{marginTop:"28px",textAlign:"center"}}>
+          <button onClick={()=>setDemoMode(!demoMode)} style={{background:"none",border:"none",color:"#770A1C",fontSize:"10px",fontWeight:700,cursor:"pointer",fontFamily:"'Barlow',sans-serif",letterSpacing:"1px",textTransform:"uppercase",transition:"all .2s",padding:"0"}}>
             {demoMode ? "Hide Demo Access" : "Show Demo Access"}
           </button>
           {demoMode && <>
-            <div style={{fontSize:"10px",color:"rgba(255,255,255,.35)",fontWeight:700,textTransform:"uppercase",letterSpacing:"1px",marginTop:"10px",marginBottom:"10px"}}>Quick Access (Demo)</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
+            <div style={{fontSize:"10px",color:"#7D766A",fontWeight:700,textTransform:"uppercase",letterSpacing:"1px",marginTop:"14px",marginBottom:"12px",fontFamily:"'Barlow',sans-serif"}}>Quick Access (Demo)</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
               {users.filter(u=>u.status==="active").map(u=>{
                 const r = rc(u.role);
                 return <button key={u.id} onClick={()=>{setLoggedIn(u);setView("dashboard")}}
-                  style={{background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.06)",borderRadius:"12px",padding:"12px 14px",cursor:"pointer",textAlign:"left",transition:"all .15s",fontFamily:"inherit"}}
-                  onMouseEnter={e=>{e.currentTarget.style.background="rgba(233,69,96,.1)";e.currentTarget.style.borderColor="rgba(233,69,96,.2)"}}
-                  onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,.04)";e.currentTarget.style.borderColor="rgba(255,255,255,.06)"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
-                    <div style={{width:"26px",height:"26px",borderRadius:"50%",background:r.bg,color:r.c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",fontWeight:800}}>{u.avatar}</div>
-                    <div>
-                      <div style={{fontSize:"11px",fontWeight:700,color:"#fff"}}>{u.name}</div>
-                      <div style={{fontSize:"9px",color:r.c,fontWeight:600}}>{r.i} {r.l}</div>
+                  style={{background:"#FFFFFF",border:"1px solid rgba(26,26,26,.08)",borderRadius:"6px",padding:"12px 12px",cursor:"pointer",textAlign:"left",transition:"all .15s",fontFamily:"'Archivo',sans-serif",boxSizing:"border-box"}}
+                  onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)";e.currentTarget.style.borderColor="rgba(119,10,28,.15)"}}
+                  onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor="rgba(26,26,26,.08)"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+                    <div style={{width:"28px",height:"28px",borderRadius:"50%",background:"#B08D42",color:"#770A1C",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px",fontWeight:800,flexShrink:0}}>{u.avatar}</div>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontFamily:"'Barlow',sans-serif",fontSize:"11px",fontWeight:700,color:"#1A1A1A",lineHeight:"1.2"}}>{u.name}</div>
+                      <div style={{fontSize:"9px",color:"#7D766A",fontWeight:500}}>{r.i} {r.l}</div>
                     </div>
                   </div>
                 </button>;
@@ -1242,9 +1230,9 @@ const loggedRC = ROLE_CFG[role]||ROLE_CFG.viewer;
 const recentNotifs = getRecentNotifications();
 const unreads = recentNotifs.filter(n => new Date(n.time) > new Date(lastSeenTime)).length;
 return (
-  <div role="application" aria-label="Invogue Collab HQ" style={{fontFamily:"'DM Sans',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
+  <div role="application" aria-label="Invogue Collab HQ" style={{fontFamily:"'Archivo',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&family=Newsreader:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet"/>
-    <style>{`*{box-sizing:border-box}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:${T.border};border-radius:3px}@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}@media(max-width:768px){.mobile-grid-1{grid-template-columns:1fr!important}.mobile-hide{display:none!important}.mobile-stack{flex-direction:column!important}.mobile-full{width:100%!important;max-width:100%!important}.mobile-small-text{font-size:10px!important}.mobile-pad{padding:10px!important}}@media(max-width:480px){.mobile-xs-hide{display:none!important}}`}</style>
+    <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@600;700;800&family=Archivo:wght@400;500;600&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#F6F4F0}::-webkit-scrollbar-thumb{background:#D4C49A;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#B08D42}@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}@media(max-width:768px){.mobile-grid-1{grid-template-columns:1fr!important}.mobile-hide{display:none!important}.mobile-stack{flex-direction:column!important}.mobile-full{width:100%!important;max-width:100%!important}.mobile-small-text{font-size:10px!important}.mobile-pad{padding:10px!important}}@media(max-width:480px){.mobile-xs-hide{display:none!important}}`}</style>
       {/* Animated background blobs */}
       <div style={{position:"absolute",top:"-20%",left:"-10%",width:"400px",height:"400px",borderRadius:"50%",background:"radial-gradient(circle, rgba(233,69,96,.15) 0%, transparent 70%)",animation:"float 8s ease-in-out infinite",pointerEvents:"none"}}/>
       <div style={{position:"absolute",bottom:"-15%",right:"-5%",width:"350px",height:"350px",borderRadius:"50%",background:"radial-gradient(circle, rgba(124,58,237,.15) 0%, transparent 70%)",animation:"float 10s ease-in-out infinite 2s",pointerEvents:"none"}}/>
@@ -1254,29 +1242,29 @@ return (
     {toast&&<div role="alert" aria-live="assertive" style={{position:"fixed",top:16,right:16,zIndex:2e3,padding:"12px 20px",borderRadius:"12px",fontSize:"12px",fontWeight:700,color:"#fff",background:toast.type==="err"?"linear-gradient(135deg, #FF3D71, #DB2777)":toast.type==="warn"?"linear-gradient(135deg, #FFAA00, #FF6B00)":"linear-gradient(135deg, #00D68F, #06B6D4)",boxShadow:"0 8px 32px rgba(0,0,0,.3)",animation:"fadeUp .3s ease",letterSpacing:".3px",border:"1px solid rgba(255,255,255,.15)"}}>{toast.msg}</div>}
 
     {/* ── HEADER ── */}
-    <div role="banner" style={{background:"linear-gradient(135deg, #0F0F1A 0%, #1A1A2E 50%, #16213E 100%)",borderBottom:"1px solid rgba(255,255,255,.06)",padding:"10px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px"}}>
-      <div style={{display:"flex",alignItems:"baseline",gap:"8px"}}>
-        <span style={{fontFamily:"'Newsreader',serif",fontSize:"17px",fontWeight:700,color:"#fff",letterSpacing:"2px"}}>INVOGUE</span>
-        <span style={{fontSize:"9px",color:"#E94560",fontWeight:800,letterSpacing:"2px"}}>COLLAB HQ</span>
+    <div role="banner" style={{background:"#FFFFFF",borderBottom:"1px solid rgba(26,26,26,.08)",padding:"12px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"12px"}}>
+      <div style={{display:"flex",alignItems:"baseline",gap:"6px"}}>
+        <span style={{fontFamily:"'Barlow',sans-serif",fontSize:"16px",fontWeight:800,color:"#1A1A1A",letterSpacing:"3px",textTransform:"uppercase"}}>INVOGUE</span>
+        <span style={{fontFamily:"'Barlow',sans-serif",fontSize:"10px",fontWeight:700,color:"#770A1C",letterSpacing:"2px",textTransform:"uppercase",marginLeft:"6px"}}>COLLAB HQ</span>
       </div>
 
       {/* Feature 4: Global Search */}
       <div style={{flex:1,maxWidth:"400px",margin:"0 10px",minWidth:"150px",position:"relative"}}>
         <input type="text" aria-label="Search deals, influencers, and campaigns" value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);if(e.target.value.trim())setSearchResults(performSearch(e.target.value));else setSearchResults(null)}}
           placeholder="Search deals, influencers, campaigns..."
-          style={{width:"100%",padding:"8px 14px",borderRadius:"10px",border:"1px solid rgba(255,255,255,.06)",background:"rgba(255,255,255,.05)",color:"#fff",fontSize:"11px",fontFamily:"inherit",outline:"none"}}/>
-        {searchResults&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:"#1A1A2E",borderRadius:"12px",border:"1px solid rgba(255,255,255,.08)",marginTop:"4px",maxHeight:"300px",overflowY:"auto",zIndex:100,boxShadow:"0 8px 20px rgba(0,0,0,.2)"}}>
+          style={{width:"100%",padding:"8px 14px",borderRadius:"4px",border:"1px solid rgba(26,26,26,.12)",background:"#FFFFFF",color:"#1A1A1A",fontSize:"11px",fontFamily:"'Archivo',sans-serif",outline:"none"}}/>
+        {searchResults&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:"#FFFFFF",borderRadius:"4px",border:"1px solid rgba(26,26,26,.12)",marginTop:"4px",maxHeight:"300px",overflowY:"auto",zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,.06)"}}>
           {(searchResults.dealMatches?.length||0)>0&&<>
-            <div style={{fontSize:"9px",fontWeight:700,color:T.sub,padding:"8px 12px",textTransform:"uppercase"}}>Deals</div>
-            {searchResults.dealMatches.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail");setSearchQuery("");setSearchResults(null)}} style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`,cursor:"pointer",fontSize:"11px"}}><b>{d.inf}</b><div style={{fontSize:"9px",color:T.sub}}>{d.product}</div></div>)}
+            <div style={{fontSize:"9px",fontWeight:700,color:"#7D766A",padding:"8px 12px",textTransform:"uppercase"}}>Deals</div>
+            {searchResults.dealMatches.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail");setSearchQuery("");setSearchResults(null)}} style={{padding:"8px 12px",borderBottom:`1px solid rgba(26,26,26,.08)`,cursor:"pointer",fontSize:"11px",color:"#1A1A1A"}}><b>{d.inf}</b><div style={{fontSize:"9px",color:"#7D766A"}}>{d.product}</div></div>)}
           </>}
           {(searchResults.infMatches?.length||0)>0&&<>
-            <div style={{fontSize:"9px",fontWeight:700,color:T.sub,padding:"8px 12px",textTransform:"uppercase",marginTop:"4px"}}>Influencers</div>
-            {searchResults.infMatches.map(i=><div key={i.id} onClick={()=>{setInfProfile(i);setView("influencers");setSearchQuery("");setSearchResults(null)}} style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`,cursor:"pointer",fontSize:"11px"}}><b>{i.name}</b><div style={{fontSize:"9px",color:T.sub}}>{i.platform}</div></div>)}
+            <div style={{fontSize:"9px",fontWeight:700,color:"#7D766A",padding:"8px 12px",textTransform:"uppercase",marginTop:"4px"}}>Influencers</div>
+            {searchResults.infMatches.map(i=><div key={i.id} onClick={()=>{setInfProfile(i);setView("influencers");setSearchQuery("");setSearchResults(null)}} style={{padding:"8px 12px",borderBottom:`1px solid rgba(26,26,26,.08)`,cursor:"pointer",fontSize:"11px",color:"#1A1A1A"}}><b>{i.name}</b><div style={{fontSize:"9px",color:"#7D766A"}}>{i.platform}</div></div>)}
           </>}
           {(searchResults.campMatches?.length||0)>0&&<>
-            <div style={{fontSize:"9px",fontWeight:700,color:T.sub,padding:"8px 12px",textTransform:"uppercase",marginTop:"4px"}}>Campaigns</div>
-            {searchResults.campMatches.map(c=><div key={c.id} onClick={()=>{setCampFilter(c.id);setView("deals");setSearchQuery("");setSearchResults(null)}} style={{padding:"8px 12px",cursor:"pointer",fontSize:"11px"}}><b>{c.name}</b><div style={{fontSize:"9px",color:T.sub}}>{f(c.budget)} budget</div></div>)}
+            <div style={{fontSize:"9px",fontWeight:700,color:"#7D766A",padding:"8px 12px",textTransform:"uppercase",marginTop:"4px"}}>Campaigns</div>
+            {searchResults.campMatches.map(c=><div key={c.id} onClick={()=>{setCampFilter(c.id);setView("deals");setSearchQuery("");setSearchResults(null)}} style={{padding:"8px 12px",cursor:"pointer",fontSize:"11px",color:"#1A1A1A"}}><b>{c.name}</b><div style={{fontSize:"9px",color:"#7D766A"}}>{f(c.budget)} budget</div></div>)}
           </>}
         </div>}
       </div>
@@ -1284,34 +1272,34 @@ return (
       <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
         {/* Feature 5: Notifications Bell */}
         <div style={{position:"relative"}}>
-          <button aria-label={"Notifications"+(unreads>0?", "+unreads+" unread":"")} onClick={()=>{setNotificationPanel(!notificationPanel);if(!notificationPanel)setLastSeenTime(new Date().toISOString())}} style={{background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.06)",borderRadius:"10px",color:"#fff",fontSize:"16px",cursor:"pointer",position:"relative",padding:"6px 8px"}}>
+          <button aria-label={"Notifications"+(unreads>0?", "+unreads+" unread":"")} onClick={()=>{setNotificationPanel(!notificationPanel);if(!notificationPanel)setLastSeenTime(new Date().toISOString())}} style={{background:"none",border:"none",color:"#1A1A1A",fontSize:"16px",cursor:"pointer",position:"relative",padding:"4px"}}>
             🔔
-            {unreads>0&&<span style={{position:"absolute",top:-4,right:-4,background:"linear-gradient(135deg, #FF3D71, #E94560)",color:"#fff",borderRadius:"50%",width:"18px",height:"18px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",fontWeight:800}}>{unreads}</span>}
+            {unreads>0&&<span style={{position:"absolute",top:-6,right:-6,background:"#770A1C",color:"#FFFFFF",borderRadius:"50%",width:"18px",height:"18px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",fontWeight:800}}>{unreads}</span>}
           </button>
-          {notificationPanel&&<div style={{position:"absolute",top:"100%",right:0,background:T.surface,borderRadius:"6px",marginTop:"4px",width:"320px",maxHeight:"400px",overflowY:"auto",zIndex:100,boxShadow:"0 8px 20px rgba(0,0,0,.2)"}}>
-            <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,fontWeight:700,fontSize:"12px"}}>Notifications</div>
-            {recentNotifs.length===0?<div style={{padding:"12px",fontSize:"11px",color:T.sub,textAlign:"center"}}>No notifications</div>:recentNotifs.map(n=><div key={n.id} style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,fontSize:"10.5px"}}>
+          {notificationPanel&&<div style={{position:"absolute",top:"100%",right:0,background:"#FFFFFF",borderRadius:"4px",marginTop:"8px",width:"320px",maxHeight:"400px",overflowY:"auto",zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,.06)",border:"1px solid rgba(26,26,26,.08)"}}>
+            <div style={{padding:"10px 12px",borderBottom:`1px solid rgba(26,26,26,.08)`,fontWeight:700,fontSize:"12px",color:"#1A1A1A"}}>Notifications</div>
+            {recentNotifs.length===0?<div style={{padding:"12px",fontSize:"11px",color:"#7D766A",textAlign:"center"}}>No notifications</div>:recentNotifs.map(n=><div key={n.id} style={{padding:"10px 12px",borderBottom:`1px solid rgba(26,26,26,.08)`,fontSize:"10.5px",color:"#1A1A1A"}}>
               <div style={{display:"flex",gap:"6px"}}>
                 <span style={{fontSize:"14px"}}>{n.icon}</span>
                 <div style={{flex:1}}>
                   <div style={{fontWeight:600}}>{n.msg}</div>
-                  <div style={{color:T.sub,fontSize:"9px",marginTop:"2px"}}>{n.inf}</div>
-                  <div style={{color:T.faint,fontSize:"8.5px",marginTop:"2px"}}>{new Date(n.time).toLocaleString()}</div>
+                  <div style={{color:"#7D766A",fontSize:"9px",marginTop:"2px"}}>{n.inf}</div>
+                  <div style={{color:"#B5AFA4",fontSize:"8.5px",marginTop:"2px"}}>{new Date(n.time).toLocaleString()}</div>
                 </div>
               </div>
             </div>)}
           </div>}
         </div>
 
-        <div style={{display:"flex",alignItems:"center",gap:"7px",padding:"6px 12px",borderRadius:"12px",background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.06)"}}>
-          <div style={{width:"22px",height:"22px",borderRadius:"50%",background:loggedRC.bg,color:loggedRC.c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"8px",fontWeight:800}}>{loggedIn.avatar}</div>
+        <div style={{display:"flex",alignItems:"center",gap:"8px",padding:"6px 10px"}}>
+          <div style={{width:"24px",height:"24px",borderRadius:"50%",background:"#F6DFC1",color:"#770A1C",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",fontWeight:800}}>{loggedIn.avatar}</div>
           <div>
-            <div style={{fontSize:"10.5px",fontWeight:700,color:"#fff",lineHeight:1.2}}>{loggedIn.name}</div>
-            <div style={{fontSize:"8.5px",color:loggedRC.c,fontWeight:700}}>{loggedRC.i} {loggedRC.l}</div>
+            <div style={{fontSize:"10px",fontFamily:"'Barlow',sans-serif",fontWeight:700,color:"#1A1A1A",lineHeight:1.2}}>{loggedIn.name}</div>
+            <div style={{fontSize:"9px",fontFamily:"'Archivo',sans-serif",color:"#7D766A",fontWeight:400}}>{loggedRC.i} {loggedRC.l}</div>
           </div>
         </div>
-        <button aria-label="Sign out" onClick={handleLogout} style={{background:"none",border:"1px solid rgba(255,255,255,.08)",borderRadius:"8px",color:"rgba(255,255,255,.4)",fontSize:"10px",padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>Sign Out</button>
-        <button onClick={resetData} title="Reset to sample data" style={{background:"none",border:"1px solid rgba(255,255,255,.08)",borderRadius:"4px",color:"rgba(255,255,255,.3)",fontSize:"8px",padding:"3px 6px",cursor:"pointer",fontFamily:"inherit"}}>Reset</button>
+        <button aria-label="Sign out" onClick={handleLogout} style={{background:"none",border:"none",color:"#7D766A",fontSize:"10px",padding:"5px 10px",cursor:"pointer",fontFamily:"'Archivo',sans-serif",fontWeight:400}}>Sign Out</button>
+        <button onClick={resetData} title="Reset to sample data" style={{background:"none",border:"none",color:"#B5AFA4",fontSize:"9px",padding:"3px 6px",cursor:"pointer",fontFamily:"'Archivo',sans-serif",fontWeight:400}}>Reset</button>
       </div>
     </div>
 
@@ -1328,11 +1316,11 @@ return (
         logistics: [{k:"dashboard",l:"Shipment Center",i:"🔵"},{k:"shipments",l:"All Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
       };
       const items = navItems[role]||navItems.negotiator;
-      return <div role="navigation" aria-label="Main navigation" style={{background:"#0F0F1A",borderBottom:"1px solid rgba(255,255,255,.04)",padding:"0 16px",display:"flex",gap:"2px",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+      return <div role="navigation" aria-label="Main navigation" style={{background:"#FFFFFF",borderBottom:"1px solid rgba(26,26,26,.08)",padding:"0 24px",display:"flex",gap:"16px",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
         {items.map(n=>(
-          <button key={n.k} onClick={()=>setView(n.k)} style={{padding:"8px 14px",border:"none",borderBottom:"none",borderRadius:"8px",margin:"4px 0",background:view===n.k?"rgba(233,69,96,.12)":"transparent",color:view===n.k?"#E94560":"#8B8FA3",fontWeight:view===n.k?800:500,fontSize:"11px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"5px",letterSpacing:".3px",transition:"all .2s"}}>
+          <button key={n.k} onClick={()=>setView(n.k)} style={{padding:"12px 0",border:"none",borderBottom:view===n.k?"2px solid #770A1C":"none",background:"transparent",color:view===n.k?"#770A1C":"#7D766A",fontWeight:view===n.k?600:600,fontSize:"10px",cursor:"pointer",fontFamily:"'Barlow',sans-serif",display:"flex",alignItems:"center",gap:"5px",letterSpacing:"0.8px",textTransform:"uppercase",transition:"all .2s"}}>
             {n.i} {n.l}
-            {n.n>0&&<span style={{background:"linear-gradient(135deg, #FF3D71, #E94560)",color:"#fff",borderRadius:"8px",padding:"1px 6px",fontSize:"9px",fontWeight:800,lineHeight:"16px"}}>{n.n}</span>}
+            {n.n>0&&<span style={{background:"#770A1C",color:"#FFFFFF",borderRadius:"50%",width:"16px",height:"16px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"8px",fontWeight:800,lineHeight:"16px"}}>{n.n}</span>}
           </button>
         ))}
       </div>;
@@ -1355,14 +1343,14 @@ return (
 
         return <>
           {/* Admin header band */}
-          <div style={{background:T.gradient1,borderRadius:"14px",padding:"16px 20px",marginBottom:"16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{background:T.brand,borderRadius:"6px",padding:"16px 20px",marginBottom:"16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
-              <div style={{fontSize:"17px",fontWeight:800,color:T.text}}>⚙️ Admin Control Panel</div>
-              <div style={{fontSize:"11px",color:T.faint,marginTop:"2px"}}>Super access — all roles, all data, all controls</div>
+              <div style={{fontSize:"17px",fontWeight:800,color:"#F6DFC1",fontFamily:"Barlow,sans-serif",textTransform:"uppercase",letterSpacing:"1px"}}>⚙️ Admin Control Panel</div>
+              <div style={{fontSize:"11px",color:"rgba(246,223,193,.6)",marginTop:"2px"}}>Super access — all roles, all data, all controls</div>
             </div>
             <div style={{display:"flex",gap:"6px"}}>
               <Btn v="gold" sm onClick={()=>setView("users")}>Manage Team</Btn>
-              <Btn v="outline" sm sx={{borderColor:"rgba(255,255,255,.2)",color:"rgba(255,255,255,.7)"}} onClick={()=>setView("audit")}>Audit Logs</Btn>
+              <Btn v="outline" sm sx={{borderColor:"rgba(246,223,193,.3)",color:"#F6DFC1"}} onClick={()=>setView("audit")}>Audit Logs</Btn>
             </div>
           </div>
 
@@ -1528,7 +1516,7 @@ return (
 
           {/* Users table */}
           <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"40px 1.5fr 1.5fr 1fr 0.8fr 1.2fr",padding:"10px 14px",background:T.brand,fontSize:"9px",fontWeight:800,color:"rgba(255,255,255,.6)",textTransform:"uppercase",letterSpacing:".5px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"40px 1.5fr 1.5fr 1fr 0.8fr 1.2fr",padding:"10px 14px",background:T.brand,fontSize:"9px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Barlow,sans-serif",letterSpacing:".5px"}}>
               <div></div><div>Name</div><div>Email</div><div>Role</div><div>Status</div><div>Actions</div>
             </div>
             {users.map(u=>{
@@ -1561,7 +1549,7 @@ return (
           <div style={{marginTop:"20px"}}>
             <div style={{fontSize:"13px",fontWeight:800,marginBottom:"10px"}}>Role Permissions Reference</div>
             <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",overflow:"hidden"}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr 1fr 1fr",padding:"8px 12px",background:T.brand,fontSize:"8.5px",fontWeight:800,color:"rgba(255,255,255,.6)",textTransform:"uppercase",letterSpacing:".4px"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr 1fr 1fr",padding:"8px 12px",background:T.brand,fontSize:"8.5px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Barlow,sans-serif",letterSpacing:".4px"}}>
                 <div>Permission</div><div>Admin</div><div>Manager</div><div>Finance</div><div>Negotiator</div><div>Logistics</div><div>Viewer</div>
               </div>
               {[
@@ -1612,13 +1600,13 @@ return (
             <div style={{fontSize:"11px",color:T.sub}}>Complete activity trail across all deals and users — {allLogs.length} entries</div>
           </div>
           <div style={{display:"flex",gap:"8px",marginBottom:"12px",alignItems:"center",flexWrap:"wrap"}}>
-            <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>From</label><input type="date" value={auditDateFrom} onChange={e=>{setAuditDateFrom(e.target.value);setAuditPage(0)}} style={{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:"5px",fontSize:"11px",fontFamily:"inherit",background:"rgba(255,255,255,.06)",color:T.text}}/></div>
-            <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>To</label><input type="date" value={auditDateTo} onChange={e=>{setAuditDateTo(e.target.value);setAuditPage(0)}} style={{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:"5px",fontSize:"11px",fontFamily:"inherit",background:"rgba(255,255,255,.06)",color:T.text}}/></div>
+            <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>From</label><input type="date" value={auditDateFrom} onChange={e=>{setAuditDateFrom(e.target.value);setAuditPage(0)}} style={{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:"5px",fontSize:"11px",fontFamily:"inherit",background:T.surface,color:T.text}}/></div>
+            <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>To</label><input type="date" value={auditDateTo} onChange={e=>{setAuditDateTo(e.target.value);setAuditPage(0)}} style={{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:"5px",fontSize:"11px",fontFamily:"inherit",background:T.surface,color:T.text}}/></div>
             {(auditDateFrom||auditDateTo)&&<Btn v="ghost" sm onClick={()=>{setAuditDateFrom("");setAuditDateTo("");setAuditPage(0)}}>Clear filters</Btn>}
             <span style={{fontSize:"10px",color:T.sub,marginLeft:"auto"}}>{allLogs.length} total entries</span>
           </div>
           <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr 1.5fr 2fr 0.8fr",padding:"9px 14px",background:T.brand,fontSize:"9px",fontWeight:800,color:"rgba(255,255,255,.6)",textTransform:"uppercase",letterSpacing:".5px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr 1.5fr 2fr 0.8fr",padding:"9px 14px",background:T.brand,fontSize:"9px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Barlow,sans-serif",letterSpacing:".5px"}}>
               <div>Timestamp</div><div>User</div><div>Action</div><div>Details</div><div>Influencer</div>
             </div>
             {filteredLogs.slice(auditPage * ITEMS_PER_PAGE, (auditPage+1) * ITEMS_PER_PAGE).map((lg,i)=>{
@@ -2242,7 +2230,7 @@ return (
                 });
                 return <div style={{display:"flex",alignItems:"center",gap:"24px",padding:"12px"}}>
                   <svg width="160" height="160" viewBox="0 0 160 160">
-                    {slices.map((s,i)=><path key={i} d={s.path} fill={s.color} stroke={T.surface} strokeWidth="2"/>)}
+                    {slices.map((s,i)=><path key={i} d={s.path} fill={s.color} stroke="#fff" strokeWidth="2"/>)}
                   </svg>
                   <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
                     {slices.map((s,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:"8px",fontSize:"11px"}}>
@@ -2463,7 +2451,7 @@ return (
         {view==="deliverables"&&<>
           <div style={{fontSize:"15px",fontWeight:800,marginBottom:"14px"}}>📋 Deliverables Bank — <span style={{color:T.purple}}>{pendingDels.length} Pending</span></div>
           <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",overflow:"hidden",marginBottom:"20px"}}>
-            <div style={{display:"grid",gridTemplateColumns:"1.8fr 1.5fr 1.2fr 0.8fr 0.8fr 0.7fr",padding:"8px 12px",background:T.brand,fontSize:"9px",fontWeight:800,color:"rgba(255,255,255,.6)",textTransform:"uppercase",letterSpacing:".5px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1.8fr 1.5fr 1.2fr 0.8fr 0.8fr 0.7fr",padding:"8px 12px",background:T.brand,fontSize:"9px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Barlow,sans-serif",letterSpacing:".5px"}}>
               <div>Influencer</div><div>Deliverable</div><div>Campaign</div><div>Platform</div><div>Deadline</div><div>Status</div>
             </div>
             {pendingDels.length===0&&<div style={{padding:"24px",textAlign:"center",color:T.sub,fontSize:"12px"}}>{deals.some(d=>!["rejected","pending","renegotiate","dropped"].includes(d.status))?"All deliverables fulfilled! 🎉":"No approved deals with pending deliverables yet"}</div>}
@@ -2596,7 +2584,7 @@ return (
         {sel&&<>
           <div style={{padding:"12px",background:T.purpleBg,borderRadius:"7px",marginBottom:"14px",fontSize:"11.5px",color:T.purple}}>
             <div style={{fontWeight:800,fontSize:"13px",marginBottom:"6px"}}>📦 {sel.products?sel.products.map(p=>p.name).join(", "):sel.product}</div>
-            {sel.products && sel.products.length>0 && <div style={{marginTop:"8px",padding:"8px",background:"rgba(255,255,255,.1)",borderRadius:"4px",fontSize:"10px"}}>
+            {sel.products && sel.products.length>0 && <div style={{marginTop:"8px",padding:"8px",background:T.surfaceAlt,borderRadius:"4px",fontSize:"10px"}}>
               <div style={{fontWeight:700,marginBottom:"4px"}}>Items to pack & ship:</div>
               {sel.products.map((p,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px",marginBottom:"3px"}}>
                 <span><b>{p.name}</b></span>
@@ -3005,7 +2993,7 @@ return (
             {["timeliness","quality","communication","professionalism"].map(dim=><div key={dim} style={{marginBottom:"8px"}}>
               <div style={{fontSize:"10px",fontWeight:600,marginBottom:"4px",textTransform:"capitalize"}}>{dim}</div>
               <div style={{display:"flex",gap:"4px"}}>
-                {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setRatingF({...ratingF,stars:{...ratingF.stars,[dim]:n}})} style={{width:"32px",height:"32px",border:"1px solid "+T.border,borderRadius:"4px",cursor:"pointer",background:ratingF.stars[dim]>=n?T.gold:T.surface,color:ratingF.stars[dim]>=n?T.bg:T.sub,fontWeight:700,fontSize:"14px"}}>⭐</button>)}
+                {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setRatingF({...ratingF,stars:{...ratingF.stars,[dim]:n}})} style={{width:"32px",height:"32px",border:"1px solid "+T.border,borderRadius:"4px",cursor:"pointer",background:ratingF.stars[dim]>=n?T.gold:T.surface,color:ratingF.stars[dim]>=n?"#fff":T.sub,fontWeight:700,fontSize:"14px"}}>⭐</button>)}
               </div>
             </div>)}
           </div>

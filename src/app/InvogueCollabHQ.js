@@ -545,7 +545,8 @@ export default function InvogueCollabHQ() {
     // Build product string from products array
     const productStr = nDeal.products?.filter(p=>p.name).map(p=>p.name).join(", ") || nDeal.product;
 
-    await supabase.from('deals').insert({
+    try {
+    const {error:dealErr} = await supabase.from('deals').insert({
       id:dealId,
       influencer_name:nDeal.inf,
       platform:nDeal.platform,
@@ -565,6 +566,7 @@ export default function InvogueCollabHQ() {
       email:nDeal.email,
       products_json:JSON.stringify(nDeal.products||[]),
     });
+    if(dealErr) { console.error("Deal insert failed:",dealErr); return notify("Failed to save deal: "+dealErr.message,"err"); }
 
     const dbDels = nDeal.dels.map(dl=>({id:uid(),deal_id:dealId,type:dl.type,description:dl.desc,status:'pending',live_link:null}));
     if(dbDels.length>0) await supabase.from('deliverables').insert(dbDels);
@@ -623,6 +625,7 @@ export default function InvogueCollabHQ() {
     setNDeal(null);
     setFormErrors({});
     notify("Deal submitted for approval!");
+    } catch(e) { console.error("Deal creation error:",e); notify("Error saving deal. Please try again.","err"); }
   };
 
   const createCampaign = async () => {

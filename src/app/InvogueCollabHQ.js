@@ -8,12 +8,20 @@ import { supabase } from '../lib/supabase';
 
 // ─── DESIGN SYSTEM ───
 const T = {
-  bg: "#F6F4F0", surface: "#FFFFFF", brand: "#141824", gold: "#B08D42",
-  goldSoft: "#EDE7D6", goldMid: "#D4C49A", border: "#E2DDD3",
-  text: "#141824", sub: "#7D766A", faint: "#B5AFA4",
-  ok: "#1B7A3D", okBg: "#E2F3E8", warn: "#C27A08", warnBg: "#FEF4DD",
-  err: "#B42318", errBg: "#FDE8E8", info: "#0F5BA7", infoBg: "#E0EDFA",
-  purple: "#6527BE", purpleBg: "#EFE4FF", teal: "#0E7A71", tealBg: "#E0F5F3",
+  bg: "#0F0F1A", surface: "#1A1A2E", surfaceAlt: "#16213E", brand: "#E94560", gold: "#FFD700",
+  goldSoft: "rgba(255,215,0,.12)", goldMid: "#FFA500", border: "rgba(255,255,255,.08)",
+  text: "#F5F5F5", sub: "#8B8FA3", faint: "#5C5F73",
+  ok: "#00D68F", okBg: "rgba(0,214,143,.12)", warn: "#FFAA00", warnBg: "rgba(255,170,0,.12)",
+  err: "#FF3D71", errBg: "rgba(255,61,113,.12)", info: "#0095FF", infoBg: "rgba(0,149,255,.12)",
+  purple: "#7C3AED", purpleBg: "rgba(124,58,237,.12)", teal: "#06B6D4", tealBg: "rgba(6,182,212,.12)",
+  gradient1: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+  gradient2: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+  gradient3: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+  gradient4: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+  gradient5: "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
+  gradientGold: "linear-gradient(135deg, #FFD700 0%, #FFA500 100%)",
+  cardShadow: "0 8px 32px rgba(0,0,0,.3)",
+  cardShadowHover: "0 12px 40px rgba(233,69,96,.2)",
 };
 
 const STATUS_CFG = {
@@ -136,50 +144,63 @@ const ROLE_CFG = {
 };
 
 // ─── REUSABLE COMPONENTS ───
-const Badge = ({s,sm}) => { const x=STATUS_CFG[s]||{l:s,c:T.sub,bg:"#eee",i:"?"}; return <span style={{display:"inline-flex",alignItems:"center",gap:"3px",padding:sm?"2px 6px":"3px 9px",borderRadius:"14px",fontSize:sm?"9.5px":"10.5px",fontWeight:700,color:x.c,background:x.bg,whiteSpace:"nowrap",letterSpacing:".2px"}}>{x.i} {x.l}</span>; };
+const Badge = ({s,sm}) => { const x=STATUS_CFG[s]||{l:s,c:T.sub,bg:"rgba(255,255,255,.1)",i:"?"}; return <span style={{display:"inline-flex",alignItems:"center",gap:"4px",padding:sm?"3px 8px":"4px 12px",borderRadius:"20px",fontSize:sm?"10px":"11px",fontWeight:700,color:x.c,background:x.bg,whiteSpace:"nowrap",letterSpacing:".3px",border:`1px solid ${x.c}22`,backdropFilter:"blur(4px)"}}>{x.i} {x.l}</span>; };
 const DBadge = ({s}) => { const m={pending:{l:"Pending",c:T.warn,bg:T.warnBg},live:{l:"Delivered",c:T.ok,bg:T.okBg}}; const x=m[s]||m.pending; return <span style={{padding:"2px 6px",borderRadius:"8px",fontSize:"9.5px",fontWeight:700,color:x.c,background:x.bg}}>{x.l}</span>; };
 
 const Btn = ({children,onClick,v="primary",sm,disabled,sx})=>{
-  const vs={primary:{bg:T.brand,c:"#fff"},gold:{bg:T.gold,c:"#fff"},outline:{bg:"transparent",c:T.brand,border:`1px solid ${T.border}`},danger:{bg:T.err,c:"#fff"},ok:{bg:T.ok,c:"#fff"},purple:{bg:T.purple,c:"#fff"},ghost:{bg:"transparent",c:T.sub}};
+  const vs={
+    primary:{bg:"linear-gradient(135deg, #E94560, #c62a47)",c:"#fff",border:"none"},
+    gold:{bg:"linear-gradient(135deg, #FFD700, #FFA500)",c:"#1a1a2e",border:"none"},
+    outline:{bg:"transparent",c:T.text,border:`1.5px solid ${T.border}`},
+    danger:{bg:"linear-gradient(135deg, #FF3D71, #DB2777)",c:"#fff",border:"none"},
+    ok:{bg:"linear-gradient(135deg, #00D68F, #06B6D4)",c:"#fff",border:"none"},
+    purple:{bg:"linear-gradient(135deg, #7C3AED, #A855F7)",c:"#fff",border:"none"},
+    ghost:{bg:"transparent",c:T.sub,border:"none"}
+  };
   const vv=vs[v]||vs.primary;
-  return <button onClick={onClick} disabled={disabled} style={{border:vv.border||"none",borderRadius:"6px",padding:sm?"5px 9px":"7px 14px",fontSize:sm?"10.5px":"11.5px",fontWeight:700,cursor:disabled?"not-allowed":"pointer",fontFamily:"inherit",opacity:disabled?.4:1,background:vv.bg,color:vv.c,display:"inline-flex",alignItems:"center",gap:"4px",whiteSpace:"nowrap",transition:"all .12s",letterSpacing:".2px",...sx}}>{children}</button>;
+  return <button onClick={onClick} disabled={disabled} style={{border:vv.border,borderRadius:"10px",padding:sm?"6px 12px":"9px 18px",fontSize:sm?"11px":"12px",fontWeight:700,cursor:disabled?"not-allowed":"pointer",fontFamily:"inherit",opacity:disabled?.35:1,background:vv.bg,color:vv.c,display:"inline-flex",alignItems:"center",gap:"5px",whiteSpace:"nowrap",letterSpacing:".3px",boxShadow:v==="primary"||v==="gold"?"0 4px 14px rgba(0,0,0,.25)":"none",...sx}}>{children}</button>;
 };
 
 const Inp = ({value,onChange,type="text",disabled,placeholder,prefix,error})=>(
   <div style={{display:"flex"}}>
-    {prefix&&<span style={{padding:"7px 8px",background:T.goldSoft,border:`1px solid ${T.border}`,borderRight:"none",borderRadius:"5px 0 0 5px",fontSize:"11px",color:T.sub,lineHeight:"1.3"}}>{prefix}</span>}
-    <input type={type} value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} style={{width:"100%",padding:"7px 10px",border:`1px solid ${error?T.err:T.border}`,borderRadius:prefix?"0 5px 5px 0":"5px",fontSize:"11.5px",fontFamily:"inherit",color:T.text,background:disabled?"#f3f1ed":"#fff",outline:"none",boxSizing:"border-box"}}/>
+    {prefix&&<span style={{padding:"9px 10px",background:"rgba(255,255,255,.06)",border:`1.5px solid ${T.border}`,borderRight:"none",borderRadius:"10px 0 0 10px",fontSize:"11px",color:T.sub,lineHeight:"1.3"}}>{prefix}</span>}
+    <input type={type} value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} style={{width:"100%",padding:"9px 12px",border:`1.5px solid ${error?T.err:T.border}`,borderRadius:prefix?"0 10px 10px 0":"10px",fontSize:"12px",fontFamily:"inherit",color:T.text,background:disabled?"rgba(255,255,255,.03)":"rgba(255,255,255,.06)",outline:"none",boxSizing:"border-box",transition:"all .2s"}}/>
   </div>
 );
 
 const Textarea = ({value,onChange,disabled,placeholder,rows=3,error})=>(
-  <textarea value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} rows={rows} style={{width:"100%",padding:"7px 10px",border:`1px solid ${error?T.err:T.border}`,borderRadius:"5px",fontSize:"11.5px",fontFamily:"inherit",color:T.text,background:disabled?"#f3f1ed":"#fff",outline:"none",boxSizing:"border-box",resize:"vertical"}}/>
+  <textarea value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} rows={rows} style={{width:"100%",padding:"9px 12px",border:`1.5px solid ${error?T.err:T.border}`,borderRadius:"10px",fontSize:"12px",fontFamily:"inherit",color:T.text,background:disabled?"rgba(255,255,255,.03)":"rgba(255,255,255,.06)",outline:"none",boxSizing:"border-box",resize:"vertical",transition:"all .2s"}}/>
 );
 
 const Sel = ({value,onChange,options})=>(
-  <select value={value} onChange={onChange} style={{width:"100%",padding:"7px 10px",border:`1px solid ${T.border}`,borderRadius:"5px",fontSize:"11.5px",fontFamily:"inherit",color:T.text,background:"#fff",outline:"none",boxSizing:"border-box"}}>
+  <select value={value} onChange={onChange} style={{width:"100%",padding:"9px 12px",border:`1.5px solid ${T.border}`,borderRadius:"10px",fontSize:"12px",fontFamily:"inherit",color:T.text,background:T.surface,outline:"none",boxSizing:"border-box",cursor:"pointer",transition:"all .2s"}}>
     {options.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
   </select>
 );
 
-const Field = ({label,children,span,error,required})=>(<div style={{gridColumn:span?`span ${span}`:undefined,marginBottom:"4px"}}><div style={{fontSize:"9.5px",fontWeight:700,color:error?T.err:T.sub,textTransform:"uppercase",letterSpacing:".6px",marginBottom:"4px"}}>{label}{required&&<span style={{color:T.err}}> *</span>}{error&&<span style={{color:T.err,fontSize:"8px",marginLeft:"4px",textTransform:"none",fontWeight:600}}>{error}</span>}</div>{children}</div>);
+const Field = ({label,children,span,error,required})=>(<div style={{gridColumn:span?`span ${span}`:undefined,marginBottom:"6px"}}><div style={{fontSize:"10px",fontWeight:700,color:error?T.err:T.sub,textTransform:"uppercase",letterSpacing:".8px",marginBottom:"5px"}}>{label}{required&&<span style={{color:T.err}}> *</span>}{error&&<span style={{color:T.err,fontSize:"9px",marginLeft:"4px",textTransform:"none",fontWeight:600}}>{error}</span>}</div>{children}</div>);
 
 const Modal = ({open,onClose,title,children,w=540})=>{
   if(!open) return null;
-  return <div role="presentation" style={{position:"fixed",inset:0,background:"rgba(10,10,20,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"12px"}} onClick={onClose}>
-    <div role="dialog" aria-modal="true" aria-label={title} onClick={e=>e.stopPropagation()} style={{background:T.bg,borderRadius:"12px",width:`${w}px`,maxWidth:"96vw",minWidth:"280px",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,.2)"}}>
-      <div style={{padding:"13px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-        <span style={{fontWeight:800,fontSize:"14px",color:T.brand,letterSpacing:".2px"}}>{title}</span>
-        <button onClick={onClose} style={{background:"none",border:"none",fontSize:"16px",cursor:"pointer",color:T.sub,padding:"2px 5px",lineHeight:1}}>✕</button>
+  return <div role="presentation" style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"12px",animation:"fadeIn .2s ease"}} onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label={title} onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:"20px",width:`${w}px`,maxWidth:"96vw",minWidth:"280px",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 80px rgba(0,0,0,.5)",border:`1px solid ${T.border}`,animation:"fadeUp .25s ease"}}>
+      <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        <span style={{fontWeight:800,fontSize:"15px",color:T.text,letterSpacing:".2px"}}>{title}</span>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,.06)",border:`1px solid ${T.border}`,borderRadius:"8px",fontSize:"14px",cursor:"pointer",color:T.sub,padding:"4px 8px",lineHeight:1,transition:"all .15s"}}>✕</button>
       </div>
-      <div style={{padding:"18px",overflowY:"auto",flex:1}}>{children}</div>
+      <div style={{padding:"20px",overflowY:"auto",flex:1}}>{children}</div>
     </div>
   </div>;
 };
 
-const StatBox = ({l,v,c,sub})=>(<div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"11px 13px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px"}}>{l}</div><div style={{fontSize:"19px",fontWeight:800,color:c||T.brand,marginTop:"1px",fontFamily:"inherit"}}>{v}</div>{sub&&<div style={{fontSize:"9.5px",color:T.sub,marginTop:"1px"}}>{sub}</div>}</div>);
+const StatBox = ({l,v,c,sub,gradient})=>(<div className="stat-hover" style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"16px",padding:"16px 18px",position:"relative",overflow:"hidden",transition:"all .25s ease",cursor:"default"}}>
+  {gradient&&<div style={{position:"absolute",top:0,left:0,right:0,height:"3px",background:gradient,borderRadius:"16px 16px 0 0"}}/>}
+  <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".8px",marginBottom:"6px"}}>{l}</div>
+  <div style={{fontSize:"24px",fontWeight:900,color:c||T.text,lineHeight:1.1,fontFamily:"inherit"}}>{v}</div>
+  {sub&&<div style={{fontSize:"10px",color:T.sub,marginTop:"4px"}}>{sub}</div>}
+</div>);
 
-const Section = ({title,icon,children,action})=>(<div style={{marginBottom:"14px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"7px"}}><span style={{fontSize:"10px",fontWeight:800,color:T.sub,textTransform:"uppercase",letterSpacing:".6px"}}>{icon} {title}</span>{action}</div>{children}</div>);
+const Section = ({title,icon,children,action})=>(<div style={{marginBottom:"20px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}><span style={{fontSize:"12px",fontWeight:800,color:T.text,textTransform:"uppercase",letterSpacing:".8px"}}>{icon} {title}</span>{action}</div>{children}</div>);
 export default function InvogueCollabHQ() {
   const [loaded, setLoaded] = useState(false);
   const [campaigns, setCampaigns] = useState([]);
@@ -1112,66 +1133,93 @@ export default function InvogueCollabHQ() {
     notify("Data refreshed from Supabase");
   };
 
-  if(!loaded) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Newsreader',Georgia,serif",color:T.sub}}>Loading Invogue Collab HQ...</div>;
+  if(!loaded) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'DM Sans',sans-serif",background:T.bg,color:T.text,flexDirection:"column",gap:"12px"}}><div style={{width:"40px",height:"40px",borderRadius:"50%",border:"3px solid rgba(255,255,255,.1)",borderTopColor:T.brand,animation:"spin .8s linear infinite"}}/><div style={{fontSize:"13px",fontWeight:600,color:T.sub}}>Loading Invogue Collab HQ...</div><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>;
 // ═══════════════════════════ LOGIN SCREEN ═══════════════════════════
 if(!loggedIn) {
   const rc = (r) => ROLE_CFG[r]||ROLE_CFG.viewer;
   return (
-    <div style={{fontFamily:"'DM Sans',sans-serif",background:T.brand,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+    <div style={{fontFamily:"'DM Sans',sans-serif",background:"linear-gradient(135deg, #0F0F1A 0%, #1A1A2E 30%, #16213E 60%, #0F0F1A 100%)",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",position:"relative",overflow:"hidden"}}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&family=Newsreader:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet"/>
-      <style>{`*{box-sizing:border-box}@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@media(max-width:480px){.login-grid{grid-template-columns:1fr!important}}`}</style>
+          <style>{`
+*{box-sizing:border-box;margin:0;padding:0}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:rgba(255,255,255,.03)}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.25)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes slideIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+@keyframes glow{0%,100%{box-shadow:0 0 5px rgba(233,69,96,.3)}50%{box-shadow:0 0 20px rgba(233,69,96,.6)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+button{transition:all .2s ease!important}
+button:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.1)}
+button:active:not(:disabled){transform:translateY(0);filter:brightness(.95)}
+input:focus,select:focus,textarea:focus{border-color:#E94560!important;box-shadow:0 0 0 3px rgba(233,69,96,.15)!important;outline:none}
+.stat-hover:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(233,69,96,.15)!important}
+.card-hover:hover{transform:translateY(-1px);border-color:rgba(233,69,96,.3)!important;box-shadow:0 8px 32px rgba(0,0,0,.4)!important}
+.row-hover:hover{background:rgba(255,255,255,.04)!important}
+@media(max-width:768px){.mobile-grid-1{grid-template-columns:1fr!important}.mobile-hide{display:none!important}.mobile-stack{flex-direction:column!important}.mobile-full{width:100%!important;max-width:100%!important}}
+@media(max-width:480px){.mobile-xs-hide{display:none!important}}
+`}</style>
+      {/* Animated background blobs */}
+      <div style={{position:"absolute",top:"-20%",left:"-10%",width:"400px",height:"400px",borderRadius:"50%",background:"radial-gradient(circle, rgba(233,69,96,.15) 0%, transparent 70%)",animation:"float 8s ease-in-out infinite",pointerEvents:"none"}}/>
+      <div style={{position:"absolute",bottom:"-15%",right:"-5%",width:"350px",height:"350px",borderRadius:"50%",background:"radial-gradient(circle, rgba(124,58,237,.15) 0%, transparent 70%)",animation:"float 10s ease-in-out infinite 2s",pointerEvents:"none"}}/>
+      <div style={{position:"absolute",top:"40%",right:"10%",width:"200px",height:"200px",borderRadius:"50%",background:"radial-gradient(circle, rgba(0,149,255,.1) 0%, transparent 70%)",animation:"float 6s ease-in-out infinite 1s",pointerEvents:"none"}}/>
       <div style={{width:"100%",maxWidth:"400px",animation:"fadeUp .5s ease"}}>
         {/* Logo */}
         <div style={{textAlign:"center",marginBottom:"32px"}}>
           <div style={{fontFamily:"'Newsreader',serif",fontSize:"28px",fontWeight:700,color:"#fff",letterSpacing:"6px",marginBottom:"6px"}}>INVOGUE</div>
-          <div style={{fontSize:"10px",color:T.gold,fontWeight:800,letterSpacing:"4px"}}>COLLAB HQ</div>
-          <div style={{width:"40px",height:"2px",background:T.gold,margin:"14px auto 0",borderRadius:"2px"}}/>
+          <div style={{fontSize:"10px",color:"#E94560",fontWeight:800,letterSpacing:"4px"}}>COLLAB HQ</div>
+          <div style={{width:"40px",height:"3px",background:"linear-gradient(90deg, #E94560, #FFD700)",margin:"14px auto 0",borderRadius:"2px"}}/>
         </div>
 
         {/* Login Card */}
-        <div style={{background:T.surface,borderRadius:"14px",padding:"28px 24px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
-          <div style={{fontSize:"16px",fontWeight:800,color:T.brand,marginBottom:"4px"}}>Welcome back</div>
-          <div style={{fontSize:"11.5px",color:T.sub,marginBottom:"20px"}}>Sign in to your workspace</div>
+        <div style={{background:"rgba(26,26,46,.8)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderRadius:"20px",padding:"32px 28px",boxShadow:"0 24px 80px rgba(0,0,0,.4)",border:"1px solid rgba(255,255,255,.08)"}}>
+          <div style={{fontSize:"20px",fontWeight:900,color:"#F5F5F5",marginBottom:"6px"}}>Welcome back</div>
+          <div style={{fontSize:"13px",color:"#8B8FA3",marginBottom:"24px"}}>Sign in to your workspace</div>
 
           {/* Email */}
           <div style={{marginBottom:"14px"}}>
-            <label style={{display:"block",fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"5px"}}>Email</label>
+            <label style={{display:"block",fontSize:"10px",fontWeight:700,color:"#8B8FA3",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"5px"}}>Email</label>
             <input type="email" aria-label="Email address" value={loginEmail} onChange={e=>{setLoginEmail(e.target.value);setLoginErr("")}}
               onKeyDown={e=>e.key==="Enter"&&handleLogin()}
               placeholder="your@invogue.in"
-              style={{width:"100%",padding:"11px 14px",border:`1.5px solid ${loginErr?T.err:T.border}`,borderRadius:"8px",fontSize:"13px",fontFamily:"inherit",color:T.text,outline:"none",background:"#fff",transition:"border .15s",boxSizing:"border-box"}}/>
+              style={{width:"100%",padding:"12px 16px",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:"12px",fontSize:"13px",fontFamily:"inherit",color:"#F5F5F5",outline:"none",background:"rgba(255,255,255,.06)",transition:"all .2s",boxSizing:"border-box"}}/>
           </div>
 
           {/* PIN */}
           <div style={{marginBottom:"18px"}}>
-            <label style={{display:"block",fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"5px"}}>PIN</label>
+            <label style={{display:"block",fontSize:"10px",fontWeight:700,color:"#8B8FA3",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"5px"}}>PIN</label>
             <input type="password" aria-label="PIN" value={loginPin} onChange={e=>{setLoginPin(e.target.value);setLoginErr("")}}
               onKeyDown={e=>e.key==="Enter"&&handleLogin()}
               placeholder="••••" maxLength={6}
-              style={{width:"100%",padding:"11px 14px",border:`1.5px solid ${loginErr?T.err:T.border}`,borderRadius:"8px",fontSize:"13px",fontFamily:"inherit",color:T.text,outline:"none",background:"#fff",letterSpacing:"4px",transition:"border .15s",boxSizing:"border-box"}}/>
+              style={{width:"100%",padding:"12px 16px",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:"12px",fontSize:"13px",fontFamily:"inherit",color:"#F5F5F5",outline:"none",background:"rgba(255,255,255,.06)",letterSpacing:"4px",transition:"all .2s",boxSizing:"border-box"}}/>
           </div>
 
           {/* Error */}
           {loginErr&&<div style={{padding:"8px 12px",background:T.errBg,borderRadius:"6px",fontSize:"11px",color:T.err,fontWeight:600,marginBottom:"14px"}}>{loginErr}</div>}
 
           {/* Login Button */}
-          <button onClick={handleLogin} style={{width:"100%",padding:"12px",background:T.gold,color:"#fff",border:"none",borderRadius:"8px",fontSize:"13px",fontWeight:800,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px",transition:"all .15s",boxShadow:"0 4px 12px rgba(176,141,66,.3)"}}>Sign In</button>
+          <button onClick={handleLogin} style={{width:"100%",padding:"14px",background:"linear-gradient(135deg, #E94560, #c62a47)",color:"#fff",border:"none",borderRadius:"12px",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px",transition:"all .2s",boxShadow:"0 4px 20px rgba(233,69,96,.3)"}}>Sign In</button>
         </div>
 
         {/* Quick login cards */}
         <div style={{marginTop:"24px",textAlign:"center"}}>
-          <button onClick={()=>setDemoMode(!demoMode)} style={{background:"none",border:"1px solid rgba(255,255,255,.1)",borderRadius:"6px",padding:"6px 14px",color:"rgba(255,255,255,.35)",fontSize:"10px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",letterSpacing:"1px",textTransform:"uppercase"}}>
+          <button onClick={()=>setDemoMode(!demoMode)} style={{background:"rgba(233,69,96,.1)",border:"1px solid rgba(233,69,96,.3)",borderRadius:"10px",padding:"8px 16px",color:"#E94560",fontSize:"10px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",letterSpacing:"1px",textTransform:"uppercase",transition:"all .2s"}}>
             {demoMode ? "Hide Demo Access" : "Show Demo Access"}
           </button>
           {demoMode && <>
             <div style={{fontSize:"10px",color:"rgba(255,255,255,.35)",fontWeight:700,textTransform:"uppercase",letterSpacing:"1px",marginTop:"10px",marginBottom:"10px"}}>Quick Access (Demo)</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
               {users.filter(u=>u.status==="active").map(u=>{
                 const r = rc(u.role);
                 return <button key={u.id} onClick={()=>{setLoggedIn(u);setView("dashboard")}}
-                  style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.08)",borderRadius:"8px",padding:"10px 12px",cursor:"pointer",textAlign:"left",transition:"all .15s",fontFamily:"inherit"}}
-                  onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,.12)";e.currentTarget.style.borderColor="rgba(255,255,255,.15)"}}
-                  onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,.06)";e.currentTarget.style.borderColor="rgba(255,255,255,.08)"}}>
+                  style={{background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.06)",borderRadius:"12px",padding:"12px 14px",cursor:"pointer",textAlign:"left",transition:"all .15s",fontFamily:"inherit"}}
+                  onMouseEnter={e=>{e.currentTarget.style.background="rgba(233,69,96,.1)";e.currentTarget.style.borderColor="rgba(233,69,96,.2)"}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,.04)";e.currentTarget.style.borderColor="rgba(255,255,255,.06)"}}>
                   <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
                     <div style={{width:"26px",height:"26px",borderRadius:"50%",background:r.bg,color:r.c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",fontWeight:800}}>{u.avatar}</div>
                     <div>
@@ -1197,23 +1245,27 @@ return (
   <div role="application" aria-label="Invogue Collab HQ" style={{fontFamily:"'DM Sans',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&family=Newsreader:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet"/>
     <style>{`*{box-sizing:border-box}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:${T.border};border-radius:3px}@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}@media(max-width:768px){.mobile-grid-1{grid-template-columns:1fr!important}.mobile-hide{display:none!important}.mobile-stack{flex-direction:column!important}.mobile-full{width:100%!important;max-width:100%!important}.mobile-small-text{font-size:10px!important}.mobile-pad{padding:10px!important}}@media(max-width:480px){.mobile-xs-hide{display:none!important}}`}</style>
+      {/* Animated background blobs */}
+      <div style={{position:"absolute",top:"-20%",left:"-10%",width:"400px",height:"400px",borderRadius:"50%",background:"radial-gradient(circle, rgba(233,69,96,.15) 0%, transparent 70%)",animation:"float 8s ease-in-out infinite",pointerEvents:"none"}}/>
+      <div style={{position:"absolute",bottom:"-15%",right:"-5%",width:"350px",height:"350px",borderRadius:"50%",background:"radial-gradient(circle, rgba(124,58,237,.15) 0%, transparent 70%)",animation:"float 10s ease-in-out infinite 2s",pointerEvents:"none"}}/>
+      <div style={{position:"absolute",top:"40%",right:"10%",width:"200px",height:"200px",borderRadius:"50%",background:"radial-gradient(circle, rgba(0,149,255,.1) 0%, transparent 70%)",animation:"float 6s ease-in-out infinite 1s",pointerEvents:"none"}}/>
 
     {/* TOAST */}
-    {toast&&<div role="alert" aria-live="assertive" style={{position:"fixed",top:14,right:14,zIndex:2e3,padding:"9px 16px",borderRadius:"7px",fontSize:"11.5px",fontWeight:700,color:"#fff",background:toast.type==="err"?T.err:toast.type==="warn"?T.warn:T.ok,boxShadow:"0 8px 20px rgba(0,0,0,.15)",animation:"fadeUp .25s ease",letterSpacing:".2px"}}>{toast.msg}</div>}
+    {toast&&<div role="alert" aria-live="assertive" style={{position:"fixed",top:16,right:16,zIndex:2e3,padding:"12px 20px",borderRadius:"12px",fontSize:"12px",fontWeight:700,color:"#fff",background:toast.type==="err"?"linear-gradient(135deg, #FF3D71, #DB2777)":toast.type==="warn"?"linear-gradient(135deg, #FFAA00, #FF6B00)":"linear-gradient(135deg, #00D68F, #06B6D4)",boxShadow:"0 8px 32px rgba(0,0,0,.3)",animation:"fadeUp .3s ease",letterSpacing:".3px",border:"1px solid rgba(255,255,255,.15)"}}>{toast.msg}</div>}
 
     {/* ── HEADER ── */}
-    <div role="banner" style={{background:T.brand,padding:"10px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px"}}>
+    <div role="banner" style={{background:"linear-gradient(135deg, #0F0F1A 0%, #1A1A2E 50%, #16213E 100%)",borderBottom:"1px solid rgba(255,255,255,.06)",padding:"10px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px"}}>
       <div style={{display:"flex",alignItems:"baseline",gap:"8px"}}>
         <span style={{fontFamily:"'Newsreader',serif",fontSize:"17px",fontWeight:700,color:"#fff",letterSpacing:"2px"}}>INVOGUE</span>
-        <span style={{fontSize:"9px",color:T.gold,fontWeight:800,letterSpacing:"2px"}}>COLLAB HQ</span>
+        <span style={{fontSize:"9px",color:"#E94560",fontWeight:800,letterSpacing:"2px"}}>COLLAB HQ</span>
       </div>
 
       {/* Feature 4: Global Search */}
       <div style={{flex:1,maxWidth:"400px",margin:"0 10px",minWidth:"150px",position:"relative"}}>
         <input type="text" aria-label="Search deals, influencers, and campaigns" value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);if(e.target.value.trim())setSearchResults(performSearch(e.target.value));else setSearchResults(null)}}
           placeholder="Search deals, influencers, campaigns..."
-          style={{width:"100%",padding:"7px 12px",borderRadius:"6px",border:"1px solid rgba(255,255,255,.2)",background:"rgba(255,255,255,.08)",color:"#fff",fontSize:"11px",fontFamily:"inherit",outline:"none"}}/>
-        {searchResults&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:T.surface,borderRadius:"6px",marginTop:"4px",maxHeight:"300px",overflowY:"auto",zIndex:100,boxShadow:"0 8px 20px rgba(0,0,0,.2)"}}>
+          style={{width:"100%",padding:"8px 14px",borderRadius:"10px",border:"1px solid rgba(255,255,255,.06)",background:"rgba(255,255,255,.05)",color:"#fff",fontSize:"11px",fontFamily:"inherit",outline:"none"}}/>
+        {searchResults&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:"#1A1A2E",borderRadius:"12px",border:"1px solid rgba(255,255,255,.08)",marginTop:"4px",maxHeight:"300px",overflowY:"auto",zIndex:100,boxShadow:"0 8px 20px rgba(0,0,0,.2)"}}>
           {(searchResults.dealMatches?.length||0)>0&&<>
             <div style={{fontSize:"9px",fontWeight:700,color:T.sub,padding:"8px 12px",textTransform:"uppercase"}}>Deals</div>
             {searchResults.dealMatches.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail");setSearchQuery("");setSearchResults(null)}} style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`,cursor:"pointer",fontSize:"11px"}}><b>{d.inf}</b><div style={{fontSize:"9px",color:T.sub}}>{d.product}</div></div>)}
@@ -1232,9 +1284,9 @@ return (
       <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
         {/* Feature 5: Notifications Bell */}
         <div style={{position:"relative"}}>
-          <button aria-label={"Notifications"+(unreads>0?", "+unreads+" unread":"")} onClick={()=>{setNotificationPanel(!notificationPanel);if(!notificationPanel)setLastSeenTime(new Date().toISOString())}} style={{background:"none",border:"none",color:"#fff",fontSize:"18px",cursor:"pointer",position:"relative"}}>
+          <button aria-label={"Notifications"+(unreads>0?", "+unreads+" unread":"")} onClick={()=>{setNotificationPanel(!notificationPanel);if(!notificationPanel)setLastSeenTime(new Date().toISOString())}} style={{background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.06)",borderRadius:"10px",color:"#fff",fontSize:"16px",cursor:"pointer",position:"relative",padding:"6px 8px"}}>
             🔔
-            {unreads>0&&<span style={{position:"absolute",top:-4,right:-4,background:T.err,color:"#fff",borderRadius:"50%",width:"18px",height:"18px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",fontWeight:800}}>{unreads}</span>}
+            {unreads>0&&<span style={{position:"absolute",top:-4,right:-4,background:"linear-gradient(135deg, #FF3D71, #E94560)",color:"#fff",borderRadius:"50%",width:"18px",height:"18px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",fontWeight:800}}>{unreads}</span>}
           </button>
           {notificationPanel&&<div style={{position:"absolute",top:"100%",right:0,background:T.surface,borderRadius:"6px",marginTop:"4px",width:"320px",maxHeight:"400px",overflowY:"auto",zIndex:100,boxShadow:"0 8px 20px rgba(0,0,0,.2)"}}>
             <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,fontWeight:700,fontSize:"12px"}}>Notifications</div>
@@ -1251,14 +1303,14 @@ return (
           </div>}
         </div>
 
-        <div style={{display:"flex",alignItems:"center",gap:"7px",padding:"4px 10px",borderRadius:"8px",background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.08)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:"7px",padding:"6px 12px",borderRadius:"12px",background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.06)"}}>
           <div style={{width:"22px",height:"22px",borderRadius:"50%",background:loggedRC.bg,color:loggedRC.c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"8px",fontWeight:800}}>{loggedIn.avatar}</div>
           <div>
             <div style={{fontSize:"10.5px",fontWeight:700,color:"#fff",lineHeight:1.2}}>{loggedIn.name}</div>
             <div style={{fontSize:"8.5px",color:loggedRC.c,fontWeight:700}}>{loggedRC.i} {loggedRC.l}</div>
           </div>
         </div>
-        <button aria-label="Sign out" onClick={handleLogout} style={{background:"none",border:"1px solid rgba(255,255,255,.1)",borderRadius:"5px",color:"rgba(255,255,255,.5)",fontSize:"9.5px",padding:"4px 8px",cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>Sign Out</button>
+        <button aria-label="Sign out" onClick={handleLogout} style={{background:"none",border:"1px solid rgba(255,255,255,.08)",borderRadius:"8px",color:"rgba(255,255,255,.4)",fontSize:"10px",padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>Sign Out</button>
         <button onClick={resetData} title="Reset to sample data" style={{background:"none",border:"1px solid rgba(255,255,255,.08)",borderRadius:"4px",color:"rgba(255,255,255,.3)",fontSize:"8px",padding:"3px 6px",cursor:"pointer",fontFamily:"inherit"}}>Reset</button>
       </div>
     </div>
@@ -1276,11 +1328,11 @@ return (
         logistics: [{k:"dashboard",l:"Shipment Center",i:"🔵"},{k:"shipments",l:"All Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
       };
       const items = navItems[role]||navItems.negotiator;
-      return <div role="navigation" aria-label="Main navigation" style={{background:T.surface,borderBottom:`1px solid ${T.border}`,padding:"0 10px",display:"flex",gap:"2px",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+      return <div role="navigation" aria-label="Main navigation" style={{background:"#0F0F1A",borderBottom:"1px solid rgba(255,255,255,.04)",padding:"0 16px",display:"flex",gap:"2px",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
         {items.map(n=>(
-          <button key={n.k} onClick={()=>setView(n.k)} style={{padding:"10px 13px",border:"none",borderBottom:view===n.k?`2px solid ${T.gold}`:"2px solid transparent",background:"none",color:view===n.k?T.brand:T.sub,fontWeight:view===n.k?800:500,fontSize:"11px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"4px",letterSpacing:".2px"}}>
+          <button key={n.k} onClick={()=>setView(n.k)} style={{padding:"8px 14px",border:"none",borderBottom:"none",borderRadius:"8px",margin:"4px 0",background:view===n.k?"rgba(233,69,96,.12)":"transparent",color:view===n.k?"#E94560":"#8B8FA3",fontWeight:view===n.k?800:500,fontSize:"11px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"5px",letterSpacing:".3px",transition:"all .2s"}}>
             {n.i} {n.l}
-            {n.n>0&&<span style={{background:T.err,color:"#fff",borderRadius:"7px",padding:"0 5px",fontSize:"9px",fontWeight:800,lineHeight:"15px"}}>{n.n}</span>}
+            {n.n>0&&<span style={{background:"linear-gradient(135deg, #FF3D71, #E94560)",color:"#fff",borderRadius:"8px",padding:"1px 6px",fontSize:"9px",fontWeight:800,lineHeight:"16px"}}>{n.n}</span>}
           </button>
         ))}
       </div>;
@@ -1303,10 +1355,10 @@ return (
 
         return <>
           {/* Admin header band */}
-          <div style={{background:"linear-gradient(135deg,#141824 0%,#2D1F4E 100%)",borderRadius:"10px",padding:"16px 20px",marginBottom:"16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{background:T.gradient1,borderRadius:"14px",padding:"16px 20px",marginBottom:"16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
-              <div style={{fontSize:"17px",fontWeight:800,color:"#fff"}}>⚙️ Admin Control Panel</div>
-              <div style={{fontSize:"11px",color:"rgba(255,255,255,.5)",marginTop:"2px"}}>Super access — all roles, all data, all controls</div>
+              <div style={{fontSize:"17px",fontWeight:800,color:T.text}}>⚙️ Admin Control Panel</div>
+              <div style={{fontSize:"11px",color:T.faint,marginTop:"2px"}}>Super access — all roles, all data, all controls</div>
             </div>
             <div style={{display:"flex",gap:"6px"}}>
               <Btn v="gold" sm onClick={()=>setView("users")}>Manage Team</Btn>
@@ -1400,7 +1452,7 @@ return (
 
           {/* OVERDUE DELIVERABLES */}
           {overdueDels.length>0&&<Section title={`Overdue Deliverables (${overdueDels.length})`} icon="🚨">
-            {overdueDels.map((d,i)=><div key={i} style={{background:"#FFF8F5",border:`1px solid ${T.err}22`,borderRadius:"6px",padding:"7px 10px",marginBottom:"3px",fontSize:"11px",display:"flex",justifyContent:"space-between"}}>
+            {overdueDels.map((d,i)=><div key={i} style={{background:T.errBg,border:`1px solid ${T.err}22`,borderRadius:"6px",padding:"7px 10px",marginBottom:"3px",fontSize:"11px",display:"flex",justifyContent:"space-between"}}>
               <span><b>{d.inf}</b> · {d.type}: {d.desc||"—"}</span><span style={{color:T.err,fontWeight:700}}>Due: {d.deadline}</span>
             </div>)}
           </Section>}
@@ -1560,8 +1612,8 @@ return (
             <div style={{fontSize:"11px",color:T.sub}}>Complete activity trail across all deals and users — {allLogs.length} entries</div>
           </div>
           <div style={{display:"flex",gap:"8px",marginBottom:"12px",alignItems:"center",flexWrap:"wrap"}}>
-            <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>From</label><input type="date" value={auditDateFrom} onChange={e=>{setAuditDateFrom(e.target.value);setAuditPage(0)}} style={{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:"5px",fontSize:"11px",fontFamily:"inherit"}}/></div>
-            <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>To</label><input type="date" value={auditDateTo} onChange={e=>{setAuditDateTo(e.target.value);setAuditPage(0)}} style={{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:"5px",fontSize:"11px",fontFamily:"inherit"}}/></div>
+            <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>From</label><input type="date" value={auditDateFrom} onChange={e=>{setAuditDateFrom(e.target.value);setAuditPage(0)}} style={{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:"5px",fontSize:"11px",fontFamily:"inherit",background:"rgba(255,255,255,.06)",color:T.text}}/></div>
+            <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>To</label><input type="date" value={auditDateTo} onChange={e=>{setAuditDateTo(e.target.value);setAuditPage(0)}} style={{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:"5px",fontSize:"11px",fontFamily:"inherit",background:"rgba(255,255,255,.06)",color:T.text}}/></div>
             {(auditDateFrom||auditDateTo)&&<Btn v="ghost" sm onClick={()=>{setAuditDateFrom("");setAuditDateTo("");setAuditPage(0)}}>Clear filters</Btn>}
             <span style={{fontSize:"10px",color:T.sub,marginLeft:"auto"}}>{allLogs.length} total entries</span>
           </div>
@@ -1571,7 +1623,7 @@ return (
             </div>
             {filteredLogs.slice(auditPage * ITEMS_PER_PAGE, (auditPage+1) * ITEMS_PER_PAGE).map((lg,i)=>{
               const isFinancial = lg.a.toLowerCase().includes("payment")||lg.a.toLowerCase().includes("approved")||lg.a.toLowerCase().includes("invoice")||lg.a.toLowerCase().includes("dispute");
-              return <div key={i} style={{display:"grid",gridTemplateColumns:"1.2fr 1fr 1.5fr 2fr 0.8fr",padding:"7px 14px",borderBottom:`1px solid ${T.border}`,fontSize:"11px",alignItems:"center",background:isFinancial?"#FFFDF5":"transparent"}}>
+              return <div key={i} style={{display:"grid",gridTemplateColumns:"1.2fr 1fr 1.5fr 2fr 0.8fr",padding:"7px 14px",borderBottom:`1px solid ${T.border}`,fontSize:"11px",alignItems:"center",background:isFinancial?T.goldSoft:"transparent"}}>
                 <div style={{color:T.sub,fontSize:"10px",fontFamily:"monospace"}}>{lg.t}</div>
                 <div style={{fontWeight:600}}>{lg.u}</div>
                 <div>
@@ -1655,7 +1707,7 @@ return (
 
           {/* Renegotiation Requests */}
           {myRenegotiations.length>0&&<Section title={`Renegotiation Requests (${myRenegotiations.length})`} icon="🔄">
-            {myRenegotiations.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:"#fff8f0",border:`1px solid ${T.warnBg}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"5px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            {myRenegotiations.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.warnBg,border:`1px solid ${T.warnBg}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"5px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div><span style={{fontWeight:700,fontSize:"12px"}}>{d.inf}</span> <span style={{color:T.sub,fontSize:"11px"}}>· {f(d.amount)} · {d.dels.length} deliverables</span></div>
               <Badge s={d.status} sm/>
             </div>)}
@@ -1770,7 +1822,7 @@ return (
 
           {/* OVERDUE DELIVERABLES */}
           {overdueDels.length>0&&<Section title={`Overdue Deliverables (${overdueDels.length})`} icon="🚨">
-            {overdueDels.map((d,i)=><div key={i} style={{background:"#FFF8F5",border:`1px solid ${T.err}22`,borderRadius:"6px",padding:"7px 10px",marginBottom:"3px",fontSize:"11px",display:"flex",justifyContent:"space-between"}}>
+            {overdueDels.map((d,i)=><div key={i} style={{background:T.errBg,border:`1px solid ${T.err}22`,borderRadius:"6px",padding:"7px 10px",marginBottom:"3px",fontSize:"11px",display:"flex",justifyContent:"space-between"}}>
               <span><b>{d.inf}</b> · {d.type}: {d.desc||"—"}</span><span style={{color:T.err,fontWeight:700}}>Due: {d.deadline}</span>
             </div>)}
           </Section>}
@@ -1945,7 +1997,7 @@ return (
                 const totalSpend = getInfTotalSpend(inf);
                 const ratingColor = inf.rating==="A+"?T.ok:inf.rating==="A"?T.info:inf.rating==="B+"?T.warn:T.sub;
                 return <div key={inf.id} onClick={()=>setInfProfile(inf)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"10px",padding:"14px",cursor:"pointer",transition:"all .12s"}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,.05)"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow=T.cardShadowHover}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"8px"}}>
                     <div style={{display:"flex",gap:"10px",alignItems:"center"}}>
@@ -2170,7 +2222,7 @@ return (
               {(()=>{
                 const total = Object.values(analytics.statusDist).reduce((s,v)=>s+v,0);
                 if(total===0) return <div style={{fontSize:"11px",color:T.sub,padding:"12px"}}>No deals yet</div>;
-                const colors = {pending:T.warn,approved:T.ok,live:"#1B7A3D",paid:T.brand,rejected:T.err,dropped:"#999"};
+                const colors = {pending:T.warn,approved:T.ok,live:T.teal,paid:T.brand,rejected:T.err,dropped:T.faint};
                 const entries = Object.entries(analytics.statusDist).filter(([,v])=>v>0);
                 let startAngle = 0;
                 const slices = entries.map(([status,count])=>{
@@ -2190,7 +2242,7 @@ return (
                 });
                 return <div style={{display:"flex",alignItems:"center",gap:"24px",padding:"12px"}}>
                   <svg width="160" height="160" viewBox="0 0 160 160">
-                    {slices.map((s,i)=><path key={i} d={s.path} fill={s.color} stroke="#fff" strokeWidth="2"/>)}
+                    {slices.map((s,i)=><path key={i} d={s.path} fill={s.color} stroke={T.surface} strokeWidth="2"/>)}
                   </svg>
                   <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
                     {slices.map((s,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:"8px",fontSize:"11px"}}>
@@ -2316,7 +2368,7 @@ return (
                   const paid=totalPaid(d);
                   const done=d.dels.filter(x=>x.st==="live").length;
                   return <div key={d.id} style={{background:T.surface,border:bulkSelected.has(d.id)?`2px solid ${T.gold}`:(`1px solid ${T.border}`),borderRadius:"9px",padding:"13px",cursor:"pointer",transition:"all .12s",animation:"fadeUp .3s ease"}}
-                    onMouseEnter={e=>{if(!bulkSelected.has(d.id)){e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,.05)"}}}
+                    onMouseEnter={e=>{if(!bulkSelected.has(d.id)){e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow=T.cardShadowHover}}}
                     onMouseLeave={e=>{if(!bulkSelected.has(d.id)){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"5px"}}>
                       <div style={{display:"flex",alignItems:"flex-start",gap:"6px"}}>
@@ -2417,7 +2469,7 @@ return (
             {pendingDels.length===0&&<div style={{padding:"24px",textAlign:"center",color:T.sub,fontSize:"12px"}}>{deals.some(d=>!["rejected","pending","renegotiate","dropped"].includes(d.status))?"All deliverables fulfilled! 🎉":"No approved deals with pending deliverables yet"}</div>}
             {pendingDels.map((d,i)=>{
               const overdue = new Date(d.deadline)<new Date();
-              return <div key={i} style={{display:"grid",gridTemplateColumns:"1.8fr 1.5fr 1.2fr 0.8fr 0.8fr 0.7fr",padding:"8px 12px",borderBottom:`1px solid ${T.border}`,fontSize:"11px",alignItems:"center",background:overdue?"#FFF8F5":"transparent"}}>
+              return <div key={i} style={{display:"grid",gridTemplateColumns:"1.8fr 1.5fr 1.2fr 0.8fr 0.8fr 0.7fr",padding:"8px 12px",borderBottom:`1px solid ${T.border}`,fontSize:"11px",alignItems:"center",background:overdue?T.errBg:"transparent"}}>
                 <div style={{fontWeight:700}}>{d.inf}</div>
                 <div><span style={{color:T.sub}}>{d.type}</span> — {d.desc||"—"}</div>
                 <div style={{fontSize:"10px",color:T.gold,fontWeight:700}}>{getCamp(d.cid)?.name||"—"}</div>
@@ -2487,7 +2539,7 @@ return (
           </div>
 
           {/* Products */}
-          <div style={{marginTop:"8px",padding:"12px",background:"#f8f6f2",borderRadius:"7px",marginBottom:"8px"}}>
+          <div style={{marginTop:"8px",padding:"12px",background:T.surfaceAlt,borderRadius:"7px",marginBottom:"8px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
               <span style={{fontSize:"10px",fontWeight:800,color:T.brand,textTransform:"uppercase",letterSpacing:".5px"}}>📦 Products ({nDeal.products?.length||0})</span>
               <Btn v="outline" sm onClick={()=>setNDeal({...nDeal,products:[...(nDeal.products||[]),{id:uid(),name:"",color:"",size:"",qty:"1"}]})}>+ Add Product</Btn>
@@ -2658,7 +2710,7 @@ return (
           <div style={{marginBottom:"14px"}}>
             <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px"}}>Select Deliverables to Keep</div>
             {renegF.dels.map((dl,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",gap:"8px",padding:"7px 10px",background:dl.keep?T.surface:"#f8f6f2",border:`1px solid ${dl.keep?T.border:"#e8e4dc"}`,borderRadius:"6px",marginBottom:"4px",opacity:dl.keep?1:.5}}>
+              <div key={i} style={{display:"flex",alignItems:"center",gap:"8px",padding:"7px 10px",background:dl.keep?T.surface:T.surfaceAlt,border:`1px solid ${dl.keep?T.border:T.border}`,borderRadius:"6px",marginBottom:"4px",opacity:dl.keep?1:.5}}>
                 <input type="checkbox" checked={dl.keep} onChange={()=>{
                   const ds=[...renegF.dels]; ds[i]={...ds[i],keep:!ds[i].keep}; setRenegF({...renegF,dels:ds});
                 }} style={{accentColor:T.gold,width:"16px",height:"16px"}}/>
@@ -2796,7 +2848,7 @@ return (
             {/* Email preview */}
             {["email_sent","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","partial_paid","paid"].includes(sel.status)&&
             <Section title="Confirmation Email (System-Generated)" icon="✉">
-              <div style={{background:"#fff",border:`1px solid ${T.border}`,borderRadius:"6px",padding:"12px",fontSize:"11px",lineHeight:1.7}}>
+              <div style={{background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"12px",fontSize:"11px",lineHeight:1.7,color:T.text}}>
                 Dear {sel.inf},<br/><br/>
                 Thank you for partnering with <b>Invogue</b>! Confirmed terms:<br/><br/>
                 <b>Product:</b> {sel.products?sel.products.map(p=>p.name).join(", "):sel.product}<br/>
@@ -2953,7 +3005,7 @@ return (
             {["timeliness","quality","communication","professionalism"].map(dim=><div key={dim} style={{marginBottom:"8px"}}>
               <div style={{fontSize:"10px",fontWeight:600,marginBottom:"4px",textTransform:"capitalize"}}>{dim}</div>
               <div style={{display:"flex",gap:"4px"}}>
-                {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setRatingF({...ratingF,stars:{...ratingF.stars,[dim]:n}})} style={{width:"32px",height:"32px",border:"1px solid "+T.border,borderRadius:"4px",cursor:"pointer",background:ratingF.stars[dim]>=n?T.gold:T.surface,color:ratingF.stars[dim]>=n?"#fff":T.sub,fontWeight:700,fontSize:"14px"}}>⭐</button>)}
+                {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setRatingF({...ratingF,stars:{...ratingF.stars,[dim]:n}})} style={{width:"32px",height:"32px",border:"1px solid "+T.border,borderRadius:"4px",cursor:"pointer",background:ratingF.stars[dim]>=n?T.gold:T.surface,color:ratingF.stars[dim]>=n?T.bg:T.sub,fontWeight:700,fontSize:"14px"}}>⭐</button>)}
               </div>
             </div>)}
           </div>

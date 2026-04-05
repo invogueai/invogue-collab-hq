@@ -408,7 +408,8 @@ export default function InvogueCollabHQ() {
 
       influencerStats[d.inf] = (influencerStats[d.inf]||0) + 1;
 
-      if(statusDist[d.status]) statusDist[d.status]++;
+      if(d.status in statusDist) statusDist[d.status]++;
+      else statusDist[d.status] = 1;
     });
 
     return { monthlySpend, campaignPerf, influencerStats, statusDist };
@@ -1379,7 +1380,7 @@ return (
               if(k==="admin"||k==="viewer") return null;
               return <div key={k} style={{background:v.bg,border:`1px solid ${v.c}22`,borderRadius:"8px",padding:"10px 16px",display:"flex",alignItems:"center",gap:"8px"}}>
                 <span style={{fontSize:"18px"}}>{v.i}</span>
-                <div><div style={{fontSize:"16px",fontWeight:800,color:v.c}}>{count}</div><div style={{fontSize:"9px",fontWeight:700,color:v.c,textTransform:"uppercase"}}>{v.l}s</div></div>
+                <div><div style={{fontSize:"16px",fontWeight:800,color:v.c}}>{count}</div><div style={{fontSize:"9px",fontWeight:700,color:v.c,textTransform:"uppercase"}}>{v.l}{v.l.endsWith("s")?"":"s"}</div></div>
               </div>;
             })}
           </div>
@@ -1397,6 +1398,7 @@ return (
                 <div style={{color:T.sub,fontSize:"11px"}}>{u.email}</div>
                 <div>
                   <select value={u.role} onChange={e=>changeUserRole(u.id,e.target.value)} style={{padding:"3px 6px",borderRadius:"4px",border:`1px solid ${T.border}`,fontSize:"10px",fontWeight:700,color:rc.c,background:rc.bg,fontFamily:"inherit",cursor:"pointer"}}>
+                    <option value="admin">Admin</option>
                     <option value="negotiator">Negotiator</option>
                     <option value="approver">Manager</option>
                     <option value="finance">Finance</option>
@@ -1509,7 +1511,7 @@ return (
             <StatBox l="Needs My Action" v={myNeedAction.length} c={myNeedAction.length>0?T.warn:T.ok} sub="Do these now"/>
             <StatBox l="Pending Approval" v={myPending.length} c={myPending.length>0?T.warn:T.ok} sub="With manager"/>
             <StatBox l="Active Collabs" v={myActive.length} c={T.info}/>
-            <StatBox l="Content Pending" v={myDeals.reduce((s,d)=>s+d.dels.filter(x=>x.st==="pending").length,0)} c={T.purple}/>
+            <StatBox l="Content Pending" v={myDeals.filter(d=>!["rejected","pending","renegotiate","dropped"].includes(d.status)).reduce((s,d)=>s+d.dels.filter(x=>x.st==="pending").length,0)} c={T.purple}/>
             <StatBox l="Completed" v={myCompleted.length} c={T.ok}/>
           </div>
 
@@ -2258,7 +2260,7 @@ return (
             <div style={{display:"grid",gridTemplateColumns:"1.8fr 1.5fr 1.2fr 0.8fr 0.8fr 0.7fr",padding:"8px 12px",background:T.brand,fontSize:"9px",fontWeight:800,color:"rgba(255,255,255,.6)",textTransform:"uppercase",letterSpacing:".5px"}}>
               <div>Influencer</div><div>Deliverable</div><div>Campaign</div><div>Platform</div><div>Deadline</div><div>Status</div>
             </div>
-            {pendingDels.length===0&&<div style={{padding:"24px",textAlign:"center",color:T.sub,fontSize:"12px"}}>All deliverables fulfilled! 🎉</div>}
+            {pendingDels.length===0&&<div style={{padding:"24px",textAlign:"center",color:T.sub,fontSize:"12px"}}>{deals.some(d=>!["rejected","pending","renegotiate","dropped"].includes(d.status))?"All deliverables fulfilled! 🎉":"No approved deals with pending deliverables yet"}</div>}
             {pendingDels.map((d,i)=>{
               const overdue = new Date(d.deadline)<new Date();
               return <div key={i} style={{display:"grid",gridTemplateColumns:"1.8fr 1.5fr 1.2fr 0.8fr 0.8fr 0.7fr",padding:"8px 12px",borderBottom:`1px solid ${T.border}`,fontSize:"11px",alignItems:"center",background:overdue?"#FFF8F5":"transparent"}}>

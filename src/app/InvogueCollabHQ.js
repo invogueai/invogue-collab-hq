@@ -359,7 +359,9 @@ export default function InvogueCollabHQ() {
     const errors = {};
 
     if(!nDeal.profile) errors.profile = "Influencer profile is mandatory";
-    if(!nDeal.inf||!nDeal.amount||!nDeal.product||!nDeal.deadline) errors.general = "Fill all required fields";
+    const hasProduct = (nDeal.products && nDeal.products.some(p=>p.name)) || nDeal.product;
+    if(!nDeal.inf||!nDeal.amount||!nDeal.deadline) errors.general = "Fill all required fields";
+    if(!hasProduct) errors.products = "At least one product is required";
     if(!nDeal.email) errors.email = "Email is required";
     if(nDeal.dels.length===0) errors.dels = "Add at least one deliverable";
 

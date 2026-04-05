@@ -264,6 +264,37 @@ export default function InvogueCollabHQ() {
   const [attachmentMode, setAttachmentMode] = useState({}); // {delId: "link"|"attachment"}
   const [attachmentDesc, setAttachmentDesc] = useState({}); // {delId: description}
 
+  // Feature 1: Analytics & Reports
+  const [analyticsData, setAnalyticsData] = useState(null);
+
+  // Feature 2: Influencer Rating & Feedback
+  const [ratingF, setRatingF] = useState({stars:{timeliness:0,quality:0,communication:0,professionalism:0},feedback:"",influencerId:null});
+
+  // Feature 3: Bulk Operations
+  const [bulkSelected, setBulkSelected] = useState(new Set());
+  const [bulkSelectAll, setBulkSelectAll] = useState(false);
+
+  // Feature 4: Search & Advanced Filters
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState(null);
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [filterAmountMin, setFilterAmountMin] = useState("");
+  const [filterAmountMax, setFilterAmountMax] = useState("");
+  const [filterPlatform, setFilterPlatform] = useState("");
+  const [filterStatus, setFilterStatus] = useState([]);
+  const [filterNegotiator, setFilterNegotiator] = useState("");
+  const [activeFilters, setActiveFilters] = useState([]);
+
+  // Feature 5: Activity Feed / Notifications
+  const [notificationPanel, setNotificationPanel] = useState(false);
+  const [lastSeenTime, setLastSeenTime] = useState(new Date().toISOString());
+
+  // Feature 6: Tax Support (GST/TDS)
+  const [gstRate, setGstRate] = useState("0");
+  const [tdsRate, setTdsRate] = useState("0");
+  const [taxCalculation, setTaxCalculation] = useState(null);
+
   const notify = (msg,type="ok") => { setToast({msg,type}); setTimeout(()=>setToast(null),2800); };
 
   // ── Load data from Supabase on mount ──
@@ -358,6 +389,133 @@ export default function InvogueCollabHQ() {
       pendingShip: pendingShip.length,
     };
   },[deals,pendingDels,pendingShip]);
+
+  // ── FEATURE 1: ANALYTICS HELPERS ──
+  const generateAnalyticsData = () => {
+    const monthlySpend = {};
+    const campaignPerf = {};
+    const influencerStats = {};
+    const statusDist = {pending:0, approved:0, live:0, paid:0, rejected:0, dropped:0};
+
+    deals.forEach(d => {
+      const month = d.at?.slice(0,7) || "2026-01";
+      monthlySpend[month] = (monthlySpend[month]||0) + d.amount;
+
+      if(d.cid) {
+        if(!campaignPerf[d.cid]) campaignPerf[d.cid] = {budget:getCamp(d.cid)?.budget||0, spent:0};
+        campaignPerf[d.cid].spent += d.amount;
+      }
+
+      influencerStats[d.inf] = (influencerStats[d.inf]||0) + 1;
+
+      if(statusDist[d.status]) statusDist[d.status]++;
+    });
+
+    return { monthlySpend, campaignPerf, influencerStats, statusDist };
+  };
+
+  const getRecentNotifications = () => {
+    const notifs = [];
+    deals.forEach(d => {
+      if(d.logs) {
+        d.logs.forEach(log => {
+          notifs.push({
+            id: d.id + log.t,
+            dealId: d.id,
+            inf: d.inf,
+            msg: log.a,
+            detail: log.d,
+            time: log.t,
+            icon: getNotificationIcon(log.a)
+          });
+        });
+      }
+    });
+    return notifs.sort((a,b) => new Date(b.time) - new Date(a.time)).slice(0,20);
+  };
+
+  const getNotificationIcon = (action) => {
+    if(action.includes("created")) return "✨";
+    if(action.includes("Approved")) return "✅";
+    if(action.includes("Rejected")) return "❌";
+    if(action.includes("paid")) return "💳";
+    if(action.includes("live")) return "🟢";
+    if(action.includes("Dispatched")) return "🚚";
+    return "📝";
+  };
+
+  const performSearch = (query) => {
+    if(!query.trim()) return null;
+    const q = query.toLowerCase();
+
+    const dealMatches = deals.filter(d =>
+      d.inf?.toLowerCase().includes(q) ||
+      d.product?.toLowerCase().includes(q) ||
+      getCamp(d.cid)?.name?.toLowerCase().includes(q)
+    ).slice(0,10);
+
+    const infMatches = influencers.filter(i =>
+      i.name?.toLowerCase().includes(q) ||
+      i.handle?.toLowerCase().includes(q) ||
+      i.category?.toLowerCase().includes(q)
+    ).slice(0,10);
+
+    const campMatches = campaigns.filter(c =>
+      c.name?.toLowerCase().includes(q)
+    ).slice(0,10);
+
+    return { dealMatches, infMatches, campMatches };
+  };
+
+  const applyFilters = () => {
+    let filtered = deals;
+    const active = [];
+
+    if(filterDateFrom) {
+      filtered = filtered.filter(d => new Date(d.at) >= new Date(filterDateFrom));
+      active.push(`From: ${filterDateFrom}`);
+    }
+    if(filterDateTo) {
+      filtered = filtered.filter(d => new Date(d.at) <= new Date(filterDateTo));
+      active.push(`To: ${filterDateTo}`);
+    }
+    if(filterAmountMin) {
+      filtered = filtered.filter(d => d.amount >= +filterAmountMin);
+      active.push(`Min: ${f(filterAmountMin)}`);
+    }
+    if(filterAmountMax) {
+      filtered = filtered.filter(d => d.amount <= +filterAmountMax);
+      active.push(`Max: ${f(filterAmountMax)}`);
+    }
+    if(filterPlatform) {
+      filtered = filtered.filter(d => d.platform === filterPlatform);
+      active.push(`Platform: ${filterPlatform}`);
+    }
+    if(filterStatus.length > 0) {
+      filtered = filtered.filter(d => filterStatus.includes(d.status));
+      active.push(`Status: ${filterStatus.join(", ")}`);
+    }
+    if(filterNegotiator) {
+      filtered = filtered.filter(d => d.by === filterNegotiator);
+      active.push(`Negotiator: ${filterNegotiator}`);
+    }
+
+    setActiveFilters(active);
+    return filtered;
+  };
+
+  const clearFilter = (idx) => {
+    const filters = [filterDateFrom, filterDateTo, filterAmountMin, filterAmountMax, filterPlatform, filterStatus, filterNegotiator];
+    const filterSetters = [setFilterDateFrom, setFilterDateTo, setFilterAmountMin, setFilterAmountMax, setFilterPlatform, setFilterStatus, setFilterNegotiator];
+    if(idx < filterSetters.length) filterSetters[idx]("");
+  };
+
+  const calculateTax = (amount) => {
+    const base = +amount || 0;
+    const gst = base * (parseFloat(gstRate) / 100);
+    const tds = base * (parseFloat(tdsRate) / 100);
+    return { base, gst, tds, netPayable: base + gst - tds };
+  };
 
   // ── Actions ──
   const createDeal = async () => {
@@ -751,6 +909,114 @@ export default function InvogueCollabHQ() {
     setDropReasonF("");
   };
 
+  // ── FEATURE 2: RATING & FEEDBACK ──
+  const rateInfluencer = (deal, rating) => {
+    if(!deal || !rating.feedback) return notify("Feedback required","err");
+    const overall = (rating.stars.timeliness + rating.stars.quality + rating.stars.communication + rating.stars.professionalism) / 4;
+    const infIdx = influencers.findIndex(i => i.name === deal.inf);
+    if(infIdx >= 0) {
+      const inf = influencers[infIdx];
+      inf.rating = overall.toFixed(1);
+      inf.feedback = rating.feedback;
+      setInfluencers([...influencers]);
+    }
+    upDeal(deal.id, { rating: rating.stars, feedback: rating.feedback });
+    addLog(deal.id, loggedIn?.name || "You", "Influencer rated", `Overall: ${overall.toFixed(1)}/5`);
+    setRatingF({stars:{timeliness:0,quality:0,communication:0,professionalism:0},feedback:"",influencerId:null});
+    setModal(null);
+    notify("Rating submitted!");
+  };
+
+  const getInfluencerRating = (infName) => {
+    const inf = influencers.find(i => i.name === infName);
+    return inf?.rating || 0;
+  };
+
+  // ── FEATURE 3: BULK OPERATIONS ──
+  const toggleBulkSelect = (id) => {
+    const newSet = new Set(bulkSelected);
+    if(newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setBulkSelected(newSet);
+  };
+
+  const toggleSelectAll = (items) => {
+    if(bulkSelectAll) {
+      setBulkSelected(new Set());
+      setBulkSelectAll(false);
+    } else {
+      setBulkSelected(new Set(items.map(i => i.id)));
+      setBulkSelectAll(true);
+    }
+  };
+
+  const bulkApprove = () => {
+    const toApprove = [...bulkSelected].map(id => deals.find(d => d.id === id)).filter(d => d && d.status === "pending");
+    if(toApprove.length === 0) return notify("No pending deals selected","err");
+
+    const count = toApprove.length;
+    setConfirmAction({
+      title: "Bulk Approve",
+      msg: `Approve ${count} deal${count > 1 ? 's' : ''}?`,
+      onConfirm: () => {
+        const userName = loggedIn?.name || "Manager";
+        const ts = new Date().toISOString();
+        toApprove.forEach(d => {
+          supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id);
+          upDeal(d.id, {status:"approved",appBy:userName,appAt:ts});
+          addLog(d.id, userName, "Bulk approved", f(d.amount));
+        });
+        setBulkSelected(new Set());
+        setBulkSelectAll(false);
+        setConfirmAction(null);
+        notify(`${count} deal${count > 1 ? 's' : ''} approved!`);
+      }
+    });
+  };
+
+  const bulkReject = () => {
+    const toReject = [...bulkSelected].map(id => deals.find(d => d.id === id)).filter(d => d && d.status === "pending");
+    if(toReject.length === 0) return notify("No pending deals selected","err");
+
+    const count = toReject.length;
+    setConfirmAction({
+      title: "Bulk Reject",
+      msg: `Reject ${count} deal${count > 1 ? 's' : ''}?`,
+      onConfirm: () => {
+        const userName = loggedIn?.name || "Manager";
+        const ts = new Date().toISOString();
+        toReject.forEach(d => {
+          supabase.from('deals').update({status:'rejected',approved_by:userName,approved_at:ts}).eq('id',d.id);
+          upDeal(d.id, {status:"rejected",appBy:userName,appAt:ts});
+          addLog(d.id, userName, "Bulk rejected", "Batch rejection");
+        });
+        setBulkSelected(new Set());
+        setBulkSelectAll(false);
+        setConfirmAction(null);
+        notify(`${count} deal${count > 1 ? 's' : ''} rejected!`, "err");
+      }
+    });
+  };
+
+  const bulkExportCSV = () => {
+    const toExport = [...bulkSelected].map(id => deals.find(d => d.id === id)).filter(d => d);
+    if(toExport.length === 0) return notify("No deals selected","err");
+
+    const csv = "Influencer,Platform,Product,Amount,Status,Created\n" +
+      toExport.map(d => `"${d.inf}","${d.platform}","${d.product}",${d.amount},"${d.status}","${d.at}"`).join("\n");
+
+    const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href",url);
+    link.setAttribute("download",`deals_export_${new Date().toISOString().slice(0,10)}.csv`);
+    link.style.visibility="hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    notify(`Exported ${toExport.length} deals!`);
+  };
+
   const resetData = async () => {
     const d = await loadFromSupabase();
     setCampaigns(d.campaigns);
@@ -848,7 +1114,50 @@ return (
         <span style={{fontFamily:"'Newsreader',serif",fontSize:"17px",fontWeight:700,color:"#fff",letterSpacing:"2px"}}>INVOGUE</span>
         <span style={{fontSize:"9px",color:T.gold,fontWeight:800,letterSpacing:"2px"}}>COLLAB HQ</span>
       </div>
+
+      {/* Feature 4: Global Search */}
+      <div style={{flex:1,maxWidth:"400px",margin:"0 20px",position:"relative"}}>
+        <input type="text" value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);if(e.target.value.trim())setSearchResults(performSearch(e.target.value));else setSearchResults(null)}}
+          placeholder="Search deals, influencers, campaigns..."
+          style={{width:"100%",padding:"7px 12px",borderRadius:"6px",border:"1px solid rgba(255,255,255,.2)",background:"rgba(255,255,255,.08)",color:"#fff",fontSize:"11px",fontFamily:"inherit",outline:"none"}}/>
+        {searchResults&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:T.surface,borderRadius:"6px",marginTop:"4px",maxHeight:"300px",overflowY:"auto",zIndex:100,boxShadow:"0 8px 20px rgba(0,0,0,.2)"}}>
+          {(searchResults.dealMatches?.length||0)>0&&<>
+            <div style={{fontSize:"9px",fontWeight:700,color:T.sub,padding:"8px 12px",textTransform:"uppercase"}}>Deals</div>
+            {searchResults.dealMatches.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail");setSearchQuery("");setSearchResults(null)}} style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`,cursor:"pointer",fontSize:"11px"}}><b>{d.inf}</b><div style={{fontSize:"9px",color:T.sub}}>{d.product}</div></div>)}
+          </>}
+          {(searchResults.infMatches?.length||0)>0&&<>
+            <div style={{fontSize:"9px",fontWeight:700,color:T.sub,padding:"8px 12px",textTransform:"uppercase",marginTop:"4px"}}>Influencers</div>
+            {searchResults.infMatches.map(i=><div key={i.id} onClick={()=>{setInfProfile(i);setView("influencers");setSearchQuery("");setSearchResults(null)}} style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`,cursor:"pointer",fontSize:"11px"}}><b>{i.name}</b><div style={{fontSize:"9px",color:T.sub}}>{i.platform}</div></div>)}
+          </>}
+          {(searchResults.campMatches?.length||0)>0&&<>
+            <div style={{fontSize:"9px",fontWeight:700,color:T.sub,padding:"8px 12px",textTransform:"uppercase",marginTop:"4px"}}>Campaigns</div>
+            {searchResults.campMatches.map(c=><div key={c.id} onClick={()=>{setCampFilter(c.id);setView("deals");setSearchQuery("");setSearchResults(null)}} style={{padding:"8px 12px",cursor:"pointer",fontSize:"11px"}}><b>{c.name}</b><div style={{fontSize:"9px",color:T.sub}}>{f(c.budget)} budget</div></div>)}
+          </>}
+        </div>}
+      </div>
+
       <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+        {/* Feature 5: Notifications Bell */}
+        <div style={{position:"relative"}}>
+          <button onClick={()=>{setNotificationPanel(!notificationPanel);if(!notificationPanel)setLastSeenTime(new Date().toISOString())}} style={{background:"none",border:"none",color:"#fff",fontSize:"18px",cursor:"pointer",position:"relative"}}>
+            🔔
+            {unreads>0&&<span style={{position:"absolute",top:-4,right:-4,background:T.err,color:"#fff",borderRadius:"50%",width:"18px",height:"18px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",fontWeight:800}}>{unreads}</span>}
+          </button>
+          {notificationPanel&&<div style={{position:"absolute",top:"100%",right:0,background:T.surface,borderRadius:"6px",marginTop:"4px",width:"320px",maxHeight:"400px",overflowY:"auto",zIndex:100,boxShadow:"0 8px 20px rgba(0,0,0,.2)"}}>
+            <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,fontWeight:700,fontSize:"12px"}}>Notifications</div>
+            {recentNotifs.length===0?<div style={{padding:"12px",fontSize:"11px",color:T.sub,textAlign:"center"}}>No notifications</div>:recentNotifs.map(n=><div key={n.id} style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,fontSize:"10.5px"}}>
+              <div style={{display:"flex",gap:"6px"}}>
+                <span style={{fontSize:"14px"}}>{n.icon}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:600}}>{n.msg}</div>
+                  <div style={{color:T.sub,fontSize:"9px",marginTop:"2px"}}>{n.inf}</div>
+                  <div style={{color:T.faint,fontSize:"8.5px",marginTop:"2px"}}>{new Date(n.time).toLocaleString()}</div>
+                </div>
+              </div>
+            </div>)}
+          </div>}
+        </div>
+
         <div style={{display:"flex",alignItems:"center",gap:"7px",padding:"4px 10px",borderRadius:"8px",background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.08)"}}>
           <div style={{width:"22px",height:"22px",borderRadius:"50%",background:loggedRC.bg,color:loggedRC.c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"8px",fontWeight:800}}>{loggedIn.avatar}</div>
           <div>
@@ -863,11 +1172,14 @@ return (
 
     {/* ── ROLE-AWARE NAV ── */}
     {(()=>{
+      const recentNotifs = getRecentNotifications();
+      const unreads = recentNotifs.filter(n => new Date(n.time) > new Date(lastSeenTime)).length;
+
       const navItems = {
-        admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"audit",l:"Audit Log",i:"📜"}],
+        admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"analytics",l:"Analytics",i:"📊"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"audit",l:"Audit Log",i:"📜"}],
         negotiator: [{k:"dashboard",l:"My Dashboard",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"dropped",l:"Dropped Collabs",i:"🚫",n:stats.dropped},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
-        approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
-        finance: [{k:"dashboard",l:"Payment Center",i:"🔵"}],
+        approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
+        finance: [{k:"dashboard",l:"Payment Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"}],
         logistics: [{k:"dashboard",l:"Shipment Center",i:"🔵"},{k:"shipments",l:"All Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
       };
       const items = navItems[role]||navItems.negotiator;
@@ -1591,10 +1903,16 @@ return (
                 <div style={{fontWeight:700,marginBottom:"2px"}}>📝 Notes</div>{inf.notes}
               </div>}
 
-              {/* Avg Rate */}
-              <div style={{padding:"8px 10px",background:T.goldSoft,borderRadius:"6px",marginBottom:"14px",fontSize:"11px",display:"flex",justifyContent:"space-between"}}>
-                <span style={{fontWeight:700,color:T.brand}}>Average Rate</span>
-                <span style={{fontWeight:800,color:T.gold}}>{f(inf.avgRate)}</span>
+              {/* Avg Rate & Overall Rating */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"14px"}}>
+                <div style={{padding:"8px 10px",background:T.goldSoft,borderRadius:"6px",fontSize:"11px"}}>
+                  <span style={{fontWeight:700,color:T.brand}}>Average Rate</span>
+                  <div style={{fontWeight:800,color:T.gold,fontSize:"13px",marginTop:"2px"}}>{f(inf.avgRate)}</div>
+                </div>
+                {typeof inf.rating==="number"&&<div style={{padding:"8px 10px",background:T.okBg,borderRadius:"6px",fontSize:"11px"}}>
+                  <span style={{fontWeight:700,color:T.ok}}>Overall Rating</span>
+                  <div style={{fontWeight:800,color:T.ok,fontSize:"13px",marginTop:"2px"}}>{inf.rating.toFixed(1)}/5 ⭐</div>
+                </div>}
               </div>
 
               {/* Collaboration History */}
@@ -1660,6 +1978,117 @@ return (
           </>
         </Modal>
 
+        {/* ═══ FEATURE 1: ANALYTICS & REPORTS VIEW ═══ */}
+        {view==="analytics"&&(()=>{
+          const analytics = generateAnalyticsData();
+          const months = Object.keys(analytics.monthlySpend).sort().slice(-6);
+          const maxSpend = Math.max(...months.map(m => analytics.monthlySpend[m]||0));
+          return <>
+            <h2 style={{fontSize:"16px",fontWeight:800,marginBottom:"14px"}}>📊 Analytics & Reports</h2>
+
+            {/* Monthly Spend Chart */}
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"14px",marginBottom:"14px"}}>
+              <div style={{fontSize:"12px",fontWeight:700,marginBottom:"10px"}}>Monthly Spend Trend</div>
+              <div style={{display:"flex",alignItems:"flex-end",gap:"6px",height:"140px",justifyContent:"space-around"}}>
+                {months.map(m => {
+                  const val = analytics.monthlySpend[m]||0;
+                  const h = (val/maxSpend)*120 || 10;
+                  return <div key={m} style={{display:"flex",flexDirection:"column",alignItems:"center",flex:1}}>
+                    <div style={{background:T.gold,width:"100%",height:`${h}px`,borderRadius:"3px",marginBottom:"6px",transition:"all .2s"}}/>
+                    <div style={{fontSize:"9px",color:T.sub}}>{m.slice(5)}</div>
+                    <div style={{fontSize:"8px",color:T.faint}}>{f(val)}</div>
+                  </div>;
+                })}
+              </div>
+            </div>
+
+            {/* Campaign Performance */}
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"14px",marginBottom:"14px"}}>
+              <div style={{fontSize:"12px",fontWeight:700,marginBottom:"10px"}}>Campaign Performance (Budget vs Spent)</div>
+              {campaigns.map(c => {
+                const perf = analytics.campaignPerf[c.id] || {budget:c.budget,spent:0};
+                const pct = c.budget > 0 ? (perf.spent / c.budget * 100) : 0;
+                return <div key={c.id} style={{marginBottom:"10px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:"4px",fontSize:"10px"}}>
+                    <span style={{fontWeight:600}}>{c.name}</span>
+                    <span>{f(perf.spent)}/{f(perf.budget)}</span>
+                  </div>
+                  <div style={{height:"6px",background:T.border,borderRadius:"3px",overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.warn:T.ok}}/>
+                  </div>
+                </div>;
+              })}
+            </div>
+
+            {/* Top Influencers */}
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"14px",marginBottom:"14px"}}>
+              <div style={{fontSize:"12px",fontWeight:700,marginBottom:"10px"}}>Top Influencers</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
+                <div>
+                  <div style={{fontSize:"10px",color:T.sub,marginBottom:"6px"}}>By Deal Count</div>
+                  {Object.entries(analytics.influencerStats).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([inf,count])=><div key={inf} style={{fontSize:"10px",padding:"4px 0",display:"flex",justifyContent:"space-between"}}>
+                    <span>{inf}</span><span style={{color:T.gold,fontWeight:700}}>{count} deals</span>
+                  </div>)}
+                </div>
+                <div>
+                  <div style={{fontSize:"10px",color:T.sub,marginBottom:"6px"}}>By Total Amount</div>
+                  {deals.reduce((acc,d)=>{acc[d.inf]=(acc[d.inf]||0)+d.amount;return acc;},{})&&Object.entries(deals.reduce((acc,d)=>{acc[d.inf]=(acc[d.inf]||0)+d.amount;return acc;},{})).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([inf,amt])=><div key={inf} style={{fontSize:"10px",padding:"4px 0",display:"flex",justifyContent:"space-between"}}>
+                    <span>{inf}</span><span style={{color:T.gold,fontWeight:700}}>{f(amt)}</span>
+                  </div>)}
+                </div>
+              </div>
+            </div>
+
+            {/* Status Distribution Pie */}
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"14px",marginBottom:"14px"}}>
+              <div style={{fontSize:"12px",fontWeight:700,marginBottom:"10px"}}>Deal Status Distribution</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
+                <svg viewBox="0 0 100 100" style={{width:"120px",height:"120px"}}>
+                  {(() => {
+                    const stat = analytics.statusDist;
+                    const total = Object.values(stat).reduce((a,b)=>a+b,0);
+                    let angle = 0;
+                    const colors = {pending:T.warn,approved:T.ok,live:T.ok,paid:T.gold,rejected:T.err,dropped:T.err};
+                    const labels = Object.entries(stat).filter(e=>e[1]>0).map(([k,v])=>{
+                      const pct = ((v/total)*100).toFixed(0);
+                      const slice = (v/total)*360;
+                      const x = 50+30*Math.cos((angle+slice/2)*Math.PI/180);
+                      const y = 50+30*Math.sin((angle+slice/2)*Math.PI/180);
+                      const startAngle = angle;
+                      const endAngle = angle+slice;
+                      const large = slice>180?1:0;
+                      const x1=50+30*Math.cos(startAngle*Math.PI/180),y1=50+30*Math.sin(startAngle*Math.PI/180);
+                      const x2=50+30*Math.cos(endAngle*Math.PI/180),y2=50+30*Math.sin(endAngle*Math.PI/180);
+                      const result = <g key={k}><path d={`M 50 50 L ${x1} ${y1} A 30 30 0 ${large} 1 ${x2} ${y2} Z`} fill={colors[k]}/></g>;
+                      angle = endAngle;
+                      return result;
+                    });
+                    return labels;
+                  })()}
+                </svg>
+                <div>
+                  {Object.entries(analytics.statusDist).filter(e=>e[1]>0).map(([k,v])=><div key={k} style={{fontSize:"10px",padding:"4px 0",display:"flex",justifyContent:"space-between"}}>
+                    <span>{k}</span><span style={{fontWeight:700}}>{v} ({((v/Object.values(analytics.statusDist).reduce((a,b)=>a+b,0))*100).toFixed(0)}%)</span>
+                  </div>)}
+                </div>
+              </div>
+            </div>
+
+            {/* Export Button */}
+            <div style={{textAlign:"right"}}>
+              <Btn v="gold" onClick={()=>{
+                const csv = "Metric,Value\nTotal Committed,"+stats.committed+"\nTotal Paid,"+stats.paid+"\nPending Approval,"+stats.pendingN+"\nDisputes,"+stats.disputed+"\nPending Deliverables,"+stats.pendingDels;
+                const blob = new Blob([csv],{type:"text/csv"});
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = `analytics_${new Date().toISOString().slice(0,10)}.csv`;
+                link.click();
+                notify("Report exported!");
+              }}>📥 Export Report</Btn>
+            </div>
+          </>;
+        })()}
+
         {/* ═══ ALL COLLABORATIONS VIEW (shared, accessible from all roles) ═══ */}
         {view==="deals"&&<>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"8px",marginBottom:"14px"}}>
@@ -1678,6 +2107,28 @@ return (
             {campaigns.map(c=><button key={c.id} onClick={()=>setCampFilter(c.id)} style={{padding:"4px 10px",border:`1px solid ${campFilter===c.id?T.gold:T.border}`,borderRadius:"14px",background:campFilter===c.id?T.goldSoft:"transparent",color:campFilter===c.id?T.brand:T.sub,fontSize:"10.5px",fontWeight:campFilter===c.id?700:500,cursor:"pointer",fontFamily:"inherit"}}>{c.name} ({campDeals(c.id).length})</button>)}
           </div>
 
+          {/* Feature 4: Filter Controls */}
+          <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"12px",marginBottom:"12px"}}>
+            <div style={{fontSize:"11px",fontWeight:700,marginBottom:"8px"}}>Filters</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"8px",marginBottom:"8px"}}>
+              <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>Date From</label><Inp type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)}/></div>
+              <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>Date To</label><Inp type="date" value={filterDateTo} onChange={e=>setFilterDateTo(e.target.value)}/></div>
+              <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>Min Amount</label><Inp type="number" value={filterAmountMin} onChange={e=>setFilterAmountMin(e.target.value)} placeholder="0"/></div>
+              <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>Max Amount</label><Inp type="number" value={filterAmountMax} onChange={e=>setFilterAmountMax(e.target.value)} placeholder="999999"/></div>
+              <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>Platform</label><Sel value={filterPlatform} onChange={e=>setFilterPlatform(e.target.value)} options={[{v:"",l:"All"},{v:"Instagram",l:"Instagram"},{v:"YouTube",l:"YouTube"},{v:"TikTok",l:"TikTok"}]}/></div>
+              <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>Negotiator</label><Sel value={filterNegotiator} onChange={e=>setFilterNegotiator(e.target.value)} options={[{v:"",l:"All"},...users.filter(u=>u.role==="negotiator").map(u=>({v:u.name,l:u.name}))]}/></div>
+            </div>
+            <div style={{display:"flex",gap:"6px"}}>
+              <Btn v="gold" sm onClick={()=>{const filtered=applyFilters();setTab("all")}}>Apply Filters</Btn>
+              <Btn v="outline" sm onClick={()=>{setFilterDateFrom("");setFilterDateTo("");setFilterAmountMin("");setFilterAmountMax("");setFilterPlatform("");setFilterNegotiator("");setFilterStatus([]);setActiveFilters([])}}>Clear All</Btn>
+            </div>
+            {activeFilters.length>0&&<div style={{marginTop:"8px",display:"flex",gap:"4px",flexWrap:"wrap"}}>
+              {activeFilters.map((f,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:"4px",background:T.goldSoft,color:T.brand,padding:"4px 8px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>
+                {f}<button onClick={()=>clearFilter(i)} style={{background:"none",border:"none",color:T.brand,cursor:"pointer",fontSize:"12px",padding:"0",lineHeight:1}}>✕</button>
+              </span>)}
+            </div>}
+          </div>
+
           {/* Tabs + Action */}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.border}`,marginBottom:"12px"}}>
             <div style={{display:"flex",gap:"2px"}}>
@@ -1685,7 +2136,21 @@ return (
                 <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"7px 12px",border:"none",borderBottom:tab===t.k?`2px solid ${T.gold}`:"2px solid transparent",background:"none",color:tab===t.k?T.brand:T.sub,fontWeight:tab===t.k?800:500,fontSize:"11px",cursor:"pointer",fontFamily:"inherit"}}>{t.l}</button>
               ))}
             </div>
-            {(role==="negotiator"||role==="admin")&&<Btn v="gold" sm onClick={()=>{setNDeal({inf:"",email:"",platform:"Instagram",followers:"",products:[],usage:"6 months",deadline:"",profile:"",phone:"",address:"",paymentTerms:"Net 15 days",cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>+ New Deal</Btn>}
+            <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+              {(role==="negotiator"||role==="admin")&&<Btn v="gold" sm onClick={()=>{setNDeal({inf:"",email:"",platform:"Instagram",followers:"",products:[],usage:"6 months",deadline:"",profile:"",phone:"",address:"",paymentTerms:"Net 15 days",cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>+ New Deal</Btn>}
+              {bulkSelected.size>0&&<>
+                <Btn v="ok" sm onClick={bulkApprove}>✓ Approve ({bulkSelected.size})</Btn>
+                <Btn v="danger" sm onClick={bulkReject}>✕ Reject ({bulkSelected.size})</Btn>
+                <Btn v="gold" sm onClick={bulkExportCSV}>📥 Export ({bulkSelected.size})</Btn>
+              </>}
+            </div>
+          </div>
+
+          {/* Feature 3: Bulk Select Checkbox */}
+          <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px",padding:"8px",background:T.goldSoft,borderRadius:"6px"}}>
+            <input type="checkbox" checked={bulkSelectAll} onChange={()=>toggleSelectAll(filtered)} style={{cursor:"pointer"}} title="Select all deals"/>
+            <span style={{fontSize:"10px",color:T.brand,fontWeight:700}}>{bulkSelectAll?`All ${filtered.length} selected`:`Select All (${filtered.length})`}</span>
+            {bulkSelected.size>0&&<span style={{fontSize:"10px",color:T.brand,marginLeft:"auto"}}>{bulkSelected.size} selected</span>}
           </div>
 
           {/* Cards */}
@@ -1694,11 +2159,17 @@ return (
               const camp=getCamp(d.cid);
               const paid=totalPaid(d);
               const done=d.dels.filter(x=>x.st==="live").length;
-              return <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",padding:"13px",cursor:"pointer",transition:"all .12s",animation:"fadeUp .3s ease"}}
-                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,.05)"}}
-                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}>
+              return <div key={d.id} style={{background:T.surface,border:bulkSelected.has(d.id)?`2px solid ${T.gold}`:(`1px solid ${T.border}`),borderRadius:"9px",padding:"13px",cursor:"pointer",transition:"all .12s",animation:"fadeUp .3s ease"}}
+                onMouseEnter={e=>{if(!bulkSelected.has(d.id)){e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,.05)"}}}
+                onMouseLeave={e=>{if(!bulkSelected.has(d.id)){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"5px"}}>
-                  <div><div style={{fontWeight:800,fontSize:"12.5px"}}>{d.inf}</div><div style={{fontSize:"10px",color:T.sub}}>{d.platform} · {d.followers}</div></div>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:"6px"}}>
+                    <input type="checkbox" checked={bulkSelected.has(d.id)} onChange={e=>{e.stopPropagation();toggleBulkSelect(d.id)}} style={{cursor:"pointer",marginTop:"2px"}}/>
+                    <div onClick={()=>{setSel(d);setModal("detail")}} style={{cursor:"pointer"}}>
+                      <div style={{fontWeight:800,fontSize:"12.5px"}}>{d.inf}</div>
+                      <div style={{fontSize:"10px",color:T.sub}}>{d.platform} · {d.followers}</div>
+                    </div>
+                  </div>
                   <Badge s={d.status} sm/>
                 </div>
                 {camp&&<div style={{fontSize:"9.5px",color:T.gold,fontWeight:700,marginBottom:"3px"}}>🎯 {camp.name}</div>}
@@ -2212,6 +2683,8 @@ return (
                 <Btn v="ok" sm onClick={()=>{setPayF({type:"final",amount:String(sel.amount-paid),note:"Paying approved amount per dispute resolution"});setModal("payment")}}>Pay Approved Amount</Btn>
                 <Btn v="danger" sm onClick={()=>notify("Escalated to founder","warn")}>Escalate</Btn>
               </>}
+              {["paid","live"].includes(sel.status)&&(role==="negotiator"||role==="admin")&&<Btn v="gold" sm onClick={()=>{setRatingF({stars:{timeliness:0,quality:0,communication:0,professionalism:0},feedback:"",influencerId:sel.id});setModal("rate")}}>⭐ Rate Influencer</Btn>}
+              {role==="finance"&&<Btn v="purple" sm onClick={()=>{setGstRate("0");setTdsRate("0");setModal("taxCalculator")}}>🧮 Tax Info</Btn>}
               {(sel.status==="pending"||sel.status==="renegotiate")&&role==="negotiator"&&<div style={{fontSize:"10.5px",color:T.sub,fontStyle:"italic",padding:"4px 0"}}>⏳ Awaiting manager approval</div>}
               {role==="admin"&&<div style={{fontSize:"9.5px",color:T.sub,fontStyle:"italic",padding:"4px 0",borderTop:`1px dashed ${T.border}`,marginTop:"4px",paddingTop:"6px",width:"100%"}}>⚙ Admin: All actions available regardless of status</div>}
             </div>
@@ -2304,6 +2777,96 @@ return (
           </>}
         </>}
       </Modal>
+
+      {/* ═══ FEATURE 2: RATING MODAL ═══ */}
+      <Modal open={modal==="rate"} onClose={()=>setModal(null)} title={`Rate Influencer — ${sel?.inf}`} w={480}>
+        {sel&&<>
+          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+            <div>Collab: <b>{sel.product}</b></div>
+            <div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>Status: {sel.status} · Amount: {f(sel.amount)}</div>
+          </div>
+          <div style={{marginBottom:"12px"}}>
+            <div style={{fontSize:"11px",fontWeight:700,marginBottom:"8px"}}>Rate on these dimensions:</div>
+            {["timeliness","quality","communication","professionalism"].map(dim=><div key={dim} style={{marginBottom:"8px"}}>
+              <div style={{fontSize:"10px",fontWeight:600,marginBottom:"4px",textTransform:"capitalize"}}>{dim}</div>
+              <div style={{display:"flex",gap:"4px"}}>
+                {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setRatingF({...ratingF,stars:{...ratingF.stars,[dim]:n}})} style={{width:"32px",height:"32px",border:"1px solid "+T.border,borderRadius:"4px",cursor:"pointer",background:ratingF.stars[dim]>=n?T.gold:T.surface,color:ratingF.stars[dim]>=n?"#fff":T.sub,fontWeight:700,fontSize:"14px"}}>⭐</button>)}
+              </div>
+            </div>)}
+          </div>
+          <Field label="Feedback (Required)" required error={!ratingF.feedback?"Required":""}>
+            <Textarea value={ratingF.feedback} onChange={e=>setRatingF({...ratingF,feedback:e.target.value})} placeholder="Share your feedback about working with this influencer..." rows={4}/>
+          </Field>
+          <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"14px",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>
+            <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
+            <Btn v="gold" onClick={()=>rateInfluencer(sel,ratingF)}>⭐ Submit Rating</Btn>
+          </div>
+        </>}
+      </Modal>
+
+      {/* ═══ FEATURE 2: VIEW INFLUENCER RATING ═══ */}
+      <Modal open={modal==="infRating"} onClose={()=>setModal(null)} title={`Influencer Rating — ${sel?.inf}`} w={420}>
+        {sel&&<>
+          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px"}}>
+            <div style={{fontSize:"12px",fontWeight:700}}>{sel.inf}</div>
+            <div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{sel.platform} · {sel.followers} followers</div>
+          </div>
+          {sel.rating?<>
+            <div style={{marginBottom:"12px"}}>
+              <div style={{fontSize:"11px",fontWeight:700,marginBottom:"8px"}}>Overall Rating</div>
+              <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                <div style={{fontSize:"32px"}}>⭐⭐⭐⭐⭐</div>
+                <div style={{fontSize:"18px",fontWeight:700,color:T.gold}}>{typeof sel.rating==="object"?((sel.rating.timeliness+sel.rating.quality+sel.rating.communication+sel.rating.professionalism)/4).toFixed(1):sel.rating}/5</div>
+              </div>
+            </div>
+            <div style={{padding:"10px",background:T.bg,borderRadius:"6px",marginBottom:"12px",fontSize:"10px",lineHeight:1.5}}>
+              <div style={{fontWeight:700,marginBottom:"4px"}}>Feedback:</div>
+              {sel.feedback||"No feedback provided"}
+            </div>
+          </>:<div style={{fontSize:"11px",color:T.sub,padding:"12px",textAlign:"center"}}>No rating yet</div>}
+        </>}
+      </Modal>
+
+      {/* ═══ FEATURE 6: TAX CALCULATION MODAL ═══ */}
+      <Modal open={modal==="taxCalculator"} onClose={()=>setModal(null)} title="Tax Calculator (GST/TDS)" w={460}>
+        {sel&&<>
+          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+            <div><b>{sel.inf}</b> · {sel.product}</div>
+            <div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>Base Amount: <b>{f(sel.amount)}</b></div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"14px"}}>
+            <Field label="GST Rate (%)"><Sel value={gstRate} onChange={e=>setGstRate(e.target.value)} options={[{v:"0",l:"No GST (0%)"},{v:"5",l:"5%"},{v:"12",l:"12%"},{v:"18",l:"18%"},{v:"28",l:"28%"}]}/></Field>
+            <Field label="TDS Rate (%)"><Sel value={tdsRate} onChange={e=>setTdsRate(e.target.value)} options={[{v:"0",l:"No TDS (0%)"},{v:"1",l:"1%"},{v:"2",l:"2%"},{v:"5",l:"5%"},{v:"10",l:"10%"}]}/></Field>
+          </div>
+          {(() => {
+            const tax = calculateTax(sel.amount);
+            return <div style={{padding:"10px",background:T.bg,borderRadius:"6px",marginBottom:"14px",fontSize:"11px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:"4px"}}>
+                <span>Base Amount</span>
+                <span style={{fontWeight:700}}>{f(tax.base)}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:"4px"}}>
+                <span>GST Amount ({gstRate}%)</span>
+                <span style={{color:T.warn,fontWeight:700}}>+{f(tax.gst)}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:"8px"}}>
+                <span>TDS Deduction ({tdsRate}%)</span>
+                <span style={{color:T.err,fontWeight:700}}>-{f(tax.tds)}</span>
+              </div>
+              <div style={{borderTop:`1px solid ${T.border}`,paddingTop:"8px",display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontWeight:700}}>Net Payable</span>
+                <span style={{fontSize:"13px",color:T.gold,fontWeight:800}}>{f(tax.netPayable)}</span>
+              </div>
+            </div>;
+          })()}
+          <div style={{display:"flex",gap:"7px",justifyContent:"flex-end"}}>
+            <Btn v="outline" onClick={()=>setModal(null)}>Close</Btn>
+            <Btn v="gold" onClick={()=>{setGstRate("0");setTdsRate("0");setModal("detail")}}>Apply to Payment</Btn>
+          </div>
+        </>}
+      </Modal>
+
+      {/* ═══ BULK CONFIRMATION MODAL (already handled by confirmAction) ═══ */}
     </div>
   );
 }

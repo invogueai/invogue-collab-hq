@@ -39,6 +39,14 @@ const now = () => new Date().toISOString().slice(0,16).replace("T"," ");
 const f = n => "₹"+Number(n||0).toLocaleString("en-IN");
 const uid = () => crypto.randomUUID();
 
+// ─── Simple PIN hashing (SHA-256) ───
+const hashPin = async (pin) => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(pin + "invogue-salt-2026");
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+};
+
 // ─── SUPABASE DATA LAYER ───
 async function loadFromSupabase() {
   const [usersRes, campaignsRes, influencersRes, dealsRes, deliverablesRes, paymentsRes, shipmentsRes, auditRes] = await Promise.all([
@@ -106,12 +114,7 @@ async function loadFromSupabase() {
   return { users, campaigns, influencers, deals };
 }
 
-const SEED_CAMPAIGNS = [
-  { id:"c1", name:"Summer Sculpt Launch", budget:500000, target:25, status:"active", created:"2026-03-15", deadline:"2026-05-30" },
-  { id:"c2", name:"Monsoon Comfort Edit", budget:300000, target:15, status:"planning", created:"2026-04-01", deadline:"2026-06-30" },
-  { id:"c3", name:"Wedding Season Push", budget:800000, target:40, status:"active", created:"2026-02-01", deadline:"2026-04-30" },
-];
-
+// Fallback user data for when Supabase is unavailable
 const SEED_USERS = [
   { id:"u0", name:"Invogue Admin", email:"admin@invogue.in", role:"admin", status:"active", created:"2026-01-01", avatar:"IA", pin:"1234" },
   { id:"u1", name:"Ankit Mehta", email:"ankit@invogue.in", role:"negotiator", status:"active", created:"2026-01-15", avatar:"AM", pin:"1111" },
@@ -131,50 +134,6 @@ const ROLE_CFG = {
   logistics:  { l:"Logistics",   c:T.purple, bg:T.purpleBg, i:"📦" },
   viewer:     { l:"Viewer",      c:T.sub,    bg:"#f0ede8",  i:"👁" },
 };
-
-const SEED_DEALS = [
-  { id:"d1", inf:"Priya Sharma", platform:"Instagram", followers:"125K", product:"Sculpt Bodysuit - Black", amount:18000, status:"pending", by:"Ankit", at:"2026-04-01 10:30", profile:"instagram.com/priyasharma", cid:"c1", usage:"6 months", deadline:"2026-04-15", phone:"+91 98765 43210", address:"42 MG Road, Indiranagar, Bangalore 560038",
-    dels:[{id:"dl1",type:"Reel",desc:"Product showcase reel",st:"pending",link:""},{id:"dl2",type:"Story",desc:"Unboxing story set (3 frames)",st:"pending",link:""},{id:"dl3",type:"Story",desc:"Review + swipe-up story",st:"pending",link:""}],
-    pays:[], ship:null, inv:null, logs:[{t:"2026-04-01 10:30",u:"Ankit",a:"Deal created",d:"Amount: ₹18,000 | 3 deliverables"}] },
-  { id:"d2", inf:"Neha Verma", platform:"YouTube", followers:"450K", product:"Seamless Shaper - Nude", amount:45000, status:"shipped", by:"Megha", at:"2026-03-28 14:15", appBy:"Ritu", appAt:"2026-03-28 16:00", profile:"youtube.com/@nehaverma", cid:"c1", usage:"12 months", deadline:"2026-04-10", phone:"+91 87654 32109", address:"B-12 Sector 62, Noida, UP 201301",
-    dels:[{id:"dl1",type:"Dedicated Video",desc:"Full review video (8-12 min)",st:"pending",link:""},{id:"dl2",type:"Community Post",desc:"Announcement post",st:"pending",link:""}],
-    pays:[{id:"py1",type:"advance",amount:15000,date:"2026-03-29",note:"30% advance on lock"}],
-    ship:{track:"DTDC-98234567",carrier:"DTDC",st:"in_transit",dispAt:"2026-03-30 11:00",dispBy:"Raj (Logistics)",delAt:null},
-    inv:null, logs:[{t:"2026-03-28 14:15",u:"Megha",a:"Deal created",d:"₹45,000 | 2 deliverables"},{t:"2026-03-28 16:00",u:"Ritu",a:"Approved & locked",d:""},{t:"2026-03-28 16:05",u:"System",a:"Confirmation email sent",d:""},{t:"2026-03-29 10:00",u:"Finance",a:"Advance payment",d:"₹15,000"},{t:"2026-03-30 11:00",u:"Raj (Logistics)",a:"Shipment dispatched",d:"DTDC-98234567"}] },
-  { id:"d3", inf:"Aisha Khan", platform:"Instagram", followers:"89K", product:"High-Waist Shorts - Beige", amount:12000, status:"partial_live", by:"Ankit", at:"2026-03-25 09:00", appBy:"Ritu", appAt:"2026-03-25 11:30", profile:"instagram.com/aishakhan", cid:"c3", usage:"3 months", deadline:"2026-04-08", phone:"+91 76543 21098", address:"15 Turner Road, Bandra West, Mumbai 400050",
-    dels:[{id:"dl1",type:"Reel",desc:"GRWM with product",st:"live",link:"instagram.com/reel/abc1"},{id:"dl2",type:"Story",desc:"Poll story",st:"live",link:"instagram.com/stories/abc2"},{id:"dl3",type:"Story",desc:"Discount code story",st:"pending",link:""},{id:"dl4",type:"Reel",desc:"Before/after reel",st:"pending",link:""}],
-    pays:[], ship:{track:"SHIPROCKET-45678",carrier:"Shiprocket",st:"delivered",dispAt:"2026-03-26 09:00",dispBy:"Raj (Logistics)",delAt:"2026-03-28 14:00"},
-    inv:null, logs:[{t:"2026-03-25 09:00",u:"Ankit",a:"Deal created",d:"₹12,000 | 4 deliverables"},{t:"2026-03-25 11:30",u:"Ritu",a:"Approved & locked",d:""},{t:"2026-03-25 12:00",u:"System",a:"Email sent",d:""},{t:"2026-03-26 09:00",u:"Raj (Logistics)",a:"Dispatched",d:"Shiprocket-45678"},{t:"2026-03-28 14:00",u:"Raj (Logistics)",a:"Product delivered",d:""},{t:"2026-03-30 10:00",u:"Ankit",a:"Deliverable live",d:"Reel: GRWM"},{t:"2026-03-31 11:00",u:"Ankit",a:"Deliverable live",d:"Story: Poll"}] },
-  { id:"d4", inf:"Ritika Nair", platform:"Instagram", followers:"210K", product:"Full Body Shaper - Cocoa", amount:25000, status:"live", by:"Sneha", at:"2026-03-20 11:00", appBy:"Ritu", appAt:"2026-03-20 13:00", profile:"instagram.com/ritikanair", cid:"c3", usage:"6 months", deadline:"2026-04-01", phone:"+91 65432 10987", address:"23 Boat Club Road, RA Puram, Chennai 600028",
-    dels:[{id:"dl1",type:"Reel",desc:"Styling reel",st:"live",link:"instagram.com/reel/xyz1"},{id:"dl2",type:"Story",desc:"Review + link (3 frames)",st:"live",link:"instagram.com/stories/xyz2"},{id:"dl3",type:"Story",desc:"Giveaway story",st:"live",link:"instagram.com/stories/xyz3"}],
-    pays:[{id:"py1",type:"advance",amount:10000,date:"2026-03-21",note:"Advance payment"}],
-    ship:{track:"DELHIVERY-78901",carrier:"Delhivery",st:"delivered",dispAt:"2026-03-21 10:00",dispBy:"Raj (Logistics)",delAt:"2026-03-23 15:00"},
-    inv:null, logs:[{t:"2026-03-20 11:00",u:"Sneha",a:"Deal created",d:"₹25,000 | 3 deliverables"},{t:"2026-03-20 13:00",u:"Ritu",a:"Approved",d:""},{t:"2026-03-21 10:00",u:"Raj",a:"Dispatched",d:"DELHIVERY-78901"},{t:"2026-03-23 15:00",u:"Raj",a:"Delivered",d:""},{t:"2026-03-28 18:00",u:"Sneha",a:"All 3 deliverables marked live",d:""}] },
-  { id:"d5", inf:"Divya Menon", platform:"YouTube", followers:"680K", product:"Sculpt Bodysuit - Nude", amount:55000, status:"partial_paid", by:"Megha", at:"2026-03-15 10:00", appBy:"Ritu", appAt:"2026-03-15 14:00", profile:"youtube.com/@divyamenon", cid:"c3", usage:"12 months", deadline:"2026-03-28", phone:"+91 54321 09876", address:"7A Jubilee Hills, Road No. 36, Hyderabad 500033",
-    dels:[{id:"dl1",type:"Dedicated Video",desc:"Full review + try-on",st:"live",link:"youtube.com/watch?v=xyz789"},{id:"dl2",type:"Shorts",desc:"Quick transformation",st:"live",link:"youtube.com/shorts/abc123"}],
-    pays:[{id:"py1",type:"advance",amount:20000,date:"2026-03-16",note:"Advance on lock"},{id:"py2",type:"partial",amount:20000,date:"2026-04-01",note:"Post content live"}],
-    ship:{track:"BLUEDART-11223",carrier:"BlueDart",st:"delivered",dispAt:"2026-03-16 09:00",dispBy:"Raj (Logistics)",delAt:"2026-03-18 12:00"},
-    inv:{amount:55000,match:true,at:"2026-04-01"}, logs:[{t:"2026-03-15 10:00",u:"Megha",a:"Deal created",d:""},{t:"2026-03-15 14:00",u:"Ritu",a:"Approved",d:""},{t:"2026-03-16 09:00",u:"Raj",a:"Dispatched",d:""},{t:"2026-03-18 12:00",u:"Raj",a:"Delivered",d:""},{t:"2026-03-27 20:00",u:"Megha",a:"All live",d:""},{t:"2026-04-01",u:"Megha",a:"Invoice submitted",d:"₹55,000 — matched ✓"},{t:"2026-03-16",u:"Finance",a:"Advance ₹20,000",d:""},{t:"2026-04-01",u:"Finance",a:"Part payment ₹20,000",d:""}] },
-  { id:"d6", inf:"Tanya Gupta", platform:"Instagram", followers:"95K", product:"Waist Trainer - Black", amount:15000, status:"disputed", by:"Ankit", at:"2026-03-10 09:30", appBy:"Ritu", appAt:"2026-03-10 12:00", profile:"instagram.com/tanyagupta", cid:"c3", usage:"3 months", deadline:"2026-03-25", phone:"+91 43210 98765", address:"56 Hauz Khas Village, New Delhi 110016",
-    dels:[{id:"dl1",type:"Reel",desc:"Workout reel",st:"live",link:"instagram.com/reel/def456"},{id:"dl2",type:"Story",desc:"Review story",st:"live",link:"instagram.com/stories/def789"}],
-    pays:[], ship:{track:"DTDC-33445",carrier:"DTDC",st:"delivered",dispAt:"2026-03-11 10:00",dispBy:"Raj (Logistics)",delAt:"2026-03-13 16:00"},
-    inv:{amount:22000,match:false,at:"2026-03-26",note:"Claims verbal agreement for ₹22,000"}, logs:[{t:"2026-03-10 09:30",u:"Ankit",a:"Deal created",d:"₹15,000"},{t:"2026-03-10 12:00",u:"Ritu",a:"Approved",d:""},{t:"2026-03-26",u:"Ankit",a:"Invoice submitted — MISMATCH",d:"Invoice: ₹22,000 vs Approved: ₹15,000"}] },
-  { id:"d7", inf:"Kavya Reddy", platform:"Instagram", followers:"310K", product:"Sculpt Bodysuit - Mocha", amount:30000, status:"paid", by:"Sneha", at:"2026-03-05 08:00", appBy:"Ritu", appAt:"2026-03-05 10:00", profile:"instagram.com/kavyareddy", cid:"c3", usage:"6 months", deadline:"2026-03-20", phone:"+91 32109 87654", address:"18 Koramangala 4th Block, Bangalore 560034",
-    dels:[{id:"dl1",type:"Reel",desc:"OOTD reel",st:"live",link:"instagram.com/reel/ghi789"},{id:"dl2",type:"Story",desc:"Swipe-up story",st:"live",link:"instagram.com/stories/ghi101"}],
-    pays:[{id:"py1",type:"final",amount:30000,date:"2026-03-22",note:"Full payment"}],
-    ship:{track:"SHIPROCKET-99887",carrier:"Shiprocket",st:"delivered",dispAt:"2026-03-06 09:00",dispBy:"Raj (Logistics)",delAt:"2026-03-08 13:00"},
-    inv:{amount:30000,match:true,at:"2026-03-21"}, logs:[{t:"2026-03-05 08:00",u:"Sneha",a:"Created",d:""},{t:"2026-03-05 10:00",u:"Ritu",a:"Approved",d:""},{t:"2026-03-22",u:"Finance",a:"Full payment ₹30,000",d:""}] },
-];
-
-const SEED_INFLUENCERS = [
-  { id:"i1", name:"Priya Sharma", platform:"Instagram", handle:"@priyasharma", profile:"instagram.com/priyasharma", followers:"125K", category:"Fashion & Lifestyle", city:"Bangalore", phone:"+91 98765 43210", email:"priya.sharma@gmail.com", address:"42 MG Road, Indiranagar, Bangalore 560038", poc:"Ankit", avgRate:18000, rating:"A", notes:"Very responsive. Delivers on time. Prefers advance payment.", tags:["fashion","lifestyle","bangalore"], added:"2026-01-20" },
-  { id:"i2", name:"Neha Verma", platform:"YouTube", handle:"@nehaverma", profile:"youtube.com/@nehaverma", followers:"450K", category:"Beauty & Fashion", city:"Noida", phone:"+91 87654 32109", email:"neha.v@gmail.com", address:"B-12 Sector 62, Noida, UP 201301", poc:"Megha", avgRate:45000, rating:"A+", notes:"Top-tier creator. Long-form only. Manager handles comms: Rohit (+91 99887 76655).", tags:["beauty","youtube","premium"], added:"2026-01-15" },
-  { id:"i3", name:"Aisha Khan", platform:"Instagram", handle:"@aishakhan", profile:"instagram.com/aishakhan", followers:"89K", category:"Fashion", city:"Mumbai", phone:"+91 76543 21098", email:"aisha.k@outlook.com", address:"15 Turner Road, Bandra West, Mumbai 400050", poc:"Ankit", avgRate:12000, rating:"B+", notes:"Good engagement rate for follower count. Sometimes delays on stories.", tags:["fashion","mumbai","micro"], added:"2026-02-10" },
-  { id:"i4", name:"Ritika Nair", platform:"Instagram", handle:"@ritikanair", profile:"instagram.com/ritikanair", followers:"210K", category:"Fashion & Fitness", city:"Chennai", phone:"+91 65432 10987", email:"ritika.nair@gmail.com", address:"23 Boat Club Road, RA Puram, Chennai 600028", poc:"Sneha", avgRate:25000, rating:"A", notes:"Creates high-quality reels. Great for body-positive messaging.", tags:["fitness","fashion","chennai"], added:"2026-01-25" },
-  { id:"i5", name:"Divya Menon", platform:"YouTube", handle:"@divyamenon", profile:"youtube.com/@divyamenon", followers:"680K", category:"Fashion & Lifestyle", city:"Hyderabad", phone:"+91 54321 09876", email:"divya.m@gmail.com", address:"7A Jubilee Hills, Road No. 36, Hyderabad 500033", poc:"Megha", avgRate:55000, rating:"A+", notes:"Premium creator. 500K+ avg views. Requires 50% advance. Manager: Preethi.", tags:["premium","youtube","lifestyle"], added:"2026-01-10" },
-  { id:"i6", name:"Tanya Gupta", platform:"Instagram", handle:"@tanyagupta", profile:"instagram.com/tanyagupta", followers:"95K", category:"Fitness", city:"Delhi", phone:"+91 43210 98765", email:"tanya.g@gmail.com", address:"56 Hauz Khas Village, New Delhi 110016", poc:"Ankit", avgRate:15000, rating:"B", notes:"⚠ Had invoice dispute in March 2026. Claimed higher verbal agreement. Be careful with terms.", tags:["fitness","delhi","caution"], added:"2026-02-05" },
-  { id:"i7", name:"Kavya Reddy", platform:"Instagram", handle:"@kavyareddy", profile:"instagram.com/kavyareddy", followers:"310K", category:"Fashion & Beauty", city:"Bangalore", phone:"+91 32109 87654", email:"kavya.r@gmail.com", address:"18 Koramangala 4th Block, Bangalore 560034", poc:"Sneha", avgRate:30000, rating:"A", notes:"Reliable. Always delivers on time. Open to long-term partnerships.", tags:["fashion","beauty","bangalore","reliable"], added:"2026-01-18" },
-];
 
 // ─── REUSABLE COMPONENTS ───
 const Badge = ({s,sm}) => { const x=STATUS_CFG[s]||{l:s,c:T.sub,bg:"#eee",i:"?"}; return <span style={{display:"inline-flex",alignItems:"center",gap:"3px",padding:sm?"2px 6px":"3px 9px",borderRadius:"14px",fontSize:sm?"9.5px":"10.5px",fontWeight:700,color:x.c,background:x.bg,whiteSpace:"nowrap",letterSpacing:".2px"}}>{x.i} {x.l}</span>; };
@@ -207,8 +166,8 @@ const Field = ({label,children,span,error,required})=>(<div style={{gridColumn:s
 
 const Modal = ({open,onClose,title,children,w=540})=>{
   if(!open) return null;
-  return <div style={{position:"fixed",inset:0,background:"rgba(10,10,20,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"12px"}} onClick={onClose}>
-    <div onClick={e=>e.stopPropagation()} style={{background:T.bg,borderRadius:"12px",width:`${w}px`,maxWidth:"96vw",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,.2)"}}>
+  return <div role="presentation" style={{position:"fixed",inset:0,background:"rgba(10,10,20,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"12px"}} onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label={title} onClick={e=>e.stopPropagation()} style={{background:T.bg,borderRadius:"12px",width:`${w}px`,maxWidth:"96vw",minWidth:"280px",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,.2)"}}>
       <div style={{padding:"13px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
         <span style={{fontWeight:800,fontSize:"14px",color:T.brand,letterSpacing:".2px"}}>{title}</span>
         <button onClick={onClose} style={{background:"none",border:"none",fontSize:"16px",cursor:"pointer",color:T.sub,padding:"2px 5px",lineHeight:1}}>✕</button>
@@ -232,6 +191,7 @@ export default function InvogueCollabHQ() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPin, setLoginPin] = useState("");
   const [loginErr, setLoginErr] = useState("");
+  const [demoMode, setDemoMode] = useState(false);
   const role = loggedIn?.role || "negotiator";
   const [view, setView] = useState("dashboard");
   const [tab, setTab] = useState("all");
@@ -286,6 +246,13 @@ export default function InvogueCollabHQ() {
   const [filterNegotiator, setFilterNegotiator] = useState("");
   const [activeFilters, setActiveFilters] = useState([]);
 
+  // Pagination & Date Filters
+  const [auditDateFrom, setAuditDateFrom] = useState("");
+  const [auditDateTo, setAuditDateTo] = useState("");
+  const [auditPage, setAuditPage] = useState(0);
+  const [dealsPage, setDealsPage] = useState(0);
+  const ITEMS_PER_PAGE = 20;
+
   // Feature 5: Activity Feed / Notifications
   const [notificationPanel, setNotificationPanel] = useState(false);
   const [lastSeenTime, setLastSeenTime] = useState(new Date().toISOString());
@@ -314,13 +281,105 @@ export default function InvogueCollabHQ() {
     })();
   },[]);
 
+  // ── Real-time sync with Supabase ──
+  useEffect(() => {
+    if(!loaded) return;
+
+    const channel = supabase.channel('collab-hq-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deals' }, async () => {
+        const {data} = await supabase.from('deals').select('*').order('created_at', { ascending: false });
+        if(data) {
+          // Re-fetch deliverables, payments, shipments, audit logs for updated deals
+          const [delRes, payRes, shipRes, logRes] = await Promise.all([
+            supabase.from('deliverables').select('*'),
+            supabase.from('payments').select('*'),
+            supabase.from('shipments').select('*'),
+            supabase.from('audit_log').select('*').order('created_at', { ascending: true }),
+          ]);
+          const delsByDeal={}, paysByDeal={}, shipByDeal={}, logsByDeal={};
+          (delRes.data||[]).forEach(dl => {
+            if(!delsByDeal[dl.deal_id]) delsByDeal[dl.deal_id]=[];
+            delsByDeal[dl.deal_id].push({id:dl.id,type:dl.type,desc:dl.description,st:dl.status,link:dl.live_link||''});
+          });
+          (payRes.data||[]).forEach(p => {
+            if(!paysByDeal[p.deal_id]) paysByDeal[p.deal_id]=[];
+            paysByDeal[p.deal_id].push({id:p.id,type:p.type,amount:p.amount,note:p.note||'',date:p.created_at?.slice(0,10)||''});
+          });
+          (shipRes.data||[]).forEach(s => {
+            shipByDeal[s.deal_id]={track:s.tracking_id,carrier:s.carrier,st:s.status,dispAt:s.dispatched_at,dispBy:s.dispatched_by,delAt:s.delivered_at};
+          });
+          (logRes.data||[]).forEach(l => {
+            if(!l.deal_id) return;
+            if(!logsByDeal[l.deal_id]) logsByDeal[l.deal_id]=[];
+            logsByDeal[l.deal_id].push({t:l.created_at,u:l.user_name,a:l.action,d:l.detail||''});
+          });
+          const deals = data.map(d => ({
+            id:d.id, inf:d.influencer_name, platform:d.platform, followers:d.followers,
+            product:d.product, amount:d.amount, status:d.status, cid:d.campaign_id,
+            usage:d.usage_rights, deadline:d.deadline, profile:d.profile_link,
+            phone:d.phone, address:d.address, by:d.created_by, at:d.created_at,
+            appBy:d.approved_by, appAt:d.approved_at,
+            email:d.email||"", payment_terms:d.payment_terms||"", pan_number:d.pan_number||"", pan_name:d.pan_name||"",
+            products:d.products||[],
+            inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note}:null,
+            dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
+            ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
+          }));
+          setDeals(deals);
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns' }, async () => {
+        const {data} = await supabase.from('campaigns').select('*');
+        if(data) setCampaigns(data.map(c => ({
+          id:c.id, name:c.name, budget:c.budget, target:c.target_influencers,
+          status:c.status, created:c.created_at?.slice(0,10)||'', deadline:c.deadline,
+          brief:c.brief||"",
+        })));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, async () => {
+        const {data} = await supabase.from('users').select('*');
+        if(data) setUsers(data.map(u => ({
+          id:u.id, name:u.name, email:u.email, pin:u.pin||'1111',
+          role:u.role, status:u.status, avatar:u.avatar||u.name?.slice(0,2).toUpperCase(),
+          created:u.created_at?.slice(0,10)||'',
+        })));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'influencers' }, async () => {
+        const {data} = await supabase.from('influencers').select('*');
+        if(data) setInfluencers(data.map(i => ({
+          id:i.id, name:i.name, platform:i.platform, handle:i.handle,
+          profile:i.profile, followers:i.followers, category:i.category,
+          city:i.city, phone:i.phone, email:i.email, address:i.address,
+          poc:i.poc, avgRate:i.avg_rate, rating:i.rating, notes:i.notes,
+          tags:i.tags||[], added:i.created_at?.slice(0,10)||'',
+        })));
+      })
+      .subscribe((status) => {
+        if(status === 'SUBSCRIBED') console.log('Realtime connected');
+        if(status === 'CHANNEL_ERROR') console.error('Realtime connection error');
+      });
+
+    return () => { supabase.removeChannel(channel); };
+  }, [loaded]);
+
+  // ── Reset deals pagination when tab or filter changes ──
+  useEffect(()=>{
+    setDealsPage(0);
+  },[tab,campFilter]);
+
   // ── Login handler ──
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setLoginErr("");
+    if(!loginEmail.trim()) { setLoginErr("Email is required"); return; }
+    if(!loginPin.trim()) { setLoginErr("PIN is required"); return; }
     const u = users.find(x=>x.email.toLowerCase()===loginEmail.toLowerCase().trim());
     if(!u) { setLoginErr("No account found with this email"); return; }
     if(u.status==="inactive") { setLoginErr("This account has been deactivated. Contact admin."); return; }
-    if(u.pin && u.pin !== loginPin) { setLoginErr("Incorrect PIN"); return; }
+    // Support both hashed and plain-text PINs for backward compatibility
+    if(u.pin) {
+      const hashed = await hashPin(loginPin);
+      if(u.pin !== loginPin && u.pin !== hashed) { setLoginErr("Incorrect PIN"); return; }
+    }
     setLoggedIn(u);
     setView("dashboard");
     setLoginEmail("");
@@ -342,7 +401,7 @@ export default function InvogueCollabHQ() {
   const addLog = useCallback((id,user,action,detail="")=>{
     const ts = new Date().toISOString();
     setDeals(ds=>ds.map(d=>d.id===id?{...d,logs:[...d.logs,{t:ts,u:user,a:action,d:detail}]}:d));
-    supabase.from('audit_log').insert({deal_id:id,user_name:user,action,detail,created_at:ts});
+    supabase.from('audit_log').insert({deal_id:id,user_name:user,action,detail,created_at:ts}).then(({error})=>{if(error) console.error("Audit log insert failed:",error);});
   },[]);
 
   const totalPaid = d => (d.pays||[]).reduce((s,p)=>s+p.amount,0);
@@ -382,6 +441,7 @@ export default function InvogueCollabHQ() {
     return {
       committed: active.reduce((s,d)=>s+d.amount,0),
       paid: deals.reduce((s,d)=>s+totalPaid(d),0),
+      pipeline: deals.reduce((s,d)=>s+d.amount,0),
       pendingN: deals.filter(d=>d.status==="pending"||d.status==="renegotiate").length,
       disputed: deals.filter(d=>d.status==="disputed").length,
       dropped: deals.filter(d=>d.status==="dropped").length,
@@ -570,7 +630,10 @@ export default function InvogueCollabHQ() {
     if(dealErr) { console.error("Deal insert failed:",dealErr); return notify("Failed to save deal: "+dealErr.message,"err"); }
 
     const dbDels = nDeal.dels.map(dl=>({id:uid(),deal_id:dealId,type:dl.type,description:dl.desc,status:'pending',live_link:null}));
-    if(dbDels.length>0) await supabase.from('deliverables').insert(dbDels);
+    if(dbDels.length>0) {
+      const {error:delErr} = await supabase.from('deliverables').insert(dbDels);
+      if(delErr) console.error("Deliverables insert failed:",delErr);
+    }
 
     // Auto-create influencer if not exists
     const existingInf = influencers.find(i=>i.name===nDeal.inf);
@@ -600,13 +663,14 @@ export default function InvogueCollabHQ() {
       else setInfluencers(prev=>[{...infData,added:ts.slice(0,10)},...prev]);
     }
 
-    await supabase.from('audit_log').insert({
+    const {error:auditErr} = await supabase.from('audit_log').insert({
       deal_id:dealId,
       user_name:userName,
       action:'Deal created',
       detail:`${f(nDeal.amount)} | ${nDeal.dels.length} deliverables`,
       created_at:ts
     });
+    if(auditErr) console.error("Audit log insert failed:",auditErr);
 
     const d = {
       ...nDeal,
@@ -632,16 +696,27 @@ export default function InvogueCollabHQ() {
 
   const createCampaign = async () => {
     if(!nCamp.name||!nCamp.budget||!nCamp.target) return notify("Fill all fields","err");
+    if(+nCamp.budget <= 0) return notify("Budget must be positive","err");
+    if(+nCamp.target <= 0 || !Number.isInteger(+nCamp.target)) return notify("Target must be a positive whole number","err");
     const campId = uid();
-    await supabase.from('campaigns').insert({
-      id:campId,
-      name:nCamp.name,
-      budget:+nCamp.budget,
-      target_influencers:+nCamp.target,
-      status:'active',
-      deadline:nCamp.deadline||null,
-      brief:nCamp.brief||null
-    });
+    try {
+      const {error:campErr} = await supabase.from('campaigns').insert({
+        id:campId,
+        name:nCamp.name,
+        budget:+nCamp.budget,
+        target_influencers:+nCamp.target,
+        status:'active',
+        deadline:nCamp.deadline||null,
+        brief:nCamp.brief||null
+      });
+      if(campErr) {
+        console.error("Campaign insert failed:",campErr);
+        return notify("Failed to create campaign: "+campErr.message,"err");
+      }
+    } catch(e) {
+      console.error("Campaign creation error:",e);
+      return notify("Error creating campaign. Please try again.","err");
+    }
     setCampaigns(prev=>[...prev,{
       id:campId,
       name:nCamp.name,
@@ -660,7 +735,7 @@ export default function InvogueCollabHQ() {
   const approveDeal = d => {
     const userName = loggedIn?.name||"You (Manager)";
     const ts = new Date().toISOString();
-    supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id);
+    supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error){console.error("Approve save failed:",error);notify("Failed to save approval","err");}});
     upDeal(d.id,{status:"approved",appBy:userName,appAt:ts});
     addLog(d.id,userName,"Approved & amount locked",f(d.amount));
 
@@ -683,7 +758,7 @@ export default function InvogueCollabHQ() {
     if(!reason || !reason.trim()) return notify("Rejection reason is mandatory","err");
     const userName = loggedIn?.name||"You (Manager)";
     const ts = new Date().toISOString();
-    supabase.from('deals').update({status:'rejected',approved_by:userName,approved_at:ts,rejection_reason:reason}).eq('id',d.id);
+    supabase.from('deals').update({status:'rejected',approved_by:userName,approved_at:ts,rejection_reason:reason}).eq('id',d.id).then(({error})=>{if(error) console.error("Reject save failed:",error);});
     upDeal(d.id,{status:"rejected",appBy:userName,appAt:ts,rejectionReason:reason});
     addLog(d.id,userName,"Rejected",`Reason: ${reason}`);
     setSel(null);
@@ -732,20 +807,21 @@ export default function InvogueCollabHQ() {
 
     const newDels = keptDels.map(({keep,isNew,...rest})=>rest);
 
-    supabase.from('deals').update({status:'renegotiate',amount:+renegF.amount,renegotiation_note:renegF.note}).eq('id',renegF.dealId);
+    supabase.from('deals').update({status:'renegotiate',amount:+renegF.amount,renegotiation_note:renegF.note}).eq('id',renegF.dealId).then(({error})=>{if(error) console.error("Renegotiate save failed:",error);});
 
     // Insert new deliverables to Supabase
     const brandNewDels = keptDels.filter(d=>d.isNew);
     if(brandNewDels.length > 0) {
       const dbNew = brandNewDels.map(dl=>({id:dl.id,deal_id:renegF.dealId,type:dl.type,description:dl.desc,status:'pending',live_link:null}));
-      await supabase.from('deliverables').insert(dbNew);
+      const {error:newDelErr} = await supabase.from('deliverables').insert(dbNew);
+      if(newDelErr) console.error("New deliverables insert failed:",newDelErr);
     }
 
     // Replace deliverables: delete removed ones
     const keptIds = newDels.map(d=>d.id);
     const currentDeal = deals.find(d=>d.id===renegF.dealId);
     const removedIds = (currentDeal?.dels||[]).map(d=>d.id).filter(id=>!keptIds.includes(id));
-    if(removedIds.length>0) supabase.from('deliverables').delete().in('id',removedIds);
+    if(removedIds.length>0) supabase.from('deliverables').delete().in('id',removedIds).then(({error})=>{if(error) console.error("Deliverables delete failed:",error);});
 
     upDeal(renegF.dealId,{status:"renegotiate",amount:+renegF.amount,dels:newDels});
     addLog(renegF.dealId, loggedIn?.name||"Manager", "Sent back for renegotiation", `New amount: ${f(renegF.amount)} | ${newDels.length} deliverables | Note: ${renegF.note}`);
@@ -756,7 +832,7 @@ export default function InvogueCollabHQ() {
   };
 
   const sendEmail = d => {
-    supabase.from('deals').update({status:'email_sent',email_sent_at:new Date().toISOString()}).eq('id',d.id);
+    supabase.from('deals').update({status:'email_sent',email_sent_at:new Date().toISOString()}).eq('id',d.id).then(({error})=>{if(error) console.error("Email sent save failed:",error);});
     upDeal(d.id,{status:"email_sent"});
     addLog(d.id,"System","Confirmation email sent","Auto-generated from locked data");
     setSel(null);
@@ -766,10 +842,11 @@ export default function InvogueCollabHQ() {
 
   const dispatch = () => {
     if(!shipF.track) return notify("Enter tracking ID","err");
+    if(shipF.track.length < 4) return notify("Tracking ID seems too short","err");
     const userName = loggedIn?.name||"You (Logistics)";
     const ts = new Date().toISOString();
-    supabase.from('shipments').insert({deal_id:sel.id,carrier:shipF.carrier,tracking_id:shipF.track,status:'in_transit',dispatched_by:userName,dispatched_at:ts});
-    supabase.from('deals').update({status:'shipped'}).eq('id',sel.id);
+    supabase.from('shipments').insert({deal_id:sel.id,carrier:shipF.carrier,tracking_id:shipF.track,status:'in_transit',dispatched_by:userName,dispatched_at:ts}).then(({error})=>{if(error) console.error("Shipment insert failed:",error);});
+    supabase.from('deals').update({status:'shipped'}).eq('id',sel.id).then(({error})=>{if(error) console.error("Dispatch save failed:",error);});
     upDeal(sel.id,{status:"shipped",ship:{track:shipF.track,carrier:shipF.carrier,st:"in_transit",dispAt:ts,dispBy:userName,delAt:null}});
     addLog(sel.id,userName,"Shipment dispatched",`${shipF.carrier}: ${shipF.track}`);
     setSel(null);
@@ -779,9 +856,11 @@ export default function InvogueCollabHQ() {
 
   const markDelivered = (d, deliveryDate, deliveryNote) => {
     const ts = deliveryDate || new Date().toISOString();
+    if(deliveryDate && new Date(deliveryDate) > new Date()) return notify("Delivery date cannot be in the future","err");
+    if(d.ship?.dispAt && deliveryDate && new Date(deliveryDate) < new Date(d.ship.dispAt)) return notify("Delivery date cannot be before dispatch date","err");
     const userName = loggedIn?.name||"You (Logistics)";
-    supabase.from('shipments').update({status:'delivered',delivered_at:ts}).eq('deal_id',d.id);
-    supabase.from('deals').update({status:'delivered_prod'}).eq('id',d.id);
+    supabase.from('shipments').update({status:'delivered',delivered_at:ts}).eq('deal_id',d.id).then(({error})=>{if(error) console.error("Shipment delivered save failed:",error);});
+    supabase.from('deals').update({status:'delivered_prod'}).eq('id',d.id).then(({error})=>{if(error) console.error("Delivered prod save failed:",error);});
     upDeal(d.id,{status:"delivered_prod",ship:{...d.ship,st:"delivered",delAt:ts}});
     addLog(d.id,userName,"Product delivered",deliveryNote||"");
     notify("Marked delivered!");
@@ -800,8 +879,8 @@ export default function InvogueCollabHQ() {
     const shouldUpdateStatus = ["email_sent","shipped","delivered_prod","partial_live"].includes(deal.status);
     const delId = deal.dels[delIdx].id;
 
-    supabase.from('deliverables').update({status:'live',live_link:link,marked_live_at:new Date().toISOString()}).eq('id',delId);
-    if(shouldUpdateStatus) supabase.from('deals').update({status:newStatus}).eq('id',deal.id);
+    supabase.from('deliverables').update({status:'live',live_link:link,marked_live_at:new Date().toISOString()}).eq('id',delId).then(({error})=>{if(error) console.error("Mark live save failed:",error);});
+    if(shouldUpdateStatus) supabase.from('deals').update({status:newStatus}).eq('id',deal.id).then(({error})=>{if(error) console.error("Deal status update failed:",error);});
 
     upDeal(deal.id,{dels:newDels, status:shouldUpdateStatus?newStatus:deal.status});
     addLog(deal.id,loggedIn?.name||"You","Deliverable marked live",`${deal.dels[delIdx].type}: ${deal.dels[delIdx].desc}`);
@@ -816,10 +895,11 @@ export default function InvogueCollabHQ() {
 
   const submitInvoice = (deal) => {
     if(!invF) return notify("Enter invoice amount","err");
+    if(+invF <= 0) return notify("Invoice amount must be positive","err");
     const match = +invF === deal.amount;
     const ts = new Date().toISOString();
     const newStatus = match?"invoice_ok":"disputed";
-    supabase.from('deals').update({status:newStatus,invoice_amount:+invF,invoice_match:match,invoice_at:ts,invoice_note:match?null:"Invoice mismatch detected by system"}).eq('id',deal.id);
+    supabase.from('deals').update({status:newStatus,invoice_amount:+invF,invoice_match:match,invoice_at:ts,invoice_note:match?null:"Invoice mismatch detected by system"}).eq('id',deal.id).then(({error})=>{if(error) console.error("Invoice save failed:",error);});
     upDeal(deal.id,{status:newStatus,inv:{amount:+invF,match,at:ts,note:match?"":"Invoice mismatch detected by system"}});
     addLog(deal.id,loggedIn?.name||"You","Invoice submitted",`${f(invF)} ${match?"— matched ✓":"— MISMATCH ⚠ (approved: "+f(deal.amount)+")"}`);
     setSel(null);
@@ -831,16 +911,17 @@ export default function InvogueCollabHQ() {
   const recordPayment = () => {
     if(role!=="finance") return notify("Only Finance role can record payments","err");
     if(!payF.amount) return notify("Enter amount","err");
+    if(+payF.amount <= 0) return notify("Amount must be positive","err");
     const amt = +payF.amount;
     if(amt > remaining(sel) && amt !== sel.amount) return notify("Exceeds remaining balance!","err");
     const payId = uid();
     const ts = new Date().toISOString();
     const userName = loggedIn?.name||"You (Finance)";
-    supabase.from('payments').insert({id:payId,deal_id:sel.id,type:payF.type,amount:amt,note:payF.note||null,processed_by:userName,created_at:ts});
+    supabase.from('payments').insert({id:payId,deal_id:sel.id,type:payF.type,amount:amt,note:payF.note||null,processed_by:userName,created_at:ts}).then(({error})=>{if(error) console.error("Payment insert failed:",error);});
     const newPays = [...sel.pays,{id:payId,type:payF.type,amount:amt,date:ts.slice(0,10),note:payF.note}];
     const tp = newPays.reduce((s,p)=>s+p.amount,0);
     const ns = tp>=sel.amount?"paid":tp>0?"partial_paid":sel.status;
-    supabase.from('deals').update({status:ns}).eq('id',sel.id);
+    supabase.from('deals').update({status:ns}).eq('id',sel.id).then(({error})=>{if(error) console.error("Payment status update failed:",error);});
     upDeal(sel.id,{pays:newPays,status:ns});
     addLog(sel.id,userName,`${payF.type} payment`,f(amt)+(payF.note?` — ${payF.note}`:""));
     setSel(prev=>prev?{...prev,pays:newPays,status:ns}:null);
@@ -856,12 +937,12 @@ export default function InvogueCollabHQ() {
 
     if(role==="negotiator") {
       // Negotiator sends for manager approval first
-      supabase.from('deals').update({status:'payment_requested',pan_number:panNumber,pan_name:panName}).eq('id',deal.id);
+      supabase.from('deals').update({status:'payment_requested',pan_number:panNumber,pan_name:panName}).eq('id',deal.id).then(({error})=>{if(error) console.error("Payment request save failed:",error);});
       upDeal(deal.id,{status:"payment_requested",pan:{number:panNumber,name:panName}});
       addLog(deal.id,userName,"Requested payment approval",`PAN: ${panNumber} | Name: ${panName}`);
     } else if(role==="approver") {
       // Manager approves and sends to finance
-      supabase.from('deals').update({status:'payment_approved',pan_number:panNumber,pan_name:panName}).eq('id',deal.id);
+      supabase.from('deals').update({status:'payment_approved',pan_number:panNumber,pan_name:panName}).eq('id',deal.id).then(({error})=>{if(error) console.error("Payment approval save failed:",error);});
       upDeal(deal.id,{status:"payment_approved",pan:{number:panNumber,name:panName}});
       addLog(deal.id,userName,"Approved payment request",`PAN: ${panNumber} | Name: ${panName}`);
     }
@@ -875,7 +956,7 @@ export default function InvogueCollabHQ() {
 
   const approvePaymentRequest = d => {
     const userName = loggedIn?.name||"Manager";
-    supabase.from('deals').update({status:'payment_approved'}).eq('id',d.id);
+    supabase.from('deals').update({status:'payment_approved'}).eq('id',d.id).then(({error})=>{if(error) console.error("Approve payment request failed:",error);});
     upDeal(d.id,{status:"payment_approved"});
     addLog(d.id,userName,"Payment approved","Forwarded to finance");
     setSel(null);
@@ -885,7 +966,7 @@ export default function InvogueCollabHQ() {
 
   const denyPaymentRequest = d => {
     const userName = loggedIn?.name||"Manager";
-    supabase.from('deals').update({status:'live'}).eq('id',d.id);
+    supabase.from('deals').update({status:'live'}).eq('id',d.id).then(({error})=>{if(error) console.error("Deny payment request failed:",error);});
     upDeal(d.id,{status:"live"});
     addLog(d.id,userName,"Payment request denied","Sent back to negotiator");
     setSel(null);
@@ -899,7 +980,7 @@ export default function InvogueCollabHQ() {
     if(totalPaidAmount > 0) return notify("Cannot drop a collab with payments already made","err");
     const userName = loggedIn?.name||"You (Negotiator)";
     const ts = new Date().toISOString();
-    supabase.from('deals').update({status:'dropped'}).eq('id',d.id);
+    supabase.from('deals').update({status:'dropped'}).eq('id',d.id).then(({error})=>{if(error) console.error("Drop collab failed:",error);});
     upDeal(d.id,{status:"dropped"});
     addLog(d.id,userName,"Collab dropped",`Reason: ${reason}`);
     setSel(null);
@@ -967,7 +1048,7 @@ export default function InvogueCollabHQ() {
         const userName = loggedIn?.name || "Manager";
         const ts = new Date().toISOString();
         toApprove.forEach(d => {
-          supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id);
+          supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error) console.error("Bulk approve save failed for "+d.id+":",error);});
           upDeal(d.id, {status:"approved",appBy:userName,appAt:ts});
           addLog(d.id, userName, "Bulk approved", f(d.amount));
         });
@@ -991,7 +1072,7 @@ export default function InvogueCollabHQ() {
         const userName = loggedIn?.name || "Manager";
         const ts = new Date().toISOString();
         toReject.forEach(d => {
-          supabase.from('deals').update({status:'rejected',approved_by:userName,approved_at:ts}).eq('id',d.id);
+          supabase.from('deals').update({status:'rejected',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error) console.error("Bulk reject save failed for "+d.id+":",error);});
           upDeal(d.id, {status:"rejected",appBy:userName,appAt:ts});
           addLog(d.id, userName, "Bulk rejected", "Batch rejection");
         });
@@ -1038,7 +1119,7 @@ if(!loggedIn) {
   return (
     <div style={{fontFamily:"'DM Sans',sans-serif",background:T.brand,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&family=Newsreader:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet"/>
-      <style>{`*{box-sizing:border-box}@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}`}</style>
+      <style>{`*{box-sizing:border-box}@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@media(max-width:480px){.login-grid{grid-template-columns:1fr!important}}`}</style>
       <div style={{width:"100%",maxWidth:"400px",animation:"fadeUp .5s ease"}}>
         {/* Logo */}
         <div style={{textAlign:"center",marginBottom:"32px"}}>
@@ -1055,7 +1136,7 @@ if(!loggedIn) {
           {/* Email */}
           <div style={{marginBottom:"14px"}}>
             <label style={{display:"block",fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"5px"}}>Email</label>
-            <input type="email" value={loginEmail} onChange={e=>{setLoginEmail(e.target.value);setLoginErr("")}}
+            <input type="email" aria-label="Email address" value={loginEmail} onChange={e=>{setLoginEmail(e.target.value);setLoginErr("")}}
               onKeyDown={e=>e.key==="Enter"&&handleLogin()}
               placeholder="your@invogue.in"
               style={{width:"100%",padding:"11px 14px",border:`1.5px solid ${loginErr?T.err:T.border}`,borderRadius:"8px",fontSize:"13px",fontFamily:"inherit",color:T.text,outline:"none",background:"#fff",transition:"border .15s",boxSizing:"border-box"}}/>
@@ -1064,7 +1145,7 @@ if(!loggedIn) {
           {/* PIN */}
           <div style={{marginBottom:"18px"}}>
             <label style={{display:"block",fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"5px"}}>PIN</label>
-            <input type="password" value={loginPin} onChange={e=>{setLoginPin(e.target.value);setLoginErr("")}}
+            <input type="password" aria-label="PIN" value={loginPin} onChange={e=>{setLoginPin(e.target.value);setLoginErr("")}}
               onKeyDown={e=>e.key==="Enter"&&handleLogin()}
               placeholder="••••" maxLength={6}
               style={{width:"100%",padding:"11px 14px",border:`1.5px solid ${loginErr?T.err:T.border}`,borderRadius:"8px",fontSize:"13px",fontFamily:"inherit",color:T.text,outline:"none",background:"#fff",letterSpacing:"4px",transition:"border .15s",boxSizing:"border-box"}}/>
@@ -1078,25 +1159,30 @@ if(!loggedIn) {
         </div>
 
         {/* Quick login cards */}
-        <div style={{marginTop:"24px"}}>
-          <div style={{fontSize:"10px",color:"rgba(255,255,255,.35)",textAlign:"center",fontWeight:700,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"10px"}}>Quick Access (Demo)</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
-            {users.filter(u=>u.status==="active").map(u=>{
-              const r = rc(u.role);
-              return <button key={u.id} onClick={()=>{setLoggedIn(u);setView("dashboard")}}
-                style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.08)",borderRadius:"8px",padding:"10px 12px",cursor:"pointer",textAlign:"left",transition:"all .15s",fontFamily:"inherit"}}
-                onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,.12)";e.currentTarget.style.borderColor="rgba(255,255,255,.15)"}}
-                onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,.06)";e.currentTarget.style.borderColor="rgba(255,255,255,.08)"}}>
-                <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
-                  <div style={{width:"26px",height:"26px",borderRadius:"50%",background:r.bg,color:r.c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",fontWeight:800}}>{u.avatar}</div>
-                  <div>
-                    <div style={{fontSize:"11px",fontWeight:700,color:"#fff"}}>{u.name}</div>
-                    <div style={{fontSize:"9px",color:r.c,fontWeight:600}}>{r.i} {r.l}</div>
+        <div style={{marginTop:"24px",textAlign:"center"}}>
+          <button onClick={()=>setDemoMode(!demoMode)} style={{background:"none",border:"1px solid rgba(255,255,255,.1)",borderRadius:"6px",padding:"6px 14px",color:"rgba(255,255,255,.35)",fontSize:"10px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",letterSpacing:"1px",textTransform:"uppercase"}}>
+            {demoMode ? "Hide Demo Access" : "Show Demo Access"}
+          </button>
+          {demoMode && <>
+            <div style={{fontSize:"10px",color:"rgba(255,255,255,.35)",fontWeight:700,textTransform:"uppercase",letterSpacing:"1px",marginTop:"10px",marginBottom:"10px"}}>Quick Access (Demo)</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
+              {users.filter(u=>u.status==="active").map(u=>{
+                const r = rc(u.role);
+                return <button key={u.id} onClick={()=>{setLoggedIn(u);setView("dashboard")}}
+                  style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.08)",borderRadius:"8px",padding:"10px 12px",cursor:"pointer",textAlign:"left",transition:"all .15s",fontFamily:"inherit"}}
+                  onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,.12)";e.currentTarget.style.borderColor="rgba(255,255,255,.15)"}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,.06)";e.currentTarget.style.borderColor="rgba(255,255,255,.08)"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                    <div style={{width:"26px",height:"26px",borderRadius:"50%",background:r.bg,color:r.c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",fontWeight:800}}>{u.avatar}</div>
+                    <div>
+                      <div style={{fontSize:"11px",fontWeight:700,color:"#fff"}}>{u.name}</div>
+                      <div style={{fontSize:"9px",color:r.c,fontWeight:600}}>{r.i} {r.l}</div>
+                    </div>
                   </div>
-                </div>
-              </button>;
-            })}
-          </div>
+                </button>;
+              })}
+            </div>
+          </>}
         </div>
       </div>
     </div>
@@ -1108,23 +1194,23 @@ const loggedRC = ROLE_CFG[role]||ROLE_CFG.viewer;
 const recentNotifs = getRecentNotifications();
 const unreads = recentNotifs.filter(n => new Date(n.time) > new Date(lastSeenTime)).length;
 return (
-  <div style={{fontFamily:"'DM Sans',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
+  <div role="application" aria-label="Invogue Collab HQ" style={{fontFamily:"'DM Sans',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&family=Newsreader:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet"/>
-    <style>{`*{box-sizing:border-box}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:${T.border};border-radius:3px}@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}`}</style>
+    <style>{`*{box-sizing:border-box}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:${T.border};border-radius:3px}@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}@media(max-width:768px){.mobile-grid-1{grid-template-columns:1fr!important}.mobile-hide{display:none!important}.mobile-stack{flex-direction:column!important}.mobile-full{width:100%!important;max-width:100%!important}.mobile-small-text{font-size:10px!important}.mobile-pad{padding:10px!important}}@media(max-width:480px){.mobile-xs-hide{display:none!important}}`}</style>
 
     {/* TOAST */}
-    {toast&&<div style={{position:"fixed",top:14,right:14,zIndex:2e3,padding:"9px 16px",borderRadius:"7px",fontSize:"11.5px",fontWeight:700,color:"#fff",background:toast.type==="err"?T.err:toast.type==="warn"?T.warn:T.ok,boxShadow:"0 8px 20px rgba(0,0,0,.15)",animation:"fadeUp .25s ease",letterSpacing:".2px"}}>{toast.msg}</div>}
+    {toast&&<div role="alert" aria-live="assertive" style={{position:"fixed",top:14,right:14,zIndex:2e3,padding:"9px 16px",borderRadius:"7px",fontSize:"11.5px",fontWeight:700,color:"#fff",background:toast.type==="err"?T.err:toast.type==="warn"?T.warn:T.ok,boxShadow:"0 8px 20px rgba(0,0,0,.15)",animation:"fadeUp .25s ease",letterSpacing:".2px"}}>{toast.msg}</div>}
 
     {/* ── HEADER ── */}
-    <div style={{background:T.brand,padding:"10px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+    <div role="banner" style={{background:T.brand,padding:"10px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px"}}>
       <div style={{display:"flex",alignItems:"baseline",gap:"8px"}}>
         <span style={{fontFamily:"'Newsreader',serif",fontSize:"17px",fontWeight:700,color:"#fff",letterSpacing:"2px"}}>INVOGUE</span>
         <span style={{fontSize:"9px",color:T.gold,fontWeight:800,letterSpacing:"2px"}}>COLLAB HQ</span>
       </div>
 
       {/* Feature 4: Global Search */}
-      <div style={{flex:1,maxWidth:"400px",margin:"0 20px",position:"relative"}}>
-        <input type="text" value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);if(e.target.value.trim())setSearchResults(performSearch(e.target.value));else setSearchResults(null)}}
+      <div style={{flex:1,maxWidth:"400px",margin:"0 10px",minWidth:"150px",position:"relative"}}>
+        <input type="text" aria-label="Search deals, influencers, and campaigns" value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);if(e.target.value.trim())setSearchResults(performSearch(e.target.value));else setSearchResults(null)}}
           placeholder="Search deals, influencers, campaigns..."
           style={{width:"100%",padding:"7px 12px",borderRadius:"6px",border:"1px solid rgba(255,255,255,.2)",background:"rgba(255,255,255,.08)",color:"#fff",fontSize:"11px",fontFamily:"inherit",outline:"none"}}/>
         {searchResults&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:T.surface,borderRadius:"6px",marginTop:"4px",maxHeight:"300px",overflowY:"auto",zIndex:100,boxShadow:"0 8px 20px rgba(0,0,0,.2)"}}>
@@ -1146,7 +1232,7 @@ return (
       <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
         {/* Feature 5: Notifications Bell */}
         <div style={{position:"relative"}}>
-          <button onClick={()=>{setNotificationPanel(!notificationPanel);if(!notificationPanel)setLastSeenTime(new Date().toISOString())}} style={{background:"none",border:"none",color:"#fff",fontSize:"18px",cursor:"pointer",position:"relative"}}>
+          <button aria-label={"Notifications"+(unreads>0?", "+unreads+" unread":"")} onClick={()=>{setNotificationPanel(!notificationPanel);if(!notificationPanel)setLastSeenTime(new Date().toISOString())}} style={{background:"none",border:"none",color:"#fff",fontSize:"18px",cursor:"pointer",position:"relative"}}>
             🔔
             {unreads>0&&<span style={{position:"absolute",top:-4,right:-4,background:T.err,color:"#fff",borderRadius:"50%",width:"18px",height:"18px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",fontWeight:800}}>{unreads}</span>}
           </button>
@@ -1172,7 +1258,7 @@ return (
             <div style={{fontSize:"8.5px",color:loggedRC.c,fontWeight:700}}>{loggedRC.i} {loggedRC.l}</div>
           </div>
         </div>
-        <button onClick={handleLogout} style={{background:"none",border:"1px solid rgba(255,255,255,.1)",borderRadius:"5px",color:"rgba(255,255,255,.5)",fontSize:"9.5px",padding:"4px 8px",cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>Sign Out</button>
+        <button aria-label="Sign out" onClick={handleLogout} style={{background:"none",border:"1px solid rgba(255,255,255,.1)",borderRadius:"5px",color:"rgba(255,255,255,.5)",fontSize:"9.5px",padding:"4px 8px",cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>Sign Out</button>
         <button onClick={resetData} title="Reset to sample data" style={{background:"none",border:"1px solid rgba(255,255,255,.08)",borderRadius:"4px",color:"rgba(255,255,255,.3)",fontSize:"8px",padding:"3px 6px",cursor:"pointer",fontFamily:"inherit"}}>Reset</button>
       </div>
     </div>
@@ -1190,7 +1276,7 @@ return (
         logistics: [{k:"dashboard",l:"Shipment Center",i:"🔵"},{k:"shipments",l:"All Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
       };
       const items = navItems[role]||navItems.negotiator;
-      return <div style={{background:T.surface,borderBottom:`1px solid ${T.border}`,padding:"0 20px",display:"flex",gap:"2px",overflowX:"auto"}}>
+      return <div role="navigation" aria-label="Main navigation" style={{background:T.surface,borderBottom:`1px solid ${T.border}`,padding:"0 10px",display:"flex",gap:"2px",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
         {items.map(n=>(
           <button key={n.k} onClick={()=>setView(n.k)} style={{padding:"10px 13px",border:"none",borderBottom:view===n.k?`2px solid ${T.gold}`:"2px solid transparent",background:"none",color:view===n.k?T.brand:T.sub,fontWeight:view===n.k?800:500,fontSize:"11px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"4px",letterSpacing:".2px"}}>
             {n.i} {n.l}
@@ -1200,7 +1286,7 @@ return (
       </div>;
     })()}
 
-    <div style={{padding:"16px 20px",maxWidth:"1120px",margin:"0 auto"}}>
+    <div style={{padding:"12px 14px",maxWidth:"1120px",margin:"0 auto"}}>
 
       {/* ═══════════════════════════════════════════════════════
           ADMIN DASHBOARD — Super access, full control
@@ -1237,6 +1323,7 @@ return (
             <StatBox l="Active Disputes" v={stats.disputed} c={stats.disputed>0?T.err:T.ok}/>
             <StatBox l="Active Team" v={activeUsers.length} c={T.info} sub={`${users.length} total`}/>
             <StatBox l="Total Deals" v={deals.length} c={T.brand}/>
+            <StatBox l="Total Pipeline" v={f(stats.pipeline)} c={T.brand} sub="All deals"/>
             <StatBox l="Pending Shipments" v={stats.pendingShip} c={stats.pendingShip>0?T.purple:T.ok}/>
           </div>
 
@@ -1340,10 +1427,12 @@ return (
 
         const handleCreateUser = () => {
           if(!userF.name||!userF.email) { notify("Name and email required","err"); return; }
+          if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userF.email)) { notify("Invalid email format","err"); return; }
           if(users.some(u=>u.email===userF.email)) { notify("Email already exists","err"); return; }
           const initials = userF.name.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2);
           const newId = uid();
-          supabase.from('users').insert({id:newId,name:userF.name,email:userF.email,role:userF.role,status:'active',avatar:initials,pin:'1111'});
+          // TODO: Hash PIN before storing: const hashedPin = await hashPin('1111');
+          supabase.from('users').insert({id:newId,name:userF.name,email:userF.email,role:userF.role,status:'active',avatar:initials,pin:'1111'}).then(({error})=>{if(error){console.error("User insert failed:",error);notify("Failed to create user: "+error.message,"err");}});
           setUsers(prev=>[...prev,{id:newId,name:userF.name,email:userF.email,role:userF.role,status:"active",created:new Date().toISOString().slice(0,10),avatar:initials,pin:"1111"}]);
           setUserF({name:"",email:"",role:"negotiator"});
           setModal(null);
@@ -1353,13 +1442,13 @@ return (
         const toggleUserStatus = (userId) => {
           const user = users.find(u=>u.id===userId);
           const newStatus = user?.status==="active"?"inactive":"active";
-          supabase.from('users').update({status:newStatus}).eq('id',userId);
+          supabase.from('users').update({status:newStatus}).eq('id',userId).then(({error})=>{if(error) console.error("User status update failed:",error);});
           setUsers(prev=>prev.map(u=>u.id===userId?{...u,status:newStatus}:u));
           notify("User status updated");
         };
 
         const changeUserRole = (userId,newRole) => {
-          supabase.from('users').update({role:newRole}).eq('id',userId);
+          supabase.from('users').update({role:newRole}).eq('id',userId).then(({error})=>{if(error) console.error("User role update failed:",error);});
           setUsers(prev=>prev.map(u=>u.id===userId?{...u,role:newRole}:u));
           notify("Role updated");
         };
@@ -1380,7 +1469,7 @@ return (
               if(k==="admin"||k==="viewer") return null;
               return <div key={k} style={{background:v.bg,border:`1px solid ${v.c}22`,borderRadius:"8px",padding:"10px 16px",display:"flex",alignItems:"center",gap:"8px"}}>
                 <span style={{fontSize:"18px"}}>{v.i}</span>
-                <div><div style={{fontSize:"16px",fontWeight:800,color:v.c}}>{count}</div><div style={{fontSize:"9px",fontWeight:700,color:v.c,textTransform:"uppercase"}}>{v.l}{v.l.endsWith("s")?"":"s"}</div></div>
+                <div><div style={{fontSize:"16px",fontWeight:800,color:v.c}}>{count}</div><div style={{fontSize:"9px",fontWeight:700,color:v.c,textTransform:"uppercase"}}>{v.l}{(v.l.endsWith("s")||v.l==="Finance")?"":"s"}</div></div>
               </div>;
             })}
           </div>
@@ -1459,16 +1548,28 @@ return (
         });
         allLogs.sort((a,b)=>b.t.localeCompare(a.t));
 
+        const filteredLogs = allLogs.filter(lg => {
+          if(auditDateFrom && lg.t.slice(0,10) < auditDateFrom) return false;
+          if(auditDateTo && lg.t.slice(0,10) > auditDateTo) return false;
+          return true;
+        });
+
         return <>
           <div style={{marginBottom:"16px"}}>
             <div style={{fontSize:"16px",fontWeight:800}}>📜 Global Audit Log</div>
             <div style={{fontSize:"11px",color:T.sub}}>Complete activity trail across all deals and users — {allLogs.length} entries</div>
           </div>
+          <div style={{display:"flex",gap:"8px",marginBottom:"12px",alignItems:"center",flexWrap:"wrap"}}>
+            <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>From</label><input type="date" value={auditDateFrom} onChange={e=>{setAuditDateFrom(e.target.value);setAuditPage(0)}} style={{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:"5px",fontSize:"11px",fontFamily:"inherit"}}/></div>
+            <div><label style={{fontSize:"9px",fontWeight:700,color:T.sub}}>To</label><input type="date" value={auditDateTo} onChange={e=>{setAuditDateTo(e.target.value);setAuditPage(0)}} style={{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:"5px",fontSize:"11px",fontFamily:"inherit"}}/></div>
+            {(auditDateFrom||auditDateTo)&&<Btn v="ghost" sm onClick={()=>{setAuditDateFrom("");setAuditDateTo("");setAuditPage(0)}}>Clear filters</Btn>}
+            <span style={{fontSize:"10px",color:T.sub,marginLeft:"auto"}}>{allLogs.length} total entries</span>
+          </div>
           <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",overflow:"hidden"}}>
             <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr 1.5fr 2fr 0.8fr",padding:"9px 14px",background:T.brand,fontSize:"9px",fontWeight:800,color:"rgba(255,255,255,.6)",textTransform:"uppercase",letterSpacing:".5px"}}>
               <div>Timestamp</div><div>User</div><div>Action</div><div>Details</div><div>Influencer</div>
             </div>
-            {allLogs.slice(0,50).map((lg,i)=>{
+            {filteredLogs.slice(auditPage * ITEMS_PER_PAGE, (auditPage+1) * ITEMS_PER_PAGE).map((lg,i)=>{
               const isFinancial = lg.a.toLowerCase().includes("payment")||lg.a.toLowerCase().includes("approved")||lg.a.toLowerCase().includes("invoice")||lg.a.toLowerCase().includes("dispute");
               return <div key={i} style={{display:"grid",gridTemplateColumns:"1.2fr 1fr 1.5fr 2fr 0.8fr",padding:"7px 14px",borderBottom:`1px solid ${T.border}`,fontSize:"11px",alignItems:"center",background:isFinancial?"#FFFDF5":"transparent"}}>
                 <div style={{color:T.sub,fontSize:"10px",fontFamily:"monospace"}}>{lg.t}</div>
@@ -1482,7 +1583,11 @@ return (
               </div>;
             })}
           </div>
-          {allLogs.length>50&&<div style={{textAlign:"center",padding:"12px",fontSize:"11px",color:T.sub}}>Showing 50 of {allLogs.length} entries</div>}
+          {filteredLogs.length > ITEMS_PER_PAGE && <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:"8px",padding:"12px"}}>
+            <Btn v="outline" sm disabled={auditPage===0} onClick={()=>setAuditPage(p=>p-1)}>← Previous</Btn>
+            <span style={{fontSize:"10px",color:T.sub}}>Page {auditPage+1} of {Math.ceil(filteredLogs.length/ITEMS_PER_PAGE)}</span>
+            <Btn v="outline" sm disabled={(auditPage+1)*ITEMS_PER_PAGE>=filteredLogs.length} onClick={()=>setAuditPage(p=>p+1)}>Next →</Btn>
+          </div>}
         </>;
       })()}
 
@@ -1995,17 +2100,28 @@ return (
           return <>
             <h2 style={{fontSize:"16px",fontWeight:800,marginBottom:"14px"}}>📊 Analytics & Reports</h2>
 
+            {/* ROI Metrics Section */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"8px",marginBottom:"16px"}}>
+              <StatBox l="Total Deal Value" v={f(deals.reduce((s,d)=>s+d.amount,0))} c={T.gold}/>
+              <StatBox l="Total Paid Out" v={f(deals.reduce((s,d)=>s+totalPaid(d),0))} c={T.ok}/>
+              <StatBox l="Avg Deal Size" v={f(deals.length>0?Math.round(deals.reduce((s,d)=>s+d.amount,0)/deals.length):0)} c={T.info}/>
+              <StatBox l="Completion Rate" v={deals.length>0?Math.round(deals.filter(d=>d.status==="paid").length/deals.length*100)+"%":"0%"} c={T.purple}/>
+              <StatBox l="Active Deals" v={deals.filter(d=>!["rejected","dropped","paid"].includes(d.status)).length} c={T.warn}/>
+              <StatBox l="Dispute Rate" v={deals.length>0?Math.round(deals.filter(d=>d.status==="disputed").length/deals.length*100)+"%":"0%"} c={T.err}/>
+            </div>
+
             {/* Monthly Spend Chart */}
             <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"14px",marginBottom:"14px"}}>
               <div style={{fontSize:"12px",fontWeight:700,marginBottom:"10px"}}>Monthly Spend Trend</div>
-              <div style={{display:"flex",alignItems:"flex-end",gap:"6px",height:"140px",justifyContent:"space-around"}}>
+              <div style={{display:"flex",alignItems:"flex-end",gap:"6px",height:"160px",justifyContent:"space-around",paddingBottom:"8px"}}>
                 {months.map(m => {
                   const val = analytics.monthlySpend[m]||0;
                   const h = (val/maxSpend)*120 || 10;
-                  return <div key={m} style={{display:"flex",flexDirection:"column",alignItems:"center",flex:1}}>
-                    <div style={{background:T.gold,width:"100%",height:`${h}px`,borderRadius:"3px",marginBottom:"6px",transition:"all .2s"}}/>
-                    <div style={{fontSize:"9px",color:T.sub}}>{m.slice(5)}</div>
-                    <div style={{fontSize:"8px",color:T.faint}}>{f(val)}</div>
+                  const monthLabel = m.slice(5);
+                  return <div key={m} style={{display:"flex",flexDirection:"column",alignItems:"center",flex:1,justifyContent:"flex-end",gap:"0"}}>
+                    <div style={{fontSize:"8px",color:T.faint,marginBottom:"2px",height:"12px",lineHeight:"12px"}}>{f(val)}</div>
+                    <div style={{background:T.gold,width:"100%",height:`${h}px`,borderRadius:"3px",transition:"all .2s",minHeight:"8px"}}/>
+                    <div style={{fontSize:"10px",fontWeight:600,color:T.sub,marginTop:"6px",textAlign:"center"}}>{monthLabel}</div>
                   </div>;
                 })}
               </div>
@@ -2051,36 +2167,64 @@ return (
             {/* Status Distribution Pie */}
             <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"14px",marginBottom:"14px"}}>
               <div style={{fontSize:"12px",fontWeight:700,marginBottom:"10px"}}>Deal Status Distribution</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
-                <svg viewBox="0 0 100 100" style={{width:"120px",height:"120px"}}>
-                  {(() => {
-                    const stat = analytics.statusDist;
-                    const total = Object.values(stat).reduce((a,b)=>a+b,0);
-                    let angle = 0;
-                    const colors = {pending:T.warn,approved:T.ok,live:T.ok,paid:T.gold,rejected:T.err,dropped:T.err};
-                    const labels = Object.entries(stat).filter(e=>e[1]>0).map(([k,v])=>{
-                      const pct = ((v/total)*100).toFixed(0);
-                      const slice = (v/total)*360;
-                      const x = 50+30*Math.cos((angle+slice/2)*Math.PI/180);
-                      const y = 50+30*Math.sin((angle+slice/2)*Math.PI/180);
-                      const startAngle = angle;
-                      const endAngle = angle+slice;
-                      const large = slice>180?1:0;
-                      const x1=50+30*Math.cos(startAngle*Math.PI/180),y1=50+30*Math.sin(startAngle*Math.PI/180);
-                      const x2=50+30*Math.cos(endAngle*Math.PI/180),y2=50+30*Math.sin(endAngle*Math.PI/180);
-                      const result = <g key={k}><path d={`M 50 50 L ${x1} ${y1} A 30 30 0 ${large} 1 ${x2} ${y2} Z`} fill={colors[k]}/></g>;
-                      angle = endAngle;
-                      return result;
-                    });
-                    return labels;
-                  })()}
-                </svg>
-                <div>
-                  {Object.entries(analytics.statusDist).filter(e=>e[1]>0).map(([k,v])=><div key={k} style={{fontSize:"10px",padding:"4px 0",display:"flex",justifyContent:"space-between"}}>
-                    <span>{k}</span><span style={{fontWeight:700}}>{v} ({((v/Object.values(analytics.statusDist).reduce((a,b)=>a+b,0))*100).toFixed(0)}%)</span>
-                  </div>)}
-                </div>
-              </div>
+              {(()=>{
+                const total = Object.values(analytics.statusDist).reduce((s,v)=>s+v,0);
+                if(total===0) return <div style={{fontSize:"11px",color:T.sub,padding:"12px"}}>No deals yet</div>;
+                const colors = {pending:T.warn,approved:T.ok,live:"#1B7A3D",paid:T.brand,rejected:T.err,dropped:"#999"};
+                const entries = Object.entries(analytics.statusDist).filter(([,v])=>v>0);
+                let startAngle = 0;
+                const slices = entries.map(([status,count])=>{
+                  const pct = count/total;
+                  const angle = pct * 360;
+                  const endAngle = startAngle + angle;
+                  const largeArc = angle > 180 ? 1 : 0;
+                  const x1 = 80 + 70 * Math.cos((startAngle-90)*Math.PI/180);
+                  const y1 = 80 + 70 * Math.sin((startAngle-90)*Math.PI/180);
+                  const x2 = 80 + 70 * Math.cos((endAngle-90)*Math.PI/180);
+                  const y2 = 80 + 70 * Math.sin((endAngle-90)*Math.PI/180);
+                  const path = entries.length===1
+                    ? `M80,10 A70,70 0 1,1 79.99,10 Z`
+                    : `M80,80 L${x1},${y1} A70,70 0 ${largeArc},1 ${x2},${y2} Z`;
+                  startAngle = endAngle;
+                  return {status,count,pct,path,color:colors[status]||T.sub};
+                });
+                return <div style={{display:"flex",alignItems:"center",gap:"24px",padding:"12px"}}>
+                  <svg width="160" height="160" viewBox="0 0 160 160">
+                    {slices.map((s,i)=><path key={i} d={s.path} fill={s.color} stroke="#fff" strokeWidth="2"/>)}
+                  </svg>
+                  <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+                    {slices.map((s,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:"8px",fontSize:"11px"}}>
+                      <div style={{width:"10px",height:"10px",borderRadius:"2px",background:s.color,flexShrink:0}}/>
+                      <span style={{fontWeight:600,textTransform:"capitalize"}}>{s.status}</span>
+                      <span style={{color:T.sub}}>{s.count} ({Math.round(s.pct*100)}%)</span>
+                    </div>)}
+                  </div>
+                </div>;
+              })()}
+            </div>
+
+            {/* Deliverables Completion */}
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",padding:"14px",marginBottom:"14px"}}>
+              <div style={{fontWeight:800,fontSize:"13px",marginBottom:"10px"}}>Deliverables Completion</div>
+              {(()=>{
+                const allDels = deals.flatMap(d=>d.dels||[]);
+                const live = allDels.filter(d=>d.st==="live").length;
+                const pending = allDels.filter(d=>d.st==="pending").length;
+                const total = allDels.length;
+                const pct = total>0?Math.round(live/total*100):0;
+                return <>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:"11px",marginBottom:"5px"}}>
+                    <span>{live} of {total} deliverables completed</span>
+                    <span style={{fontWeight:700,color:pct>80?T.ok:pct>50?T.warn:T.err}}>{pct}%</span>
+                  </div>
+                  <div style={{height:"8px",borderRadius:"4px",background:T.border,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${pct}%`,background:pct>80?T.ok:pct>50?T.warn:T.err,borderRadius:"4px",transition:"width .3s"}}/>
+                  </div>
+                  <div style={{display:"flex",gap:"16px",marginTop:"8px",fontSize:"10px",color:T.sub}}>
+                    <span>Live: {live}</span><span>Pending: {pending}</span>
+                  </div>
+                </>;
+              })()}
             </div>
 
             {/* Export Button */}
@@ -2163,36 +2307,46 @@ return (
           </div>
 
           {/* Cards */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(295px,1fr))",gap:"9px"}}>
-            {filtered.map(d=>{
-              const camp=getCamp(d.cid);
-              const paid=totalPaid(d);
-              const done=d.dels.filter(x=>x.st==="live").length;
-              return <div key={d.id} style={{background:T.surface,border:bulkSelected.has(d.id)?`2px solid ${T.gold}`:(`1px solid ${T.border}`),borderRadius:"9px",padding:"13px",cursor:"pointer",transition:"all .12s",animation:"fadeUp .3s ease"}}
-                onMouseEnter={e=>{if(!bulkSelected.has(d.id)){e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,.05)"}}}
-                onMouseLeave={e=>{if(!bulkSelected.has(d.id)){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"5px"}}>
-                  <div style={{display:"flex",alignItems:"flex-start",gap:"6px"}}>
-                    <input type="checkbox" checked={bulkSelected.has(d.id)} onChange={e=>{e.stopPropagation();toggleBulkSelect(d.id)}} style={{cursor:"pointer",marginTop:"2px"}}/>
-                    <div onClick={()=>{setSel(d);setModal("detail")}} style={{cursor:"pointer"}}>
-                      <div style={{fontWeight:800,fontSize:"12.5px"}}>{d.inf}</div>
-                      <div style={{fontSize:"10px",color:T.sub}}>{d.platform} · {d.followers}</div>
+          {(()=>{
+            const pagedDeals = filtered.slice(dealsPage * ITEMS_PER_PAGE, (dealsPage+1) * ITEMS_PER_PAGE);
+            return <>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(295px,1fr))",gap:"9px"}}>
+                {pagedDeals.map(d=>{
+                  const camp=getCamp(d.cid);
+                  const paid=totalPaid(d);
+                  const done=d.dels.filter(x=>x.st==="live").length;
+                  return <div key={d.id} style={{background:T.surface,border:bulkSelected.has(d.id)?`2px solid ${T.gold}`:(`1px solid ${T.border}`),borderRadius:"9px",padding:"13px",cursor:"pointer",transition:"all .12s",animation:"fadeUp .3s ease"}}
+                    onMouseEnter={e=>{if(!bulkSelected.has(d.id)){e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,.05)"}}}
+                    onMouseLeave={e=>{if(!bulkSelected.has(d.id)){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"5px"}}>
+                      <div style={{display:"flex",alignItems:"flex-start",gap:"6px"}}>
+                        <input type="checkbox" checked={bulkSelected.has(d.id)} onChange={e=>{e.stopPropagation();toggleBulkSelect(d.id)}} style={{cursor:"pointer",marginTop:"2px"}}/>
+                        <div onClick={()=>{setSel(d);setModal("detail")}} style={{cursor:"pointer"}}>
+                          <div style={{fontWeight:800,fontSize:"12.5px"}}>{d.inf}</div>
+                          <div style={{fontSize:"10px",color:T.sub}}>{d.platform} · {d.followers}</div>
+                        </div>
+                      </div>
+                      <Badge s={d.status} sm/>
                     </div>
-                  </div>
-                  <Badge s={d.status} sm/>
-                </div>
-                {camp&&<div style={{fontSize:"9.5px",color:T.gold,fontWeight:700,marginBottom:"3px"}}>🎯 {camp.name}</div>}
-                <div style={{fontSize:"10.5px",color:T.sub,marginBottom:"6px"}}>{d.products?d.products.map(p=>p.name).join(", "):d.product}</div>
-                <div style={{display:"flex",gap:"2px",marginBottom:"6px"}}>{d.dels.map((dl,i)=><div key={i} title={`${dl.type}: ${dl.st}`} style={{flex:1,height:"3px",borderRadius:"2px",background:dl.st==="live"?T.ok:T.border}}/>)}</div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{f(d.amount)}</span>
-                  <span style={{fontSize:"9.5px",color:T.sub}}>{done}/{d.dels.length} content · {d.by}</span>
-                </div>
-                {paid>0&&paid<d.amount&&<div style={{marginTop:"4px",height:"2.5px",borderRadius:"2px",background:T.border,overflow:"hidden"}}><div style={{height:"100%",width:`${(paid/d.amount)*100}%`,background:T.ok,borderRadius:"2px"}}/></div>}
-              </div>;
-            })}
-          </div>
-          {filtered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.sub,fontSize:"12px"}}>No deals in this view</div>}
+                    {camp&&<div style={{fontSize:"9.5px",color:T.gold,fontWeight:700,marginBottom:"3px"}}>🎯 {camp.name}</div>}
+                    <div style={{fontSize:"10.5px",color:T.sub,marginBottom:"6px"}}>{d.products?d.products.map(p=>p.name).join(", "):d.product}</div>
+                    <div style={{display:"flex",gap:"2px",marginBottom:"6px"}}>{d.dels.map((dl,i)=><div key={i} title={`${dl.type}: ${dl.st}`} style={{flex:1,height:"3px",borderRadius:"2px",background:dl.st==="live"?T.ok:T.border}}/>)}</div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{f(d.amount)}</span>
+                      <span style={{fontSize:"9.5px",color:T.sub}}>{done}/{d.dels.length} content · {d.by}</span>
+                    </div>
+                    {paid>0&&paid<d.amount&&<div style={{marginTop:"4px",height:"2.5px",borderRadius:"2px",background:T.border,overflow:"hidden"}}><div style={{height:"100%",width:`${(paid/d.amount)*100}%`,background:T.ok,borderRadius:"2px"}}/></div>}
+                  </div>;
+                })}
+              </div>
+              {filtered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.sub,fontSize:"12px"}}>No deals in this view</div>}
+              {filtered.length > ITEMS_PER_PAGE && <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:"8px",padding:"12px",marginTop:"12px"}}>
+                <Btn v="outline" sm disabled={dealsPage===0} onClick={()=>setDealsPage(p=>p-1)}>← Previous</Btn>
+                <span style={{fontSize:"10px",color:T.sub}}>Page {dealsPage+1} of {Math.ceil(filtered.length/ITEMS_PER_PAGE)}</span>
+                <Btn v="outline" sm disabled={(dealsPage+1)*ITEMS_PER_PAGE>=filtered.length} onClick={()=>setDealsPage(p=>p+1)}>Next →</Btn>
+              </div>}
+            </>;
+          })()}
         </>}
 
         {/* ═══ DROPPED COLLABS (Negotiator view) ═══ */}
@@ -2480,7 +2634,7 @@ return (
             if(users.some(u=>u.email===userF.email)) { notify("Email already exists","err"); return; }
             const initials = userF.name.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2);
             const newId = uid();
-            supabase.from('users').insert({id:newId,name:userF.name,email:userF.email,role:userF.role,status:'active',avatar:initials,pin:'1111'});
+            supabase.from('users').insert({id:newId,name:userF.name,email:userF.email,role:userF.role,status:'active',avatar:initials,pin:'1111'}).then(({error})=>{if(error){console.error("User insert failed:",error);notify("Failed to create user: "+error.message,"err");}});
             setUsers(prev=>[...prev,{id:newId,name:userF.name,email:userF.email,role:userF.role,status:"active",created:new Date().toISOString().slice(0,10),avatar:initials,pin:"1111"}]);
             setUserF({name:"",email:"",role:"negotiator"});
             setModal(null);

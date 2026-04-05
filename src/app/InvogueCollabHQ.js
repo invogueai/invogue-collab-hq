@@ -21,6 +21,7 @@ const STATUS_CFG = {
   renegotiate:    { l:"Renegotiate",      c:T.warn,   bg:T.warnBg,   i:"🔄" },
   approved:       { l:"Approved",         c:T.ok,     bg:T.okBg,     i:"✅" },
   rejected:       { l:"Rejected",         c:T.err,    bg:T.errBg,    i:"❌" },
+  dropped:        { l:"Dropped",          c:T.err,    bg:T.errBg,    i:"🚫" },
   email_sent:     { l:"Email Sent",       c:T.info,   bg:T.infoBg,   i:"📧" },
   shipped:        { l:"Shipped",          c:T.purple, bg:T.purpleBg, i:"🚚" },
   delivered_prod: { l:"Product Delivered", c:T.teal,  bg:T.tealBg,   i:"📦" },
@@ -257,6 +258,11 @@ export default function InvogueCollabHQ() {
   const [payReqNote, setPayReqNote] = useState(""); // payment request note
   const [contentF, setContentF] = useState({url:"",note:""}); // for marking content live
   const [formErrors, setFormErrors] = useState({}); // validation errors
+  const [rejectReasonF, setRejectReasonF] = useState(""); // rejection reason modal
+  const [dropReasonF, setDropReasonF] = useState(""); // drop collab reason modal
+  const [deliverableLinkF, setDeliverableLinkF] = useState({}); // unique state per deliverable {delId: url}
+  const [attachmentMode, setAttachmentMode] = useState({}); // {delId: "link"|"attachment"}
+  const [attachmentDesc, setAttachmentDesc] = useState({}); // {delId: description}
 
   const notify = (msg,type="ok") => { setToast({msg,type}); setTimeout(()=>setToast(null),2800); };
 
@@ -311,15 +317,15 @@ export default function InvogueCollabHQ() {
   const totalPaid = d => (d.pays||[]).reduce((s,p)=>s+p.amount,0);
   const remaining = d => d.amount - totalPaid(d);
   const getCamp = id => campaigns.find(c=>c.id===id);
-  const campCommitted = cid => deals.filter(d=>d.cid===cid&&!["rejected","pending","renegotiate"].includes(d.status)).reduce((s,d)=>s+d.amount,0);
+  const campCommitted = cid => deals.filter(d=>d.cid===cid&&!["rejected","pending","renegotiate","dropped"].includes(d.status)).reduce((s,d)=>s+d.amount,0);
   const campPaid = cid => deals.filter(d=>d.cid===cid).reduce((s,d)=>s+totalPaid(d),0);
   const campDeals = cid => deals.filter(d=>d.cid===cid);
-  const campLocked = cid => deals.filter(d=>d.cid===cid&&!["rejected","pending","renegotiate"].includes(d.status)).length;
+  const campLocked = cid => deals.filter(d=>d.cid===cid&&!["rejected","pending","renegotiate","dropped"].includes(d.status)).length;
 
   const pendingDels = useMemo(()=>{
     const arr=[];
     deals.forEach(d=>{
-      if(["rejected","pending","renegotiate"].includes(d.status)) return;
+      if(["rejected","pending","renegotiate","dropped"].includes(d.status)) return;
       (d.dels||[]).forEach(dl=>{
         if(dl.st==="pending") arr.push({...dl,dealId:d.id,inf:d.inf,platform:d.platform,deadline:d.deadline,cid:d.cid});
       });
@@ -341,12 +347,13 @@ export default function InvogueCollabHQ() {
   },[deals,tab,campFilter]);
 
   const stats = useMemo(()=>{
-    const active = deals.filter(d=>!["rejected","pending","renegotiate"].includes(d.status));
+    const active = deals.filter(d=>!["rejected","pending","renegotiate","dropped"].includes(d.status));
     return {
       committed: active.reduce((s,d)=>s+d.amount,0),
       paid: deals.reduce((s,d)=>s+totalPaid(d),0),
       pendingN: deals.filter(d=>d.status==="pending"||d.status==="renegotiate").length,
       disputed: deals.filter(d=>d.status==="disputed").length,
+      dropped: deals.filter(d=>d.status==="dropped").length,
       pendingDels: pendingDels.length,
       pendingShip: pendingShip.length,
     };
@@ -403,6 +410,33 @@ export default function InvogueCollabHQ() {
 
     const dbDels = nDeal.dels.map(dl=>({id:uid(),deal_id:dealId,type:dl.type,description:dl.desc,status:'pending',live_link:null}));
     if(dbDels.length>0) await supabase.from('deliverables').insert(dbDels);
+
+    // Auto-create influencer if not exists
+    const existingInf = influencers.find(i=>i.name===nDeal.inf);
+    if(!existingInf) {
+      const infId = uid();
+      const infData = {
+        id:infId,
+        name:nDeal.inf,
+        platform:nDeal.platform,
+        handle:nDeal.handle||"",
+        profile:nDeal.profile,
+        followers:nDeal.followers,
+        category:"",
+        city:"",
+        phone:nDeal.phone||"",
+        email:nDeal.email||"",
+        address:nDeal.address||"",
+        poc:userName,
+        avg_rate:nDeal.amount,
+        rating:"A",
+        notes:"Auto-created from deal",
+        tags:"[]",
+        created_at:ts
+      };
+      await supabase.from('influencers').insert(infData);
+      setInfluencers(prev=>[{...infData,tags:[],...infData,added:ts.slice(0,10)},...prev]);
+    }
 
     await supabase.from('audit_log').insert({
       deal_id:dealId,
@@ -466,19 +500,32 @@ export default function InvogueCollabHQ() {
     supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id);
     upDeal(d.id,{status:"approved",appBy:userName,appAt:ts});
     addLog(d.id,userName,"Approved & amount locked",f(d.amount));
+
+    // Budget check
+    const camp = getCamp(d.cid);
+    const committed = campCommitted(d.cid);
+    const remaining = camp ? camp.budget - committed : 0;
+    const budgetPct = camp ? Math.round((committed / camp.budget) * 100) : 0;
+    let budgetMsg = "";
+    if(camp) {
+      budgetMsg = remaining < 0 ? ` ⚠ OVERBUDGET by ${f(Math.abs(remaining))}!` : remaining < (camp.budget * 0.2) ? ` ⚠ LOW budget (${budgetPct}% used)` : "";
+    }
+
     setSel(null);
     setModal(null);
-    notify("Approved! Amount locked at "+f(d.amount));
+    notify("Approved! "+f(d.amount)+" locked"+budgetMsg);
   };
 
-  const rejectDeal = d => {
+  const rejectDeal = (d, reason) => {
+    if(!reason || !reason.trim()) return notify("Rejection reason is mandatory","err");
     const userName = loggedIn?.name||"You (Manager)";
     const ts = new Date().toISOString();
-    supabase.from('deals').update({status:'rejected',approved_by:userName,approved_at:ts}).eq('id',d.id);
-    upDeal(d.id,{status:"rejected",appBy:userName,appAt:ts});
-    addLog(d.id,userName,"Rejected","");
+    supabase.from('deals').update({status:'rejected',approved_by:userName,approved_at:ts,rejection_reason:reason}).eq('id',d.id);
+    upDeal(d.id,{status:"rejected",appBy:userName,appAt:ts,rejectionReason:reason});
+    addLog(d.id,userName,"Rejected",`Reason: ${reason}`);
     setSel(null);
     setModal(null);
+    setRejectReasonF("");
     notify("Rejected","err");
   };
 
@@ -491,12 +538,10 @@ export default function InvogueCollabHQ() {
     });
   };
 
-  const confirmAndReject = d => {
-    setConfirmAction({
-      title:"Reject Deal",
-      msg:`Reject deal with ${d.inf} for ${f(d.amount)}?`,
-      onConfirm:()=>{rejectDeal(d);setConfirmAction(null);}
-    });
+  const openRejectModal = d => {
+    setSel(d);
+    setModal("reject");
+    setRejectReasonF("");
   };
 
   const confirmAndSendEmail = d => {
@@ -600,6 +645,9 @@ export default function InvogueCollabHQ() {
     setSel(prev=>prev?{...prev,dels:newDels,status:shouldUpdateStatus?newStatus:prev.status}:null);
     setLinkF("");
     setContentF({url:"",note:""});
+    setDeliverableLinkF(prev=>{const copy={...prev};delete copy[delId];return copy;});
+    setAttachmentMode(prev=>{const copy={...prev};delete copy[delId];return copy;});
+    setAttachmentDesc(prev=>{const copy={...prev};delete copy[delId];return copy;});
     notify("Deliverable marked live!");
   };
 
@@ -618,6 +666,7 @@ export default function InvogueCollabHQ() {
   };
 
   const recordPayment = () => {
+    if(role!=="finance") return notify("Only Finance role can record payments","err");
     if(!payF.amount) return notify("Enter amount","err");
     const amt = +payF.amount;
     if(amt > remaining(sel) && amt !== sel.amount) return notify("Exceeds remaining balance!","err");
@@ -641,14 +690,24 @@ export default function InvogueCollabHQ() {
     if(!panNumber || !panName) return notify("PAN details are mandatory","err");
     const ts = new Date().toISOString();
     const userName = loggedIn?.name||"You";
-    supabase.from('deals').update({status:'payment_requested',pan_number:panNumber,pan_name:panName}).eq('id',deal.id);
-    upDeal(deal.id,{status:"payment_requested",pan:{number:panNumber,name:panName}});
-    addLog(deal.id,userName,"Sent for payment",`PAN: ${panNumber} | Name: ${panName}`);
+
+    if(role==="negotiator") {
+      // Negotiator sends for manager approval first
+      supabase.from('deals').update({status:'payment_requested',pan_number:panNumber,pan_name:panName}).eq('id',deal.id);
+      upDeal(deal.id,{status:"payment_requested",pan:{number:panNumber,name:panName}});
+      addLog(deal.id,userName,"Requested payment approval",`PAN: ${panNumber} | Name: ${panName}`);
+    } else if(role==="approver") {
+      // Manager approves and sends to finance
+      supabase.from('deals').update({status:'payment_approved',pan_number:panNumber,pan_name:panName}).eq('id',deal.id);
+      upDeal(deal.id,{status:"payment_approved",pan:{number:panNumber,name:panName}});
+      addLog(deal.id,userName,"Approved payment request",`PAN: ${panNumber} | Name: ${panName}`);
+    }
+
     setSel(null);
     setModal(null);
     setPanF({number:"",name:""});
     setPayReqNote("");
-    notify("Sent for payment approval!");
+    notify(role==="negotiator"?"Sent to manager for approval":"Payment approved for finance!");
   };
 
   const approvePaymentRequest = d => {
@@ -669,6 +728,27 @@ export default function InvogueCollabHQ() {
     setSel(null);
     setModal(null);
     notify("Payment request denied","warn");
+  };
+
+  const dropCollab = (d, reason) => {
+    if(!reason || !reason.trim()) return notify("Drop reason is mandatory","err");
+    const totalPaidAmount = totalPaid(d);
+    if(totalPaidAmount > 0) return notify("Cannot drop a collab with payments already made","err");
+    const userName = loggedIn?.name||"You (Negotiator)";
+    const ts = new Date().toISOString();
+    supabase.from('deals').update({status:'dropped'}).eq('id',d.id);
+    upDeal(d.id,{status:"dropped"});
+    addLog(d.id,userName,"Collab dropped",`Reason: ${reason}`);
+    setSel(null);
+    setModal(null);
+    setDropReasonF("");
+    notify("Collab dropped","warn");
+  };
+
+  const openDropModal = d => {
+    setSel(d);
+    setModal("drop");
+    setDropReasonF("");
   };
 
   const resetData = async () => {
@@ -785,9 +865,9 @@ return (
     {(()=>{
       const navItems = {
         admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"audit",l:"Audit Log",i:"📜"}],
-        negotiator: [{k:"dashboard",l:"My Dashboard",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
+        negotiator: [{k:"dashboard",l:"My Dashboard",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"dropped",l:"Dropped Collabs",i:"🚫",n:stats.dropped},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
         approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
-        finance: [{k:"dashboard",l:"Payment Center",i:"🔵"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
+        finance: [{k:"dashboard",l:"Payment Center",i:"🔵"}],
         logistics: [{k:"dashboard",l:"Shipment Center",i:"🔵"},{k:"shipments",l:"All Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
       };
       const items = navItems[role]||navItems.negotiator;
@@ -807,7 +887,7 @@ return (
           ADMIN DASHBOARD — Super access, full control
          ═══════════════════════════════════════════════════════ */}
       {view==="dashboard"&&role==="admin"&&(()=>{
-        const pendingApproval = deals.filter(d=>d.status==="pending"||d.status==="renegotiate");
+        const pendingApproval = deals.filter(d=>d.status==="pending");
         const disputed = deals.filter(d=>d.status==="disputed");
         const needPayment = deals.filter(d=>!["rejected","pending","renegotiate","paid"].includes(d.status)&&remaining(d)>0);
         const overdueDels = pendingDels.filter(d=>new Date(d.deadline)<new Date());
@@ -852,7 +932,7 @@ return (
                 <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{f(d.amount)}</span>
                 <Btn v="ok" sm onClick={()=>setConfirmAction({title:"Approve Deal",msg:"Approve and lock "+f(d.amount)+" for "+d.inf+"?",onConfirm:()=>{approveDeal(d);setConfirmAction(null)}})}>✓</Btn>
                 <Btn v="outline" sm onClick={()=>setConfirmAction({title:"Request Renegotiation",msg:"Renegotiate "+d.inf+" deal?",onConfirm:()=>{renegDeal(d);setConfirmAction(null)}})}>↩</Btn>
-                <Btn v="danger" sm onClick={()=>setConfirmAction({title:"Reject Deal",msg:"Reject deal with "+d.inf+"?",onConfirm:()=>{rejectDeal(d);setConfirmAction(null)}})}>✕</Btn>
+                <Btn v="danger" sm onClick={()=>openRejectModal(d)}>✕</Btn>
               </div>
             </div>)}
           </Section>}
@@ -1091,15 +1171,17 @@ return (
          ═══════════════════════════════════════════════════════ */}
       {view==="dashboard"&&role==="negotiator"&&(()=>{
         const myDeals = deals; // In production, filter by logged-in user
-        const myPending = myDeals.filter(d=>d.status==="pending"||d.status==="renegotiate");
+        const myPending = myDeals.filter(d=>d.status==="pending");
+        const myRenegotiations = myDeals.filter(d=>d.status==="renegotiate");
         const myNeedAction = myDeals.filter(d=>
           (d.status==="approved") || // needs email sent
           (d.status==="email_sent"&&!d.ship) || // waiting for logistics
           (["shipped","delivered_prod","email_sent","partial_live"].includes(d.status)&&d.dels.some(dl=>dl.st==="pending")) || // deliverables to mark
           (["live","partial_live"].includes(d.status)&&!d.inv) // needs invoice
         );
-        const myActive = myDeals.filter(d=>!["rejected","paid","pending","renegotiate"].includes(d.status));
+        const myActive = myDeals.filter(d=>!["rejected","paid","pending","renegotiate","dropped"].includes(d.status));
         const myCompleted = myDeals.filter(d=>d.status==="paid");
+        const myDropped = myDeals.filter(d=>d.status==="dropped");
         return <>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
             <div><span style={{fontSize:"16px",fontWeight:800}}>👤 My Dashboard</span><span style={{fontSize:"11px",color:T.sub,marginLeft:"8px"}}>Your collaborations at a glance</span></div>
@@ -1146,6 +1228,14 @@ return (
             </div>)}
           </Section>}
 
+          {/* Renegotiation Requests */}
+          {myRenegotiations.length>0&&<Section title={`Renegotiation Requests (${myRenegotiations.length})`} icon="🔄">
+            {myRenegotiations.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:"#fff8f0",border:`1px solid ${T.warnBg}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"5px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div><span style={{fontWeight:700,fontSize:"12px"}}>{d.inf}</span> <span style={{color:T.sub,fontSize:"11px"}}>· {f(d.amount)} · {d.dels.length} deliverables</span></div>
+              <Badge s={d.status} sm/>
+            </div>)}
+          </Section>}
+
           {/* Shipment Tracking */}
           <Section title="📦 My Shipment Tracker" icon="">
             {myDeals.filter(d=>d.ship&&d.ship.st==="in_transit").length===0&&myDeals.filter(d=>["approved","email_sent"].includes(d.status)&&!d.ship).length===0&&<div style={{fontSize:"11px",color:T.sub,padding:"8px 0"}}>No active shipments</div>}
@@ -1179,7 +1269,7 @@ return (
           MANAGER / APPROVER DASHBOARD — Bird's Eye View
          ═══════════════════════════════════════════════════════ */}
       {view==="dashboard"&&role==="approver"&&(()=>{
-        const pendingApproval = deals.filter(d=>d.status==="pending"||d.status==="renegotiate");
+        const pendingApproval = deals.filter(d=>d.status==="pending");
         const disputed = deals.filter(d=>d.status==="disputed");
         const needPayment = deals.filter(d=>!["rejected","pending","renegotiate","paid"].includes(d.status)&&remaining(d)>0);
         const overdueDels = pendingDels.filter(d=>new Date(d.deadline)<new Date());
@@ -1208,7 +1298,7 @@ return (
                 <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{f(d.amount)}</span>
                 <Btn v="ok" sm onClick={()=>setConfirmAction({title:"Approve Deal",msg:"Approve and lock "+f(d.amount)+" for "+d.inf+"?",onConfirm:()=>{approveDeal(d);setConfirmAction(null)}})}>✓</Btn>
                 <Btn v="outline" sm onClick={()=>setConfirmAction({title:"Request Renegotiation",msg:"Renegotiate "+d.inf+" deal?",onConfirm:()=>{renegDeal(d);setConfirmAction(null)}})}>↩</Btn>
-                <Btn v="danger" sm onClick={()=>setConfirmAction({title:"Reject Deal",msg:"Reject deal with "+d.inf+"?",onConfirm:()=>{rejectDeal(d);setConfirmAction(null)}})}>✕</Btn>
+                <Btn v="danger" sm onClick={()=>openRejectModal(d)}>✕</Btn>
               </div>
             </div>)}
           </Section>}
@@ -1625,6 +1715,36 @@ return (
           {filtered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.sub,fontSize:"12px"}}>No deals in this view</div>}
         </>}
 
+        {/* ═══ DROPPED COLLABS (Negotiator view) ═══ */}
+        {view==="dropped"&&role==="negotiator"&&(()=>{
+          const droppedDeals = deals.filter(d=>d.status==="dropped");
+          return <>
+            <div style={{marginBottom:"14px"}}>
+              <span style={{fontSize:"16px",fontWeight:800}}>🚫 Dropped Collabs</span>
+              <span style={{fontSize:"11px",color:T.sub,marginLeft:"8px"}}>({droppedDeals.length} total)</span>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(295px,1fr))",gap:"9px"}}>
+              {droppedDeals.map(d=>(
+                <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.errBg,border:`1px solid ${T.err}33`,borderRadius:"9px",padding:"13px",cursor:"pointer",transition:"all .12s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.err}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=`${T.err}33`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"5px"}}>
+                    <div><div style={{fontWeight:800,fontSize:"12.5px"}}>{d.inf}</div><div style={{fontSize:"10px",color:T.sub}}>{d.platform} · {d.followers}</div></div>
+                    <Badge s={d.status} sm/>
+                  </div>
+                  <div style={{fontSize:"10.5px",color:T.sub,marginBottom:"6px"}}>{d.product}</div>
+                  <div style={{fontSize:"10px",color:T.err,fontWeight:600,padding:"6px",background:"rgba(180,35,24,.1)",borderRadius:"4px",marginBottom:"6px"}}>Dropped by {d.logs?.find(l=>l.a==="Collab dropped")?.u||"Unknown"}</div>
+                  <div style={{display:"flex",justifyContent:"space-between"}}>
+                    <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{f(d.amount)}</span>
+                    <span style={{fontSize:"9.5px",color:T.sub}}>{d.dels.length} deliverables</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {droppedDeals.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.sub,fontSize:"12px"}}>No dropped collabs yet</div>}
+          </>;
+        })()}
+
         {/* ═══ CAMPAIGNS ═══ */}
         {view==="campaigns"&&<>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
@@ -1789,8 +1909,16 @@ return (
       <Modal open={modal==="ship"} onClose={()=>setModal(null)} title={`Dispatch to ${sel?.inf}`} w={440}>
         {sel&&<>
           <div style={{padding:"12px",background:T.purpleBg,borderRadius:"7px",marginBottom:"14px",fontSize:"11.5px",color:T.purple}}>
-            <div style={{fontWeight:800,fontSize:"13px",marginBottom:"6px"}}>📦 {sel.product}</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr",gap:"4px",marginTop:"6px"}}>
+            <div style={{fontWeight:800,fontSize:"13px",marginBottom:"6px"}}>📦 {sel.products?sel.products.map(p=>p.name).join(", "):sel.product}</div>
+            {sel.products && sel.products.length>0 && <div style={{marginTop:"8px",padding:"8px",background:"rgba(255,255,255,.1)",borderRadius:"4px",fontSize:"10px"}}>
+              <div style={{fontWeight:700,marginBottom:"4px"}}>Items to pack & ship:</div>
+              {sel.products.map((p,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px",marginBottom:"3px"}}>
+                <span><b>{p.name}</b></span>
+                <span>{p.color&&`Color: ${p.color}`} {p.size&&`Size: ${p.size}`}</span>
+                <span>{p.qty&&`Qty: ${p.qty}`}</span>
+              </div>)}
+            </div>}
+            <div style={{display:"grid",gridTemplateColumns:"1fr",gap:"4px",marginTop:"8px"}}>
               <div><span style={{fontWeight:700}}>📍 Ship to:</span> {sel.address||"Address not provided"}</div>
               <div><span style={{fontWeight:700}}>📱 Phone:</span> {sel.phone||"Not provided"}</div>
               <div><span style={{fontWeight:700}}>👤 Influencer:</span> {sel.inf} · {sel.platform}</div>
@@ -1982,23 +2110,44 @@ return (
 
             {/* Deliverables */}
             <Section title={`Deliverables (${done}/${sel.dels.length})`} icon="📋">
-              {sel.dels.map((dl,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 9px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"5px",marginBottom:"3px"}}>
-                <div>
-                  <span style={{fontSize:"11.5px",fontWeight:700}}>{dl.type}</span>
-                  <span style={{fontSize:"10.5px",color:T.sub,marginLeft:"5px"}}>{dl.desc}</span>
-                  {dl.link&&<div style={{fontSize:"9.5px",color:T.info,marginTop:"1px"}}>🔗 {dl.link}</div>}
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
-                  <DBadge s={dl.st}/>
-                  {(role==="negotiator"||role==="admin")&&dl.st==="pending"&&!["pending","renegotiate","rejected","approved"].includes(sel.status)&&
-                    <div style={{display:"flex",gap:"3px",alignItems:"center"}}>
-                      <Inp value={contentF.url} onChange={e=>setContentF({...contentF,url:e.target.value})} placeholder="Content URL *" sx={{width:"140px"}}/>
-                      <Btn v="ok" sm onClick={()=>{if(!contentF.url){notify("Content URL required","err");return;}markDelLive(sel,i,contentF.url)}}>✅ Live</Btn>
-                    </div>}
-                  {(role==="negotiator"||role==="admin")&&dl.st==="pending"&&(!sel.ship||sel.ship.st!=="delivered")&&
-                    <span style={{fontSize:"9px",color:T.sub,fontStyle:"italic"}}>Awaiting delivery</span>}
-                </div>
-              </div>)}
+              {sel.dels.map((dl,i)=>{
+                const url = deliverableLinkF[dl.id] || "";
+                const isAttachment = attachmentMode[dl.id] === "attachment";
+                return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"7px 9px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"5px",marginBottom:"3px"}}>
+                  <div style={{flex:1}}>
+                    <span style={{fontSize:"11.5px",fontWeight:700}}>{dl.type}</span>
+                    <span style={{fontSize:"10.5px",color:T.sub,marginLeft:"5px"}}>{dl.desc}</span>
+                    {dl.link&&<div style={{fontSize:"9.5px",color:T.info,marginTop:"1px"}}>🔗 {dl.link}</div>}
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"5px"}}>
+                    <DBadge s={dl.st}/>
+                    {(role==="negotiator"||role==="admin")&&dl.st==="pending"&&!["pending","renegotiate","rejected","approved"].includes(sel.status)&&
+                      <div style={{display:"flex",flexDirection:"column",gap:"3px",alignItems:"flex-end",width:"160px"}}>
+                        <label style={{display:"flex",gap:"4px",fontSize:"9.5px",fontWeight:600,color:T.sub}}>
+                          <input type="radio" name={`mode-${dl.id}`} checked={!isAttachment} onChange={()=>{setAttachmentMode(p=>({...p,[dl.id]:"link"}))}} style={{cursor:"pointer"}}/>
+                          Live Link
+                        </label>
+                        <label style={{display:"flex",gap:"4px",fontSize:"9.5px",fontWeight:600,color:T.sub}}>
+                          <input type="radio" name={`mode-${dl.id}`} checked={isAttachment} onChange={()=>{setAttachmentMode(p=>({...p,[dl.id]:"attachment"}))}} style={{cursor:"pointer"}}/>
+                          Custom Attachment
+                        </label>
+                        {!isAttachment?
+                          <div style={{display:"flex",gap:"3px",width:"100%"}}>
+                            <Inp value={url} onChange={e=>setDeliverableLinkF({...deliverableLinkF,[dl.id]:e.target.value})} placeholder="URL *" sx={{width:"110px"}}/>
+                            <Btn v="ok" sm onClick={()=>{if(!url){notify("Content URL required","err");return;}markDelLive(sel,i,url)}}>✅</Btn>
+                          </div>
+                        :
+                          <div style={{display:"flex",gap:"3px",width:"100%"}}>
+                            <Inp value={attachmentDesc[dl.id]||""} onChange={e=>setAttachmentDesc({...attachmentDesc,[dl.id]:e.target.value})} placeholder="File desc *" sx={{width:"110px"}}/>
+                            <Btn v="ok" sm onClick={()=>{const desc=attachmentDesc[dl.id];if(!desc){notify("Description required","err");return;}markDelLive(sel,i,desc)}}>✅</Btn>
+                          </div>
+                        }
+                      </div>}
+                    {(role==="negotiator"||role==="admin")&&dl.st==="pending"&&(!sel.ship||sel.ship.st!=="delivered")&&
+                      <span style={{fontSize:"9px",color:T.sub,fontStyle:"italic"}}>Awaiting delivery</span>}
+                  </div>
+                </div>;
+              })}
             </Section>
 
             {/* Shipment */}
@@ -2047,13 +2196,18 @@ return (
               {(role==="approver"||role==="admin")&&(sel.status==="pending"||sel.status==="renegotiate")&&<>
                 <Btn v="ok" onClick={()=>approveDeal(sel)}>✓ Approve & Lock</Btn>
                 <Btn v="outline" onClick={()=>renegDeal(sel)}>↩ Renegotiate</Btn>
-                <Btn v="danger" sm onClick={()=>rejectDeal(sel)}>✕ Reject</Btn>
+                <Btn v="danger" sm onClick={()=>openRejectModal(sel)}>✕ Reject</Btn>
               </>}
               {(role==="negotiator"||role==="admin")&&sel.status==="approved"&&<Btn v="gold" onClick={()=>sendEmail(sel)}>✉ Send Confirmation Email</Btn>}
+              {(role==="negotiator"||role==="admin")&&["pending","approved","email_sent","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
               {(role==="logistics"||role==="admin")&&["approved","email_sent"].includes(sel.status)&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC"});setModal("ship")}}>📦 Dispatch</Btn>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&!sel.inv&&<Btn v="gold" onClick={()=>{setInvF("");setModal("invoice")}}>🧾 Submit Invoice</Btn>}
-              {(role==="finance"||role==="approver"||role==="admin")&&!["pending","renegotiate","rejected"].includes(sel.status)&&rem>0&&<Btn v="ok" onClick={()=>{setPayF({type:paid===0?"advance":"partial",amount:"",note:""});setModal("payment")}}>💰 Record Payment</Btn>}
-              {(role==="negotiator"||role==="admin")&&["live","invoice_ok"].includes(sel.status)&&<Btn v="gold" onClick={()=>{setPanF({number:"",name:""});setModal("sendForPayment")}}>💸 Send for Payment</Btn>}
+              {role==="finance"&&!["pending","renegotiate","rejected","dropped"].includes(sel.status)&&rem>0&&<Btn v="ok" onClick={()=>{setPayF({type:paid===0?"advance":"partial",amount:"",note:""});setModal("payment")}}>💰 Record Payment</Btn>}
+              {(role==="negotiator"||role==="admin")&&["live","invoice_ok","payment_requested"].includes(sel.status)&&<Btn v="gold" onClick={()=>{setPanF({number:"",name:""});setModal("sendForPayment")}}>💸 Send for Payment</Btn>}
+              {(role==="approver"||role==="admin")&&sel.status==="payment_requested"&&<>
+                <Btn v="ok" sm onClick={()=>{sendForPayment(sel,sel.pan_number,sel.pan_name)}}>✓ Approve Payment</Btn>
+                <Btn v="outline" sm onClick={()=>notify("Sent back to negotiator","warn")}>↩ Request Changes</Btn>
+              </>}
               {(role==="finance"||role==="admin")&&sel.status==="disputed"&&<>
                 <Btn v="ok" sm onClick={()=>{setPayF({type:"final",amount:String(sel.amount-paid),note:"Paying approved amount per dispute resolution"});setModal("payment")}}>Pay Approved Amount</Btn>
                 <Btn v="danger" sm onClick={()=>notify("Escalated to founder","warn")}>Escalate</Btn>
@@ -2108,6 +2262,46 @@ return (
             <Btn v="outline" onClick={()=>setModal("detail")}>Cancel</Btn>
             <Btn v="gold" onClick={()=>{if(!panF.number||!panF.name){notify("PAN number and name are mandatory","err");return;}setConfirmAction({title:"Send for Payment",msg:`Send ${f(sel.amount)} payment request for ${sel.inf} to manager for approval?`,onConfirm:()=>{sendForPayment(sel,panF.number,panF.name);setConfirmAction(null)}})}}>💸 Send for Payment</Btn>
           </div>
+        </>}
+      </Modal>
+
+      {/* REJECT DEAL MODAL */}
+      <Modal open={modal==="reject"} onClose={()=>setModal(null)} title={`Reject Deal — ${sel?.inf}`} w={420}>
+        {sel&&<>
+          <div style={{padding:"10px",background:T.errBg,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+            <div style={{color:T.err,fontWeight:700}}>Amount: {f(sel.amount)}</div>
+            <div style={{fontSize:"10px",color:T.err,marginTop:"2px"}}>{sel.product} · {sel.dels.length} deliverables</div>
+          </div>
+          <Field label="Reason for Rejection *" required error={rejectReasonF.trim()===""?"Required":""}>
+            <Textarea value={rejectReasonF} onChange={e=>setRejectReasonF(e.target.value)} placeholder="Explain why this deal is being rejected..." rows={4}/>
+          </Field>
+          <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"14px",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>
+            <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
+            <Btn v="danger" onClick={()=>rejectDeal(sel,rejectReasonF)}>❌ Reject Deal</Btn>
+          </div>
+        </>}
+      </Modal>
+
+      {/* DROP COLLAB MODAL */}
+      <Modal open={modal==="drop"} onClose={()=>setModal(null)} title={`Drop Collab — ${sel?.inf}`} w={420}>
+        {sel&&<>
+          <div style={{padding:"10px",background:T.errBg,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+            <div style={{color:T.err,fontWeight:700}}>Amount: {f(sel.amount)}</div>
+            <div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>Status: {sel.status}</div>
+            <div style={{fontSize:"10px",color:T.err,marginTop:"4px",fontWeight:600}}>⚠ Can only drop if NO payments made (Current paid: {f(totalPaid(sel))})</div>
+          </div>
+          {totalPaid(sel)>0&&<div style={{padding:"10px",background:T.errBg,borderRadius:"6px",marginBottom:"12px",fontSize:"11px",color:T.err}}>
+            ❌ Cannot drop: Payment(s) already recorded. Contact manager to handle this collab.
+          </div>}
+          {totalPaid(sel)===0&&<>
+            <Field label="Reason for Dropping *" required error={dropReasonF.trim()===""?"Required":""}>
+              <Textarea value={dropReasonF} onChange={e=>setDropReasonF(e.target.value)} placeholder="Explain why you're dropping this collaboration..." rows={4}/>
+            </Field>
+            <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"14px",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>
+              <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
+              <Btn v="danger" onClick={()=>dropCollab(sel,dropReasonF)}>🚫 Drop Collab</Btn>
+            </div>
+          </>}
         </>}
       </Modal>
     </div>

@@ -139,7 +139,7 @@ const ROLE_CFG = {
 
 // ─── REUSABLE COMPONENTS ───
 const Badge = ({s,sm}) => { const x=STATUS_CFG[s]||{l:s,c:T.sub,bg:T.goldSoft,i:"?"}; return <span style={{display:"inline-flex",alignItems:"center",gap:"4px",padding:sm?"3px 8px":"4px 12px",borderRadius:"4px",fontSize:sm?"10px":"11px",fontWeight:600,color:x.c,background:x.bg,whiteSpace:"nowrap",letterSpacing:".5px",textTransform:"uppercase",border:"none",fontFamily:"Barlow,sans-serif"}}>{x.i} {x.l}</span>; };
-const DBadge = ({s}) => { const m={pending:{l:"Pending",c:T.warn,bg:T.warnBg},live:{l:"Delivered",c:T.ok,bg:T.okBg}}; const x=m[s]||m.pending; return <span style={{padding:"2px 6px",borderRadius:"8px",fontSize:"11px",fontWeight:700,color:x.c,background:x.bg}}>{x.l}</span>; };
+const DBadge = ({s}) => { const m={pending:{l:"Pending",c:T.warn,bg:T.warnBg},submitted:{l:"Submitted",c:T.info,bg:T.infoBg},under_review:{l:"Under Review",c:T.purple,bg:T.purpleBg},revision_requested:{l:"Revision Needed",c:T.err,bg:T.errBg},approved:{l:"Approved",c:T.ok,bg:T.okBg},live:{l:"Live",c:T.ok,bg:T.okBg}}; const x=m[s]||m.pending; return <span style={{padding:"2px 8px",borderRadius:"8px",fontSize:"11px",fontWeight:700,color:x.c,background:x.bg}}>{x.l}</span>; };
 
 const Btn = ({children,onClick,v="primary",sm,disabled,sx})=>{
   const vs={
@@ -237,6 +237,7 @@ export default function InvogueCollabHQ() {
   const [deliverableLinkF, setDeliverableLinkF] = useState({}); // unique state per deliverable {delId: url}
   const [attachmentMode, setAttachmentMode] = useState({}); // {delId: "link"|"attachment"}
   const [attachmentDesc, setAttachmentDesc] = useState({}); // {delId: description}
+  const [revisionFeedback, setRevisionFeedback] = useState({}); // {delId: feedback text}
 
   // Feature 1: Analytics & Reports
   const [analyticsData, setAnalyticsData] = useState(null);
@@ -431,11 +432,14 @@ export default function InvogueCollabHQ() {
     deals.forEach(d=>{
       if(["rejected","pending","renegotiate","dropped"].includes(d.status)) return;
       (d.dels||[]).forEach(dl=>{
-        if(dl.st==="pending") arr.push({...dl,dealId:d.id,inf:d.inf,platform:d.platform,deadline:d.deadline,cid:d.cid});
+        if(dl.st!=="live") arr.push({...dl,dealId:d.id,inf:d.inf,platform:d.platform,deadline:d.deadline,cid:d.cid});
       });
     });
     return arr;
   },[deals]);
+
+  const awaitingReview = useMemo(()=>pendingDels.filter(d=>d.st==="submitted"),[pendingDels]);
+  const revisionNeeded = useMemo(()=>pendingDels.filter(d=>d.st==="revision_requested"),[pendingDels]);
 
   const pendingShip = useMemo(()=>deals.filter(d=>["approved","email_sent"].includes(d.status)&&!d.ship),[deals]);
   const inTransit = useMemo(()=>deals.filter(d=>d.ship?.st==="in_transit"),[deals]);
@@ -461,8 +465,10 @@ export default function InvogueCollabHQ() {
       dropped: deals.filter(d=>d.status==="dropped").length,
       pendingDels: pendingDels.length,
       pendingShip: pendingShip.length,
+      awaitingReview: awaitingReview.length,
+      revisionNeeded: revisionNeeded.length,
     };
-  },[deals,pendingDels,pendingShip]);
+  },[deals,pendingDels,pendingShip,awaitingReview,revisionNeeded]);
 
   // ── FEATURE 1: ANALYTICS HELPERS ──
   const generateAnalyticsData = () => {
@@ -884,9 +890,11 @@ export default function InvogueCollabHQ() {
     if(!deal.ship || deal.ship.st !== "delivered") {
       return notify("Product must be delivered before content can go live","err");
     }
-    if(!contentUrl) return notify("Content URL is required","err");
+    const currentDel = deal.dels[delIdx];
+    const liveUrl = contentUrl || currentDel?.link;
+    if(!liveUrl) return notify("Content URL is required","err");
 
-    const link = contentUrl;
+    const link = liveUrl;
     const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"live",link}:dl);
     const allLive = newDels.every(dl=>dl.st==="live");
     const newStatus = allLive ? "live" : "partial_live";
@@ -905,6 +913,42 @@ export default function InvogueCollabHQ() {
     setAttachmentMode(prev=>{const copy={...prev};delete copy[delId];return copy;});
     setAttachmentDesc(prev=>{const copy={...prev};delete copy[delId];return copy;});
     notify("Deliverable marked live!");
+  };
+
+  // ─── CONTENT APPROVAL WORKFLOW ───
+  const submitContentForReview = (deal, delIdx, contentUrl) => {
+    if(!deal.ship || deal.ship.st !== "delivered") return notify("Product must be delivered before content can be submitted","err");
+    if(!contentUrl) return notify("Content URL/link is required","err");
+    const delId = deal.dels[delIdx].id;
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"submitted",link:contentUrl}:dl);
+    supabase.from('deliverables').update({status:'submitted',live_link:contentUrl,submitted_at:new Date().toISOString()}).eq('id',delId).then(({error})=>{if(error) console.error("Submit content failed:",error);});
+    upDeal(deal.id,{dels:newDels});
+    addLog(deal.id,loggedIn?.name||"You","Content submitted for review",`${deal.dels[delIdx].type}: ${contentUrl}`);
+    setSel(prev=>prev?{...prev,dels:newDels}:null);
+    setDeliverableLinkF(prev=>{const copy={...prev};delete copy[delId];return copy;});
+    notify("Content submitted for manager review!");
+  };
+
+  const approveContent = (deal, delIdx) => {
+    const delId = deal.dels[delIdx].id;
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"approved"}:dl);
+    supabase.from('deliverables').update({status:'approved',approved_at:new Date().toISOString()}).eq('id',delId).then(({error})=>{if(error) console.error("Approve content failed:",error);});
+    upDeal(deal.id,{dels:newDels});
+    addLog(deal.id,loggedIn?.name||"You","Content approved",`${deal.dels[delIdx].type}: ${deal.dels[delIdx].desc}`);
+    setSel(prev=>prev?{...prev,dels:newDels}:null);
+    notify("Content approved! Negotiator can now mark it live.");
+  };
+
+  const requestRevision = (deal, delIdx, feedback) => {
+    if(!feedback) return notify("Please provide feedback for the revision","err");
+    const delId = deal.dels[delIdx].id;
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"revision_requested",feedback,link:""}:dl);
+    supabase.from('deliverables').update({status:'revision_requested',feedback:feedback,revision_requested_at:new Date().toISOString()}).eq('id',delId).then(({error})=>{if(error) console.error("Revision request failed:",error);});
+    upDeal(deal.id,{dels:newDels});
+    addLog(deal.id,loggedIn?.name||"You","Revision requested",`${deal.dels[delIdx].type}: ${feedback}`);
+    setSel(prev=>prev?{...prev,dels:newDels}:null);
+    setRevisionFeedback(prev=>{const copy={...prev};delete copy[delId];return copy;});
+    notify("Revision requested. Negotiator will be notified.","warn");
   };
 
   const submitInvoice = (deal) => {
@@ -1306,7 +1350,7 @@ return (
       const navItems = {
         admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"analytics",l:"Analytics",i:"📊"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"audit",l:"Audit Log",i:"📜"}],
         negotiator: [{k:"dashboard",l:"My Dashboard",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"dropped",l:"Dropped Collabs",i:"🚫",n:stats.dropped},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
-        approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
+        approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.awaitingReview||stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
         finance: [{k:"dashboard",l:"Payment Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"}],
         logistics: [{k:"dashboard",l:"Shipment Center",i:"🔵"},{k:"shipments",l:"All Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
       };
@@ -1740,6 +1784,7 @@ return (
             <StatBox l="Paid Out" v={f(stats.paid)} c={T.ok}/>
             <StatBox l="Outstanding" v={f(stats.committed-stats.paid)} c={T.warn}/>
             <StatBox l="Pending Approval" v={stats.pendingN} c={stats.pendingN>0?T.warn:T.ok}/>
+            <StatBox l="Content Review" v={stats.awaitingReview} c={stats.awaitingReview>0?T.info:T.ok}/>
             <StatBox l="Disputes" v={stats.disputed} c={stats.disputed>0?T.err:T.ok}/>
             <StatBox l="Overdue Content" v={overdueDels.length} c={overdueDels.length>0?T.err:T.ok}/>
           </div>
@@ -1761,6 +1806,18 @@ return (
                 <Btn v="danger" sm onClick={()=>openRejectModal(d)}>✕</Btn>
               </div>
             </div>)}
+          </Section>}
+
+          {/* CONTENT AWAITING REVIEW */}
+          {awaitingReview.length>0&&<Section title={`Content Awaiting Review (${awaitingReview.length})`} icon="📤" action={<span style={{fontSize:"11px",color:T.info,fontWeight:700}}>Review Required</span>}>
+            {awaitingReview.map((d,i)=>{const deal=deals.find(x=>x.id===d.dealId);return <div key={i} onClick={()=>{if(deal){setSel(deal);setModal("detail")}}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.info}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"13px"}}>· {d.platform}</span></div>
+                <div style={{fontSize:"11px",color:T.sub}}>{d.type}: {d.desc||"—"} · {getCamp(d.cid)?.name||""}</div>
+                {d.link&&<a href={d.link} target="_blank" rel="noreferrer" style={{fontSize:"11px",color:T.info,fontWeight:600}} onClick={e=>e.stopPropagation()}>🔗 View Content</a>}
+              </div>
+              <DBadge s="submitted"/>
+            </div>;})}
           </Section>}
 
           {/* DISPUTES */}
@@ -2444,17 +2501,36 @@ return (
 
         {/* ═══ DELIVERABLES BANK ═══ */}
         {view==="deliverables"&&<>
-          <div style={{fontSize:"18px",fontWeight:800,marginBottom:"14px"}}>📋 Deliverables Bank — <span style={{color:T.purple}}>{pendingDels.length} Pending</span></div>
+          <div style={{fontSize:"18px",fontWeight:800,marginBottom:"14px"}}>📋 Deliverables Bank — <span style={{color:T.purple}}>{pendingDels.length} Active</span></div>
+          {/* Workflow summary cards */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"8px",marginBottom:"16px"}}>
+            <div style={{background:T.warnBg,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"10px 14px"}}>
+              <div style={{fontSize:"11px",color:T.warn,fontWeight:700,textTransform:"uppercase"}}>Pending</div>
+              <div style={{fontSize:"20px",fontWeight:800,color:T.warn}}>{pendingDels.filter(d=>d.st==="pending").length}</div>
+            </div>
+            <div style={{background:T.infoBg,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"10px 14px"}}>
+              <div style={{fontSize:"11px",color:T.info,fontWeight:700,textTransform:"uppercase"}}>Submitted</div>
+              <div style={{fontSize:"20px",fontWeight:800,color:T.info}}>{awaitingReview.length}</div>
+            </div>
+            <div style={{background:T.errBg,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"10px 14px"}}>
+              <div style={{fontSize:"11px",color:T.err,fontWeight:700,textTransform:"uppercase"}}>Revision Needed</div>
+              <div style={{fontSize:"20px",fontWeight:800,color:T.err}}>{revisionNeeded.length}</div>
+            </div>
+            <div style={{background:T.okBg,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"10px 14px"}}>
+              <div style={{fontSize:"11px",color:T.ok,fontWeight:700,textTransform:"uppercase"}}>Approved</div>
+              <div style={{fontSize:"20px",fontWeight:800,color:T.ok}}>{pendingDels.filter(d=>d.st==="approved").length}</div>
+            </div>
+          </div>
           <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",overflow:"hidden",marginBottom:"20px"}}>
             <div style={{display:"grid",gridTemplateColumns:"1.8fr 1.5fr 1.2fr 0.8fr 0.8fr 0.7fr",padding:"8px 12px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Barlow,sans-serif",letterSpacing:".5px"}}>
               <div>Influencer</div><div>Deliverable</div><div>Campaign</div><div>Platform</div><div>Deadline</div><div>Status</div>
             </div>
             {pendingDels.length===0&&<div style={{padding:"24px",textAlign:"center",color:T.sub,fontSize:"12px"}}>{deals.some(d=>!["rejected","pending","renegotiate","dropped"].includes(d.status))?"All deliverables fulfilled! 🎉":"No approved deals with pending deliverables yet"}</div>}
             {pendingDels.map((d,i)=>{
-              const overdue = new Date(d.deadline)<new Date();
-              return <div key={i} style={{display:"grid",gridTemplateColumns:"1.8fr 1.5fr 1.2fr 0.8fr 0.8fr 0.7fr",padding:"8px 12px",borderBottom:`1px solid ${T.border}`,fontSize:"13px",alignItems:"center",background:overdue?T.errBg:"transparent"}}>
+              const overdue = d.st==="pending"&&new Date(d.deadline)<new Date();
+              return <div key={i} style={{display:"grid",gridTemplateColumns:"1.8fr 1.5fr 1.2fr 0.8fr 0.8fr 0.7fr",padding:"8px 12px",borderBottom:`1px solid ${T.border}`,fontSize:"13px",alignItems:"center",background:overdue?T.errBg:d.st==="revision_requested"?"#FFF5F5":"transparent"}}>
                 <div style={{fontWeight:700}}>{d.inf}</div>
-                <div><span style={{color:T.sub}}>{d.type}</span> — {d.desc||"—"}</div>
+                <div><span style={{color:T.sub}}>{d.type}</span> — {d.desc||"—"}{d.link?<a href={d.link} target="_blank" rel="noreferrer" style={{marginLeft:"4px",fontSize:"11px",color:T.info}}>🔗</a>:null}</div>
                 <div style={{fontSize:"11px",color:T.gold,fontWeight:700}}>{getCamp(d.cid)?.name||"—"}</div>
                 <div>{d.platform}</div>
                 <div style={{color:overdue?T.err:T.text,fontWeight:overdue?700:400}}>{d.deadline}{overdue?" ⚠":""}</div>
@@ -2466,13 +2542,15 @@ return (
           <div style={{fontSize:"13px",fontWeight:800,marginBottom:"10px"}}>By Influencer</div>
           {deals.filter(d=>!["rejected"].includes(d.status)&&d.dels.length>0).map(d=>{
             const done=d.dels.filter(x=>x.st==="live").length;
+            const stColor={pending:T.warn,submitted:T.info,revision_requested:T.err,approved:T.ok,live:T.ok};
+            const stIcon={pending:"⏳",submitted:"📤",revision_requested:"✏️",approved:"✅",live:"✓"};
             return <div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"4px"}}>
                 <div><span style={{fontWeight:800,fontSize:"12px"}}>{d.inf}</span> <span style={{fontSize:"11px",color:T.sub}}>· {d.platform} · {getCamp(d.cid)?.name||""}</span></div>
-                <span style={{fontSize:"13px",fontWeight:800,color:done===d.dels.length?T.ok:T.warn}}>{done}/{d.dels.length}</span>
+                <span style={{fontSize:"13px",fontWeight:800,color:done===d.dels.length?T.ok:T.warn}}>{done}/{d.dels.length} live</span>
               </div>
               <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
-                {d.dels.map((dl,i)=><span key={i} style={{padding:"3px 8px",borderRadius:"5px",fontSize:"11px",fontWeight:700,background:dl.st==="live"?T.okBg:T.warnBg,color:dl.st==="live"?T.ok:T.warn}}>{dl.type} {dl.st==="live"?"✓":"⏳"}</span>)}
+                {d.dels.map((dl,i)=><span key={i} style={{padding:"3px 8px",borderRadius:"5px",fontSize:"11px",fontWeight:700,background:dl.st==="live"?T.okBg:dl.st==="submitted"?T.infoBg:dl.st==="revision_requested"?T.errBg:dl.st==="approved"?T.okBg:T.warnBg,color:stColor[dl.st]||T.warn}}>{dl.type} {stIcon[dl.st]||"⏳"}</span>)}
               </div>
             </div>;
           })}
@@ -2777,44 +2855,62 @@ return (
               </div>)}
             </Section>}
 
-            {/* Deliverables */}
+            {/* Deliverables — Content Approval Workflow */}
             <Section title={`Deliverables (${done}/${sel.dels.length})`} icon="📋">
               {sel.dels.map((dl,i)=>{
                 const url = deliverableLinkF[dl.id] || "";
-                const isAttachment = attachmentMode[dl.id] === "attachment";
-                return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"7px 9px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"5px",marginBottom:"3px"}}>
-                  <div style={{flex:1}}>
-                    <span style={{fontSize:"13px",fontWeight:700}}>{dl.type}</span>
-                    <span style={{fontSize:"12px",color:T.sub,marginLeft:"5px"}}>{dl.desc}</span>
-                    {dl.link&&<div style={{fontSize:"11px",color:T.info,marginTop:"1px"}}>🔗 {dl.link}</div>}
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"5px"}}>
+                const productDelivered = sel.ship && sel.ship.st === "delivered";
+                const canSubmit = (role==="negotiator"||role==="admin") && (dl.st==="pending"||dl.st==="revision_requested") && productDelivered && !["pending","renegotiate","rejected"].includes(sel.status);
+                const canReview = (role==="approver"||role==="admin") && dl.st==="submitted";
+                const canMarkLive = (role==="negotiator"||role==="admin") && dl.st==="approved";
+                return <div key={i} style={{background:T.surface,border:`1px solid ${dl.st==="revision_requested"?T.err+"33":T.border}`,borderRadius:"6px",padding:"12px",marginBottom:"8px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:canSubmit||canReview||canMarkLive?"10px":"0"}}>
+                    <div style={{flex:1}}>
+                      <span style={{fontSize:"14px",fontWeight:700}}>{dl.type}</span>
+                      <span style={{fontSize:"13px",color:T.sub,marginLeft:"6px"}}>{dl.desc}</span>
+                      {dl.link&&dl.st!=="revision_requested"&&<div style={{fontSize:"12px",color:T.info,marginTop:"3px"}}>🔗 <a href={dl.link} target="_blank" rel="noopener" style={{color:T.info}}>{dl.link}</a></div>}
+                    </div>
                     <DBadge s={dl.st}/>
-                    {(role==="negotiator"||role==="admin")&&dl.st==="pending"&&!["pending","renegotiate","rejected","approved"].includes(sel.status)&&
-                      <div style={{display:"flex",flexDirection:"column",gap:"3px",alignItems:"flex-end",width:"160px"}}>
-                        <label style={{display:"flex",gap:"4px",fontSize:"11px",fontWeight:600,color:T.sub}}>
-                          <input type="radio" name={`mode-${dl.id}`} checked={!isAttachment} onChange={()=>{setAttachmentMode(p=>({...p,[dl.id]:"link"}))}} style={{cursor:"pointer"}}/>
-                          Live Link
-                        </label>
-                        <label style={{display:"flex",gap:"4px",fontSize:"11px",fontWeight:600,color:T.sub}}>
-                          <input type="radio" name={`mode-${dl.id}`} checked={isAttachment} onChange={()=>{setAttachmentMode(p=>({...p,[dl.id]:"attachment"}))}} style={{cursor:"pointer"}}/>
-                          Custom Attachment
-                        </label>
-                        {!isAttachment?
-                          <div style={{display:"flex",gap:"3px",width:"100%"}}>
-                            <Inp value={url} onChange={e=>setDeliverableLinkF({...deliverableLinkF,[dl.id]:e.target.value})} placeholder="URL *" sx={{width:"110px"}}/>
-                            <Btn v="ok" sm onClick={()=>{if(!url){notify("Content URL required","err");return;}markDelLive(sel,i,url)}}>✅</Btn>
-                          </div>
-                        :
-                          <div style={{display:"flex",gap:"3px",width:"100%"}}>
-                            <Inp value={attachmentDesc[dl.id]||""} onChange={e=>setAttachmentDesc({...attachmentDesc,[dl.id]:e.target.value})} placeholder="File desc *" sx={{width:"110px"}}/>
-                            <Btn v="ok" sm onClick={()=>{const desc=attachmentDesc[dl.id];if(!desc){notify("Description required","err");return;}markDelLive(sel,i,desc)}}>✅</Btn>
-                          </div>
-                        }
-                      </div>}
-                    {(role==="negotiator"||role==="admin")&&dl.st==="pending"&&(!sel.ship||sel.ship.st!=="delivered")&&
-                      <span style={{fontSize:"10px",color:T.sub,fontStyle:"italic"}}>Awaiting delivery</span>}
                   </div>
+
+                  {/* Revision feedback banner */}
+                  {dl.st==="revision_requested"&&dl.feedback&&<div style={{background:T.errBg,border:`1px solid ${T.err}22`,borderRadius:"4px",padding:"10px 12px",marginBottom:"10px",fontSize:"13px"}}>
+                    <div style={{fontWeight:700,color:T.err,fontSize:"11px",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Barlow,sans-serif"}}>Manager Feedback</div>
+                    <div style={{color:T.text}}>{dl.feedback}</div>
+                  </div>}
+
+                  {/* Negotiator: Submit content for review */}
+                  {canSubmit&&<div style={{background:T.surfaceAlt,borderRadius:"4px",padding:"10px 12px"}}>
+                    <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>{dl.st==="revision_requested"?"Resubmit Revised Content":"Submit Content for Review"}</div>
+                    <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                      <div style={{flex:1}}><Inp value={url} onChange={e=>setDeliverableLinkF({...deliverableLinkF,[dl.id]:e.target.value})} placeholder="Content URL or link *"/></div>
+                      <Btn v="primary" sm onClick={()=>submitContentForReview(sel,i,url)}>Submit for Review</Btn>
+                    </div>
+                  </div>}
+
+                  {/* Manager: Review & approve or request revision */}
+                  {canReview&&<div style={{background:T.purpleBg,borderRadius:"4px",padding:"10px 12px"}}>
+                    <div style={{fontSize:"11px",fontWeight:700,color:T.purple,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>Review Content</div>
+                    {dl.link&&<div style={{fontSize:"12px",color:T.info,marginBottom:"8px"}}>🔗 <a href={dl.link} target="_blank" rel="noopener" style={{color:T.info}}>{dl.link}</a></div>}
+                    <div style={{display:"flex",gap:"6px",marginBottom:"8px"}}>
+                      <Btn v="ok" sm onClick={()=>approveContent(sel,i)}>✅ Approve Content</Btn>
+                      <Btn v="danger" sm onClick={()=>{const fb=revisionFeedback[dl.id];if(!fb){notify("Enter feedback before requesting revision","err");return;}requestRevision(sel,i,fb)}}>↩ Request Revision</Btn>
+                    </div>
+                    <Inp value={revisionFeedback[dl.id]||""} onChange={e=>setRevisionFeedback({...revisionFeedback,[dl.id]:e.target.value})} placeholder="Feedback for revision (required if requesting changes)"/>
+                  </div>}
+
+                  {/* Negotiator: Mark approved content as live */}
+                  {canMarkLive&&<div style={{background:T.okBg,borderRadius:"4px",padding:"10px 12px"}}>
+                    <div style={{fontSize:"11px",fontWeight:700,color:T.ok,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>Content Approved — Ready to Go Live</div>
+                    <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                      <div style={{flex:1}}><Inp value={url} onChange={e=>setDeliverableLinkF({...deliverableLinkF,[dl.id]:e.target.value})} placeholder="Final live URL (if different)"/></div>
+                      <Btn v="ok" sm onClick={()=>markDelLive(sel,i,url||dl.link)}>Mark Live</Btn>
+                    </div>
+                  </div>}
+
+                  {/* Awaiting delivery message */}
+                  {(role==="negotiator"||role==="admin")&&dl.st==="pending"&&!productDelivered&&!["pending","renegotiate","rejected"].includes(sel.status)&&
+                    <div style={{fontSize:"12px",color:T.sub,fontStyle:"italic",marginTop:"6px"}}>📦 Awaiting product delivery before content can be submitted</div>}
                 </div>;
               })}
             </Section>

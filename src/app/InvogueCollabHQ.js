@@ -113,6 +113,7 @@ async function loadFromSupabase() {
     paymentFormSent:d.payment_form_sent||false, paymentFormSentAt:d.payment_form_sent_at||null,
     invoiceGenerated:d.invoice_generated||false, invoiceNumber:d.invoice_number||null, invoiceDate:d.invoice_date||null,
     inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note}:null,
+    shipHistory:d.ship_history||[],
     dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
     ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
   }));
@@ -233,6 +234,10 @@ export default function InvogueCollabHQ() {
   // New state variables for enhanced functionality
   const [confirmAction, setConfirmAction] = useState(null); // {title,msg,onConfirm}
   const [deliveryF, setDeliveryF] = useState({date:"",note:""}); // for marking delivered
+  // Logistics: Pickup & Re-shipment
+  const [pickupF, setPickupF] = useState({reason:"Product Change",note:""});
+  const [reshipF, setReshipF] = useState({products:[],note:"",newAddress:""});
+  const [reshipShipF, setReshipShipF] = useState({track:"",carrier:"DTDC"});
   const [panF, setPanF] = useState({number:"",name:""}); // PAN details
   const [payReqNote, setPayReqNote] = useState(""); // payment request note
   const [contentF, setContentF] = useState({url:"",note:""}); // for marking content live
@@ -345,6 +350,7 @@ export default function InvogueCollabHQ() {
             email:d.email||"", payment_terms:d.payment_terms||"", pan_number:d.pan_number||"", pan_name:d.pan_name||"",
             products:d.products||[],
             inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note}:null,
+            shipHistory:d.ship_history||[],
             dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
             ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
           }));
@@ -452,6 +458,44 @@ export default function InvogueCollabHQ() {
   const pendingShip = useMemo(()=>deals.filter(d=>["approved","email_sent"].includes(d.status)&&!d.ship),[deals]);
   const inTransit = useMemo(()=>deals.filter(d=>d.ship?.st==="in_transit"),[deals]);
 
+  // Logistics: pickup requests, pending returns, re-shipment queues
+  const pickupRequests = useMemo(()=>{
+    const arr=[];
+    deals.forEach(d=>{
+      (d.shipHistory||[]).forEach((h,i)=>{
+        if(h.type==="pickup"&&h.status==="pickup_requested") arr.push({...h,histIdx:i,dealId:d.id,inf:d.inf,product:d.product,products:d.products,address:d.address,phone:d.phone});
+      });
+    });
+    return arr;
+  },[deals]);
+  const pickupsInTransit = useMemo(()=>{
+    const arr=[];
+    deals.forEach(d=>{
+      (d.shipHistory||[]).forEach((h,i)=>{
+        if(h.type==="pickup"&&h.status==="pickup_dispatched") arr.push({...h,histIdx:i,dealId:d.id,inf:d.inf,product:d.product,products:d.products});
+      });
+    });
+    return arr;
+  },[deals]);
+  const reshipPending = useMemo(()=>{
+    const arr=[];
+    deals.forEach(d=>{
+      (d.shipHistory||[]).forEach((h,i)=>{
+        if(h.type==="reship"&&h.status==="reship_pending") arr.push({...h,histIdx:i,dealId:d.id,inf:d.inf,address:h.newAddress||d.address,phone:d.phone});
+      });
+    });
+    return arr;
+  },[deals]);
+  const reshipInTransit = useMemo(()=>{
+    const arr=[];
+    deals.forEach(d=>{
+      (d.shipHistory||[]).forEach((h,i)=>{
+        if(h.type==="reship"&&h.status==="re_dispatched") arr.push({...h,histIdx:i,dealId:d.id,inf:d.inf});
+      });
+    });
+    return arr;
+  },[deals]);
+
   const filtered = useMemo(()=>{
     let d = deals;
     if(campFilter) d = d.filter(x=>x.cid===campFilter);
@@ -475,8 +519,12 @@ export default function InvogueCollabHQ() {
       pendingShip: pendingShip.length,
       awaitingReview: awaitingReview.length,
       revisionNeeded: revisionNeeded.length,
+      pickupRequests: pickupRequests.length,
+      pickupsInTransit: pickupsInTransit.length,
+      reshipPending: reshipPending.length,
+      reshipInTransit: reshipInTransit.length,
     };
-  },[deals,pendingDels,pendingShip,awaitingReview,revisionNeeded]);
+  },[deals,pendingDels,pendingShip,awaitingReview,revisionNeeded,pickupRequests,pickupsInTransit,reshipPending,reshipInTransit]);
 
   // ── FEATURE 1: ANALYTICS HELPERS ──
   const generateAnalyticsData = () => {
@@ -895,6 +943,94 @@ export default function InvogueCollabHQ() {
     upDeal(d.id,{status:"delivered_prod",ship:{...d.ship,st:"delivered",delAt:ts}});
     addLog(d.id,userName,"Product delivered",deliveryNote||"");
     notify("Marked delivered!");
+  };
+
+  // ─── LOGISTICS: PICKUP & RE-SHIPMENT ───
+  const requestPickup = (deal, reason, note) => {
+    if(!reason) return notify("Select a reason","err");
+    const userName = loggedIn?.name||"You";
+    const ts = new Date().toISOString();
+    const entry = {type:"pickup",reason,note:note||"",status:"pickup_requested",requestedBy:userName,requestedAt:ts};
+    const shipHistory = [...(deal.shipHistory||[]), entry];
+    supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error) console.error("Pickup request save failed:",error);});
+    upDeal(deal.id,{shipHistory});
+    addLog(deal.id,userName,"Pickup requested",`Reason: ${reason}${note?" · "+note:""}`);
+    setSel(prev=>prev?{...prev,shipHistory}:null);
+    setModal(null);
+    notify("Pickup request sent to logistics!");
+  };
+
+  const arrangePickup = (deal, histIdx, trackingId, carrier) => {
+    if(!trackingId) return notify("Enter return tracking ID","err");
+    const userName = loggedIn?.name||"You (Logistics)";
+    const ts = new Date().toISOString();
+    const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,status:"pickup_dispatched",returnTrack:trackingId,returnCarrier:carrier,arrangedBy:userName,arrangedAt:ts}:h);
+    supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error) console.error("Arrange pickup save failed:",error);});
+    upDeal(deal.id,{shipHistory});
+    addLog(deal.id,userName,"Return pickup arranged",`${carrier}: ${trackingId}`);
+    setSel(prev=>prev?{...prev,shipHistory}:null);
+    setModal(null);
+    notify("Return pickup arranged!");
+  };
+
+  const markProductReturned = (deal, histIdx) => {
+    const userName = loggedIn?.name||"You (Logistics)";
+    const ts = new Date().toISOString();
+    const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,status:"product_returned",returnedAt:ts,returnedBy:userName}:h);
+    supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error) console.error("Product returned save failed:",error);});
+    upDeal(deal.id,{shipHistory});
+    addLog(deal.id,userName,"Product returned","Product received back at warehouse");
+    setSel(prev=>prev?{...prev,shipHistory}:null);
+    notify("Product marked as returned!");
+  };
+
+  const skipPickup = (deal, histIdx, note) => {
+    const userName = loggedIn?.name||"You";
+    const ts = new Date().toISOString();
+    const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,status:"pickup_skipped",skippedBy:userName,skippedAt:ts,skipNote:note||"Low-value product / brand decision"}:h);
+    supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error) console.error("Skip pickup save failed:",error);});
+    upDeal(deal.id,{shipHistory});
+    addLog(deal.id,userName,"Pickup skipped",note||"No pickup needed");
+    setSel(prev=>prev?{...prev,shipHistory}:null);
+    notify("Pickup marked as not needed");
+  };
+
+  const requestReshipment = (deal, products, note, newAddress) => {
+    if(!products||products.length===0||products.every(p=>!p.name)) return notify("Add at least one product","err");
+    const userName = loggedIn?.name||"You";
+    const ts = new Date().toISOString();
+    const entry = {type:"reship",products,note:note||"",newAddress:newAddress||"",status:"reship_pending",requestedBy:userName,requestedAt:ts};
+    const shipHistory = [...(deal.shipHistory||[]), entry];
+    supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error) console.error("Reship request save failed:",error);});
+    upDeal(deal.id,{shipHistory});
+    addLog(deal.id,userName,"Re-shipment requested",`${products.map(p=>p.name).join(", ")}${newAddress?" · New address: "+newAddress:""}`);
+    setSel(prev=>prev?{...prev,shipHistory}:null);
+    setModal(null);
+    notify("Re-shipment request sent to logistics!");
+  };
+
+  const dispatchReship = (deal, histIdx, trackingId, carrier) => {
+    if(!trackingId) return notify("Enter tracking ID","err");
+    const userName = loggedIn?.name||"You (Logistics)";
+    const ts = new Date().toISOString();
+    const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,status:"re_dispatched",reTrack:trackingId,reCarrier:carrier,reDispatchedBy:userName,reDispatchedAt:ts}:h);
+    supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error) console.error("Reship dispatch save failed:",error);});
+    upDeal(deal.id,{shipHistory});
+    addLog(deal.id,userName,"Re-shipment dispatched",`${carrier}: ${trackingId}`);
+    setSel(prev=>prev?{...prev,shipHistory}:null);
+    setModal(null);
+    notify("Re-shipment dispatched!");
+  };
+
+  const markReshipDelivered = (deal, histIdx) => {
+    const userName = loggedIn?.name||"You (Logistics)";
+    const ts = new Date().toISOString();
+    const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,status:"re_delivered",reDeliveredAt:ts,reDeliveredBy:userName}:h);
+    supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error) console.error("Reship delivered save failed:",error);});
+    upDeal(deal.id,{shipHistory});
+    addLog(deal.id,userName,"Re-shipment delivered","New product delivered to influencer");
+    setSel(prev=>prev?{...prev,shipHistory}:null);
+    notify("Re-shipment marked as delivered!");
   };
 
   const markDelLive = (deal,delIdx,contentUrl) => {
@@ -1552,7 +1688,7 @@ return (
         negotiator: [{k:"dashboard",l:"My Dashboard",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"dropped",l:"Dropped Collabs",i:"🚫",n:stats.dropped},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
         approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.awaitingReview||stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
         finance: [{k:"dashboard",l:"Payment Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"}],
-        logistics: [{k:"dashboard",l:"Shipment Center",i:"🔵"},{k:"shipments",l:"All Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
+        logistics: [{k:"dashboard",l:"Shipment Center",i:"🔵"},{k:"shipments",l:"All Shipments",i:"🚚",n:stats.pendingShip+inTransit.length+stats.pickupRequests+stats.reshipPending}],
       };
       const items = navItems[role]||navItems.negotiator;
       return <div role="navigation" aria-label="Main navigation" style={{background:"#FFFFFF",borderBottom:"1px solid rgba(26,26,26,.08)",padding:"0 28px",display:"flex",gap:"8px",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
@@ -2174,23 +2310,26 @@ return (
          ═══════════════════════════════════════════════════════ */}
       {view==="dashboard"&&role==="logistics"&&(()=>{
         const delivered = deals.filter(d=>d.ship?.st==="delivered");
+        const totalActions = pendingShip.length + pickupRequests.length + reshipPending.length;
         return <>
-          <div style={{marginBottom:"14px"}}><span style={{fontSize:"20px",fontWeight:800}}>📦 Shipment Center</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Dispatch and track all shipments</span></div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"8px",marginBottom:"16px"}}>
+          <div style={{marginBottom:"14px"}}><span style={{fontSize:"20px",fontWeight:800}}>📦 Shipment Center</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Dispatch, track, pickups & re-shipments</span></div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"8px",marginBottom:"16px"}}>
             <StatBox l="Awaiting Dispatch" v={pendingShip.length} c={pendingShip.length>0?T.err:T.ok} sub="Ship these now"/>
             <StatBox l="In Transit" v={inTransit.length} c={inTransit.length>0?T.purple:T.ok}/>
+            <StatBox l="Pickup Requests" v={pickupRequests.length} c={pickupRequests.length>0?T.warn:T.ok} sub="Arrange returns"/>
+            <StatBox l="Re-ship Pending" v={reshipPending.length} c={reshipPending.length>0?T.err:T.ok} sub="New products to send"/>
             <StatBox l="Delivered" v={delivered.length} c={T.ok}/>
             <StatBox l="Total Shipments" v={deals.filter(d=>d.ship).length} c={T.brand}/>
           </div>
 
           {/* DISPATCH QUEUE */}
           <Section title={`Awaiting Dispatch (${pendingShip.length})`} icon="⚡" action={pendingShip.length>0?<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Action Required</span>:null}>
-            {pendingShip.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"10px 0"}}>All products dispatched! 🎉</div>}
+            {pendingShip.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"10px 0"}}>All products dispatched!</div>}
             {pendingShip.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.err}`,borderRadius:"7px",padding:"12px 14px",marginBottom:"7px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
                 <div>
                   <div style={{fontWeight:700,fontSize:"13px"}}>{d.inf}</div>
-                  <div style={{fontSize:"13px",color:T.sub,marginTop:"2px"}}>📦 <b>{d.product}</b></div>
+                  <div style={{fontSize:"13px",color:T.sub,marginTop:"2px"}}>📦 <b>{d.products?d.products.map(p=>p.name).join(", "):d.product}</b></div>
                 </div>
                 <Btn v="purple" onClick={()=>{setSel(d);setShipF({track:"",carrier:"DTDC"});setModal("ship")}}>📦 Dispatch Now</Btn>
               </div>
@@ -2202,12 +2341,91 @@ return (
             </div>)}
           </Section>
 
-          {/* IN TRANSIT */}
+          {/* PICKUP REQUESTS */}
+          {pickupRequests.length>0&&<Section title={`Pickup Requests (${pickupRequests.length})`} icon="🔄" action={<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Arrange Returns</span>}>
+            {pickupRequests.map((h,idx)=>{
+              const deal = deals.find(d=>d.id===h.dealId);
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`,borderRadius:"7px",padding:"12px 14px",marginBottom:"7px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:"13px"}}>{h.inf} <span style={{fontSize:"11px",fontWeight:400,color:T.sub}}>· Pickup</span></div>
+                    <div style={{fontSize:"12px",color:T.warn,fontWeight:600,marginTop:"2px"}}>Reason: {h.reason}</div>
+                    {h.note&&<div style={{fontSize:"12px",color:T.sub,marginTop:"1px"}}>{h.note}</div>}
+                    <div style={{fontSize:"13px",color:T.sub,marginTop:"2px"}}>📦 {h.products?h.products.map(p=>p.name).join(", "):h.product}</div>
+                  </div>
+                  <Btn v="gold" onClick={()=>{setSel(deal);setShipF({track:"",carrier:"DTDC"});setModal("arrangePickup-"+h.histIdx)}}>🔄 Arrange Pickup</Btn>
+                </div>
+                <div style={{padding:"8px 10px",background:T.warnBg,borderRadius:"5px",fontSize:"12px",color:T.warn}}>
+                  <div>📍 <b>Pickup from:</b> {h.address||"Address not provided"}</div>
+                  <div style={{marginTop:"2px"}}>📱 <b>Phone:</b> {h.phone||"Not provided"}</div>
+                </div>
+                <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>Requested by {h.requestedBy} · {new Date(h.requestedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
+              </div>;
+            })}
+          </Section>}
+
+          {/* PICKUPS IN TRANSIT */}
+          {pickupsInTransit.length>0&&<Section title={`Return Pickups In Transit (${pickupsInTransit.length})`} icon="📮">
+            {pickupsInTransit.map(h=>{
+              const deal = deals.find(d=>d.id===h.dealId);
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.warnBg,border:`1px solid ${T.warn}22`,borderRadius:"7px",padding:"11px 13px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:"14px"}}>{h.inf} <span style={{color:T.sub,fontWeight:400}}>· Return</span></div>
+                  <div style={{fontSize:"13px",marginTop:"2px"}}>{h.returnCarrier}: <span style={{color:T.info,fontWeight:700}}>{h.returnTrack}</span></div>
+                  <div style={{fontSize:"11px",color:T.sub}}>Arranged: {new Date(h.arrangedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div>
+                </div>
+                <Btn v="ok" onClick={()=>{markProductReturned(deal,h.histIdx)}}>✓ Product Returned</Btn>
+              </div>;
+            })}
+          </Section>}
+
+          {/* RE-SHIPMENT PENDING */}
+          {reshipPending.length>0&&<Section title={`Re-shipments Pending (${reshipPending.length})`} icon="📦" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Ship New Products</span>}>
+            {reshipPending.map(h=>{
+              const deal = deals.find(d=>d.id===h.dealId);
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.purple}`,borderRadius:"7px",padding:"12px 14px",marginBottom:"7px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:"13px"}}>{h.inf} <span style={{fontSize:"11px",fontWeight:400,color:T.sub}}>· Re-shipment</span></div>
+                    <div style={{fontSize:"13px",color:T.sub,marginTop:"2px"}}>📦 <b>{(h.products||[]).map(p=>p.name).join(", ")}</b></div>
+                    {h.note&&<div style={{fontSize:"12px",color:T.sub,marginTop:"1px"}}>{h.note}</div>}
+                  </div>
+                  <Btn v="purple" onClick={()=>{setSel(deal);setReshipShipF({track:"",carrier:"DTDC"});setModal("reshipDispatch-"+h.histIdx)}}>📦 Dispatch</Btn>
+                </div>
+                <div style={{padding:"8px 10px",background:T.purpleBg,borderRadius:"5px",fontSize:"12px",color:T.purple}}>
+                  <div>📍 <b>Ship to:</b> {h.address||"Address not provided"}</div>
+                  <div style={{marginTop:"2px"}}>📱 <b>Phone:</b> {h.phone||"Not provided"}</div>
+                </div>
+                {(h.products||[]).length>0&&<div style={{marginTop:"6px",padding:"8px",background:T.surfaceAlt,borderRadius:"4px",fontSize:"11px"}}>
+                  <div style={{fontWeight:700,marginBottom:"4px"}}>Items to pack & ship:</div>
+                  {h.products.map((p,i)=><div key={i}><b>{p.name}</b>{p.color?" · "+p.color:""}{p.size?" · "+p.size:""}{p.qty?" · Qty: "+p.qty:""}</div>)}
+                </div>}
+                <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>Requested by {h.requestedBy} · {new Date(h.requestedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
+              </div>;
+            })}
+          </Section>}
+
+          {/* RE-SHIPMENTS IN TRANSIT */}
+          {reshipInTransit.length>0&&<Section title={`Re-shipments In Transit (${reshipInTransit.length})`} icon="🚚">
+            {reshipInTransit.map(h=>{
+              const deal = deals.find(d=>d.id===h.dealId);
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.purpleBg,border:`1px solid ${T.purple}22`,borderRadius:"7px",padding:"11px 13px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:"14px"}}>{h.inf} <span style={{color:T.sub,fontWeight:400}}>· Re-shipment</span></div>
+                  <div style={{fontSize:"13px",marginTop:"2px"}}>{h.reCarrier}: <span style={{color:T.info,fontWeight:700}}>{h.reTrack}</span></div>
+                  <div style={{fontSize:"11px",color:T.sub}}>Dispatched: {new Date(h.reDispatchedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div>
+                </div>
+                <Btn v="ok" onClick={()=>{markReshipDelivered(deal,h.histIdx)}}>✓ Mark Delivered</Btn>
+              </div>;
+            })}
+          </Section>}
+
+          {/* IN TRANSIT (original shipments) */}
           <Section title={`In Transit (${inTransit.length})`} icon="🚚">
             {inTransit.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>Nothing in transit</div>}
             {inTransit.map(d=><div key={d.id} style={{background:T.purpleBg,border:`1px solid ${T.purple}22`,borderRadius:"7px",padding:"11px 13px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
-                <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.product}</span></div>
+                <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div>
                 <div style={{fontSize:"13px",marginTop:"2px"}}>{d.ship.carrier}: <span style={{color:T.info,fontWeight:700}}>{d.ship.track}</span></div>
                 <div style={{fontSize:"11px",color:T.sub}}>Dispatched: {d.ship.dispAt}</div>
               </div>
@@ -2218,7 +2436,7 @@ return (
           {/* DELIVERED */}
           <Section title={`Delivered (${delivered.length})`} icon="✅">
             {delivered.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",opacity:.65}}>
-              <span><b>{d.inf}</b> · {d.product} · {d.ship.carrier}: {d.ship.track}</span>
+              <span><b>{d.inf}</b> · {d.products?d.products.map(p=>p.name).join(", "):d.product} · {d.ship.carrier}: {d.ship.track}</span>
               <span style={{color:T.ok}}>✓ {d.ship.delAt}</span>
             </div>)}
           </Section>
@@ -2778,20 +2996,65 @@ return (
           <div style={{fontSize:"18px",fontWeight:800,marginBottom:"14px"}}>🚚 All Shipments</div>
           {pendingShip.length>0&&<Section title={`Awaiting Dispatch (${pendingShip.length})`} icon="📋">
             {pendingShip.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Approved: {d.appAt} · Deadline: {d.deadline}</div></div>
+              <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Approved: {d.appAt} · Deadline: {d.deadline}</div></div>
               {role==="logistics"?<Btn v="purple" sm onClick={()=>{setSel(d);setShipF({track:"",carrier:"DTDC"});setModal("ship")}}>📦 Dispatch</Btn>:<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Awaiting logistics</span>}
             </div>)}
           </Section>}
+
+          {/* Pickup Requests */}
+          {pickupRequests.length>0&&<Section title={`Pickup Requests (${pickupRequests.length})`} icon="🔄">
+            {pickupRequests.map(h=>{
+              const deal = deals.find(d=>d.id===h.dealId);
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.warn,fontWeight:600}}>· Return ({h.reason})</span></div><div style={{fontSize:"11px",color:T.sub}}>📍 {h.address||"—"} · Requested: {new Date(h.requestedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div></div>
+                {role==="logistics"&&<Btn v="gold" sm onClick={()=>{setSel(deal);setShipF({track:"",carrier:"DTDC"});setModal("arrangePickup-"+h.histIdx)}}>🔄 Arrange</Btn>}
+              </div>;
+            })}
+          </Section>}
+
+          {/* Pickups In Transit */}
+          {pickupsInTransit.length>0&&<Section title={`Return Pickups In Transit (${pickupsInTransit.length})`} icon="📮">
+            {pickupsInTransit.map(h=>{
+              const deal = deals.find(d=>d.id===h.dealId);
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.info,fontWeight:600}}>· Return In Transit</span></div><div style={{fontSize:"11px",color:T.sub}}>{h.returnCarrier}: <span style={{color:T.info,fontWeight:700}}>{h.returnTrack}</span></div></div>
+                {role==="logistics"&&<Btn v="ok" sm onClick={()=>markProductReturned(deal,h.histIdx)}>✓ Product Returned</Btn>}
+              </div>;
+            })}
+          </Section>}
+
+          {/* Re-shipments Pending */}
+          {reshipPending.length>0&&<Section title={`Re-shipments Pending (${reshipPending.length})`} icon="📦">
+            {reshipPending.map(h=>{
+              const deal = deals.find(d=>d.id===h.dealId);
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.purple}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.purple,fontWeight:600}}>· New Shipment</span></div><div style={{fontSize:"11px",color:T.sub}}>📦 {(h.products||[]).map(p=>p.name).join(", ")} · 📍 {h.address||"—"}</div></div>
+                {role==="logistics"&&<Btn v="purple" sm onClick={()=>{setSel(deal);setReshipShipF({track:"",carrier:"DTDC"});setModal("reshipDispatch-"+h.histIdx)}}>📦 Dispatch</Btn>}
+              </div>;
+            })}
+          </Section>}
+
+          {/* Re-shipments In Transit */}
+          {reshipInTransit.length>0&&<Section title={`Re-shipments In Transit (${reshipInTransit.length})`} icon="🚚">
+            {reshipInTransit.map(h=>{
+              const deal = deals.find(d=>d.id===h.dealId);
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.purple,fontWeight:600}}>· Re-shipment</span></div><div style={{fontSize:"11px",color:T.sub}}>{h.reCarrier}: <span style={{color:T.info,fontWeight:700}}>{h.reTrack}</span></div></div>
+                {role==="logistics"&&<Btn v="ok" sm onClick={()=>markReshipDelivered(deal,h.histIdx)}>✓ Delivered</Btn>}
+              </div>;
+            })}
+          </Section>}
+
           <Section title={`In Transit (${inTransit.length})`} icon="🚚">
             {inTransit.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"12px"}}>None in transit</div>}
             {inTransit.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} · {d.product}</div><div style={{fontSize:"11px",color:T.sub}}>📦 {d.ship.carrier}: <span style={{fontWeight:700,color:T.info}}>{d.ship.track}</span> · {d.ship.dispAt}</div></div>
+              <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} · {d.products?d.products.map(p=>p.name).join(", "):d.product}</div><div style={{fontSize:"11px",color:T.sub}}>📦 {d.ship.carrier}: <span style={{fontWeight:700,color:T.info}}>{d.ship.track}</span> · {d.ship.dispAt}</div></div>
               {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(d);setModal("markDelivered")}}>✓ Delivered</Btn>}
             </div>)}
           </Section>
           <Section title="Delivered" icon="✓">
             {deals.filter(d=>d.ship?.st==="delivered").map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"8px 12px",marginBottom:"4px",display:"flex",justifyContent:"space-between",alignItems:"center",opacity:.6}}>
-              <span style={{fontSize:"13px"}}><b>{d.inf}</b> · {d.product}</span>
+              <span style={{fontSize:"13px"}}><b>{d.inf}</b> · {d.products?d.products.map(p=>p.name).join(", "):d.product}</span>
               <span style={{fontSize:"11px",color:T.ok}}>✓ {d.ship.delAt}</span>
             </div>)}
           </Section>
@@ -3173,13 +3436,60 @@ return (
               })}
             </Section>
 
-            {/* Shipment */}
-            {sel.ship&&<Section title="Shipment" icon="📦">
-              <div style={{padding:"8px 10px",background:T.purpleBg,borderRadius:"5px",fontSize:"13px"}}>
+            {/* Shipment & Logistics History */}
+            {(sel.ship||(sel.shipHistory||[]).length>0)&&<Section title="Shipment & Logistics" icon="📦">
+              {/* Original shipment */}
+              {sel.ship&&<div style={{padding:"8px 10px",background:T.purpleBg,borderRadius:"5px",fontSize:"13px",marginBottom:"8px"}}>
+                <div style={{fontWeight:700,fontSize:"11px",color:T.purple,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Barlow,sans-serif"}}>Original Shipment</div>
                 <div><b>{sel.ship.carrier}:</b> <span style={{color:T.info,fontWeight:700}}>{sel.ship.track}</span></div>
                 <div style={{color:T.sub,marginTop:"1px"}}>Dispatched: {sel.ship.dispAt} by {sel.ship.dispBy}</div>
                 {sel.ship.delAt&&<div style={{color:T.ok,marginTop:"1px"}}>✓ Delivered: {sel.ship.delAt}</div>}
-              </div>
+              </div>}
+
+              {/* Shipment History Timeline */}
+              {(sel.shipHistory||[]).length>0&&<div style={{borderLeft:`2px solid ${T.border}`,paddingLeft:"12px",marginTop:"8px"}}>
+                <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"8px",fontFamily:"Barlow,sans-serif"}}>Logistics History</div>
+                {(sel.shipHistory||[]).map((h,hi)=>{
+                  const isPickup = h.type==="pickup";
+                  const isReship = h.type==="reship";
+                  const icon = isPickup?"🔄":"📦";
+                  const statusLabels = {
+                    pickup_requested:"Pickup Requested",pickup_dispatched:"Return In Transit",product_returned:"Product Returned",pickup_skipped:"Pickup Skipped",
+                    reship_pending:"Re-shipment Pending",re_dispatched:"Re-shipped",re_delivered:"Re-delivery Confirmed"
+                  };
+                  const statusColors = {
+                    pickup_requested:T.warn,pickup_dispatched:T.info,product_returned:T.ok,pickup_skipped:T.sub,
+                    reship_pending:T.warn,re_dispatched:T.purple,re_delivered:T.ok
+                  };
+                  return <div key={hi} style={{marginBottom:"10px",fontSize:"12px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                      <span>{icon}</span>
+                      <span style={{fontWeight:700,color:statusColors[h.status]||T.sub}}>{statusLabels[h.status]||h.status}</span>
+                      {isPickup&&h.reason&&<span style={{fontSize:"11px",color:T.sub}}>({h.reason})</span>}
+                    </div>
+                    {isPickup&&h.returnTrack&&<div style={{fontSize:"11px",color:T.info,marginLeft:"22px",marginTop:"1px"}}>{h.returnCarrier}: {h.returnTrack}</div>}
+                    {isReship&&h.reTrack&&<div style={{fontSize:"11px",color:T.info,marginLeft:"22px",marginTop:"1px"}}>{h.reCarrier}: {h.reTrack}</div>}
+                    {isReship&&(h.products||[]).length>0&&<div style={{fontSize:"11px",color:T.sub,marginLeft:"22px",marginTop:"1px"}}>Products: {h.products.map(p=>p.name).join(", ")}</div>}
+                    {h.newAddress&&<div style={{fontSize:"11px",color:T.sub,marginLeft:"22px",marginTop:"1px"}}>New address: {h.newAddress}</div>}
+                    {h.note&&<div style={{fontSize:"11px",color:T.sub,marginLeft:"22px",fontStyle:"italic"}}>{h.note}</div>}
+                    {h.skipNote&&<div style={{fontSize:"11px",color:T.sub,marginLeft:"22px",fontStyle:"italic"}}>{h.skipNote}</div>}
+                    <div style={{fontSize:"10px",color:T.faint,marginLeft:"22px",marginTop:"1px"}}>
+                      {h.requestedBy&&`Requested by ${h.requestedBy}`}
+                      {h.arrangedBy&&` · Arranged by ${h.arrangedBy}`}
+                      {h.returnedBy&&` · Returned by ${h.returnedBy}`}
+                      {h.reDispatchedBy&&` · Dispatched by ${h.reDispatchedBy}`}
+                      {h.reDeliveredBy&&` · Delivered by ${h.reDeliveredBy}`}
+                      {h.skippedBy&&` · Skipped by ${h.skippedBy}`}
+                    </div>
+                  </div>;
+                })}
+              </div>}
+
+              {/* Negotiator actions: Request Pickup / Request Re-shipment */}
+              {(role==="negotiator"||role==="admin")&&sel.ship?.st==="delivered"&&<div style={{display:"flex",gap:"6px",marginTop:"8px"}}>
+                <Btn v="gold" sm onClick={()=>{setPickupF({reason:"Product Change",note:""});setModal("pickupRequest")}}>🔄 Request Pickup</Btn>
+                <Btn v="purple" sm onClick={()=>{setReshipF({products:[{name:"",color:"",size:"",qty:"1"}],note:"",newAddress:""});setModal("reshipRequest")}}>📦 Request New Shipment</Btn>
+              </div>}
             </Section>}
 
             {/* Email preview */}
@@ -3272,6 +3582,102 @@ return (
           </div>
         </>}
       </Modal>
+
+      {/* PICKUP REQUEST MODAL — Negotiator requests product pickup */}
+      <Modal open={modal==="pickupRequest"} onClose={()=>setModal("detail")} title={`Request Pickup — ${sel?.inf}`} w={460}>
+        {sel&&<>
+          <div style={{padding:"10px",background:T.warnBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px"}}>
+            <div style={{fontWeight:700,color:T.warn,marginBottom:"4px"}}>🔄 Request Product Return</div>
+            <div>Product will be picked up from the influencer and returned to warehouse.</div>
+          </div>
+          <Field label="Reason for Pickup *">
+            <Sel value={pickupF.reason} onChange={e=>setPickupF({...pickupF,reason:e.target.value})} options={[{v:"Product Change",l:"Product Change"},{v:"Collab Dropped",l:"Collab Dropped"},{v:"Defective/Wrong Product",l:"Defective / Wrong Product"},{v:"Other",l:"Other"}]}/>
+          </Field>
+          <Field label="Note for Logistics (optional)"><Textarea value={pickupF.note} onChange={e=>setPickupF({...pickupF,note:e.target.value})} placeholder="Any special instructions for pickup..." rows={2}/></Field>
+          <div style={{padding:"8px 10px",background:T.surfaceAlt,borderRadius:"5px",marginBottom:"10px",fontSize:"12px",color:T.sub}}>
+            <div>📍 <b>Pickup from:</b> {sel.address||"Address not provided"}</div>
+            <div>📱 <b>Phone:</b> {sel.phone||"Not provided"}</div>
+          </div>
+          <div style={{display:"flex",gap:"7px",justifyContent:"flex-end"}}>
+            <Btn v="outline" onClick={()=>setModal("detail")}>Cancel</Btn>
+            <Btn v="ghost" sm onClick={()=>{const sh=[...(sel.shipHistory||[]),{type:"pickup",reason:pickupF.reason,note:pickupF.note,status:"pickup_skipped",skippedBy:loggedIn?.name||"You",skippedAt:new Date().toISOString(),skipNote:"No pickup needed"}];supabase.from('deals').update({ship_history:sh}).eq('id',sel.id);upDeal(sel.id,{shipHistory:sh});addLog(sel.id,loggedIn?.name||"You","Pickup skipped","No pickup needed");setSel(prev=>prev?{...prev,shipHistory:sh}:null);setModal("detail");notify("Marked as no pickup needed")}}>Skip — No Pickup Needed</Btn>
+            <Btn v="gold" onClick={()=>requestPickup(sel,pickupF.reason,pickupF.note)}>🔄 Send to Logistics</Btn>
+          </div>
+        </>}
+      </Modal>
+
+      {/* ARRANGE PICKUP MODAL — Logistics arranges return courier */}
+      {(sel&&modal&&modal.startsWith("arrangePickup-"))&&(()=>{
+        const histIdx = parseInt(modal.split("-")[1]);
+        return <Modal open={true} onClose={()=>setModal(null)} title={`Arrange Return Pickup — ${sel?.inf}`} w={440}>
+          <div style={{padding:"10px",background:T.warnBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px"}}>
+            <div style={{fontWeight:700,color:T.warn,marginBottom:"4px"}}>🔄 Return Pickup Details</div>
+            <div>Reason: <b>{(sel.shipHistory||[])[histIdx]?.reason||"—"}</b></div>
+            {(sel.shipHistory||[])[histIdx]?.note&&<div style={{marginTop:"2px",fontStyle:"italic"}}>{(sel.shipHistory||[])[histIdx].note}</div>}
+          </div>
+          <div style={{padding:"8px 10px",background:T.surfaceAlt,borderRadius:"5px",marginBottom:"10px",fontSize:"12px"}}>
+            <div>📍 <b>Pickup from:</b> {sel.address||"—"}</div>
+            <div>📱 <b>Phone:</b> {sel.phone||"—"}</div>
+          </div>
+          <Field label="Return Carrier"><Sel value={shipF.carrier} onChange={e=>setShipF({...shipF,carrier:e.target.value})} options={[{v:"DTDC",l:"DTDC"},{v:"Delhivery",l:"Delhivery"},{v:"Shiprocket",l:"Shiprocket"},{v:"BlueDart",l:"BlueDart"},{v:"India Post",l:"India Post"}]}/></Field>
+          <Field label="Return Tracking ID *"><Inp value={shipF.track} onChange={e=>setShipF({...shipF,track:e.target.value})} placeholder="Return tracking number"/></Field>
+          <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}>
+            <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
+            <Btn v="gold" onClick={()=>arrangePickup(sel,histIdx,shipF.track,shipF.carrier)}>🔄 Arrange Pickup</Btn>
+          </div>
+        </Modal>;
+      })()}
+
+      {/* REQUEST RE-SHIPMENT MODAL — Negotiator requests new product shipment */}
+      <Modal open={modal==="reshipRequest"} onClose={()=>setModal("detail")} title={`Request New Shipment — ${sel?.inf}`} w={520}>
+        {sel&&<>
+          <div style={{padding:"10px",background:T.purpleBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px",color:T.purple}}>
+            <div style={{fontWeight:700,marginBottom:"4px"}}>📦 New Product Shipment</div>
+            <div>Logistics will dispatch the new product to the influencer.</div>
+          </div>
+          <div style={{padding:"12px",background:T.surfaceAlt,borderRadius:"7px",marginBottom:"10px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
+              <span style={{fontSize:"11px",fontWeight:800,color:T.brand,textTransform:"uppercase",letterSpacing:".5px"}}>📦 New Products ({reshipF.products?.length||0})</span>
+              <Btn v="outline" sm onClick={()=>setReshipF({...reshipF,products:[...(reshipF.products||[]),{name:"",color:"",size:"",qty:"1"}]})}>+ Add</Btn>
+            </div>
+            {(reshipF.products||[]).map((p,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 60px 24px",gap:"5px",marginBottom:"4px",alignItems:"center"}}>
+              <Inp value={p.name} onChange={e=>{const ps=[...(reshipF.products||[])];ps[i]={...ps[i],name:e.target.value};setReshipF({...reshipF,products:ps})}} placeholder="Product name *"/>
+              <Inp value={p.color} onChange={e=>{const ps=[...(reshipF.products||[])];ps[i]={...ps[i],color:e.target.value};setReshipF({...reshipF,products:ps})}} placeholder="Color"/>
+              <Inp value={p.size} onChange={e=>{const ps=[...(reshipF.products||[])];ps[i]={...ps[i],size:e.target.value};setReshipF({...reshipF,products:ps})}} placeholder="Size"/>
+              <Inp value={p.qty} onChange={e=>{const ps=[...(reshipF.products||[])];ps[i]={...ps[i],qty:e.target.value};setReshipF({...reshipF,products:ps})}} placeholder="Qty" type="number"/>
+              {(reshipF.products||[]).length>1&&<button onClick={()=>setReshipF({...reshipF,products:(reshipF.products||[]).filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:T.err,cursor:"pointer",fontSize:"13px",padding:0}}>✕</button>}
+            </div>)}
+          </div>
+          <Field label="Updated Shipping Address (if changed)"><Inp value={reshipF.newAddress} onChange={e=>setReshipF({...reshipF,newAddress:e.target.value})} placeholder={sel.address||"Same as original address"}/></Field>
+          <Field label="Note for Logistics"><Textarea value={reshipF.note} onChange={e=>setReshipF({...reshipF,note:e.target.value})} placeholder="Reason for new shipment, special instructions..." rows={2}/></Field>
+          <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}>
+            <Btn v="outline" onClick={()=>setModal("detail")}>Cancel</Btn>
+            <Btn v="purple" onClick={()=>requestReshipment(sel,reshipF.products,reshipF.note,reshipF.newAddress)}>📦 Send to Logistics</Btn>
+          </div>
+        </>}
+      </Modal>
+
+      {/* RE-SHIP DISPATCH MODAL — Logistics dispatches re-shipment */}
+      {(sel&&modal&&modal.startsWith("reshipDispatch-"))&&(()=>{
+        const histIdx = parseInt(modal.split("-")[1]);
+        const h = (sel.shipHistory||[])[histIdx];
+        return <Modal open={true} onClose={()=>setModal(null)} title={`Dispatch Re-shipment — ${sel?.inf}`} w={440}>
+          <div style={{padding:"10px",background:T.purpleBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px",color:T.purple}}>
+            <div style={{fontWeight:700,marginBottom:"4px"}}>📦 Re-shipment Products</div>
+            {(h?.products||[]).map((p,i)=><div key={i}><b>{p.name}</b>{p.color?" · "+p.color:""}{p.size?" · "+p.size:""}{p.qty?" · Qty: "+p.qty:""}</div>)}
+          </div>
+          <div style={{padding:"8px 10px",background:T.surfaceAlt,borderRadius:"5px",marginBottom:"10px",fontSize:"12px"}}>
+            <div>📍 <b>Ship to:</b> {h?.newAddress||sel.address||"—"}</div>
+            <div>📱 <b>Phone:</b> {sel.phone||"—"}</div>
+          </div>
+          <Field label="Carrier"><Sel value={reshipShipF.carrier} onChange={e=>setReshipShipF({...reshipShipF,carrier:e.target.value})} options={[{v:"DTDC",l:"DTDC"},{v:"Delhivery",l:"Delhivery"},{v:"Shiprocket",l:"Shiprocket"},{v:"BlueDart",l:"BlueDart"},{v:"India Post",l:"India Post"}]}/></Field>
+          <Field label="Tracking ID *"><Inp value={reshipShipF.track} onChange={e=>setReshipShipF({...reshipShipF,track:e.target.value})} placeholder="Tracking number"/></Field>
+          <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}>
+            <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
+            <Btn v="purple" onClick={()=>dispatchReship(sel,histIdx,reshipShipF.track,reshipShipF.carrier)}>📦 Dispatch</Btn>
+          </div>
+        </Modal>;
+      })()}
 
       {/* SEND FOR PAYMENT MODAL */}
       {/* COLLECT PAYMENT DETAILS MODAL */}

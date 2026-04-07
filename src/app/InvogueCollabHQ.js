@@ -200,6 +200,88 @@ const StatBox = ({l,v,c,sub,gradient})=>(<div className="stat-hover" style={{bac
 </div>);
 
 const Section = ({title,icon,children,action})=>(<div style={{marginBottom:"20px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",paddingBottom:"10px",borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:"13px",fontWeight:700,color:T.text,textTransform:"uppercase",letterSpacing:"1px",fontFamily:"Barlow,sans-serif"}}>{icon} {title}</span>{action}</div>{children}</div>);
+
+// ─── PIPELINE STAGES (lifecycle order) ───
+const PIPELINE_STAGES = [
+  {key:"pending",label:"Pending Approval"},{key:"renegotiate",label:"Renegotiation"},
+  {key:"approved",label:"Approved"},{key:"email_sent",label:"Email Sent"},
+  {key:"shipped",label:"Shipped"},{key:"delivered_prod",label:"Product Delivered"},
+  {key:"partial_live",label:"Partially Live"},{key:"live",label:"All Content Live"},
+  {key:"invoice_ok",label:"Invoice Matched"},{key:"disputed",label:"Disputed"},
+  {key:"payment_requested",label:"Payment Requested"},{key:"payment_approved",label:"Payment Approved"},
+  {key:"partial_paid",label:"Partially Paid"},{key:"paid",label:"Fully Paid"},
+  {key:"rejected",label:"Rejected"},{key:"dropped",label:"Dropped"},
+];
+const CONTENT_STAGES = [
+  {key:"pending",label:"Not Submitted",c:T.sub,bg:T.goldSoft,i:"⏳"},
+  {key:"submitted",label:"Submitted for Review",c:T.info,bg:T.infoBg,i:"📤"},
+  {key:"approved",label:"Approved — Pending Go-Live",c:T.ok,bg:T.okBg,i:"✅"},
+  {key:"revision_requested",label:"Revision Requested",c:T.err,bg:T.errBg,i:"✏️"},
+  {key:"live",label:"Live",c:T.ok,bg:T.okBg,i:"🟢"},
+];
+
+// ─── DEAL PIPELINE COMPONENT ───
+const PipelineView = ({stageKeys, deals:dls, onClickDeal}) => {
+  const stages = PIPELINE_STAGES.filter(s=>stageKeys.includes(s.key));
+  const grouped = {};
+  stages.forEach(s=>grouped[s.key]=[]);
+  dls.forEach(d=>{ if(grouped[d.status]) grouped[d.status].push(d); });
+  const nonEmpty = stages.filter(s=>grouped[s.key].length>0);
+  if(nonEmpty.length===0) return <div style={{fontSize:"13px",color:T.sub,padding:"10px 0"}}>No deals in pipeline</div>;
+  return <div style={{marginBottom:"8px"}}>
+    <div style={{display:"flex",gap:"3px",marginBottom:"12px",flexWrap:"wrap"}}>
+      {stages.map(s=>{const ct=grouped[s.key].length;const cfg=STATUS_CFG[s.key]||{c:T.sub,bg:T.goldSoft,i:"?"};return <div key={s.key} style={{flex:ct>0?"1 1 auto":"0 0 auto",minWidth:ct>0?"80px":"50px",padding:"6px 10px",borderRadius:"6px",background:ct>0?cfg.bg:"transparent",border:`1px solid ${ct>0?cfg.c+"33":T.border}`,textAlign:"center",opacity:ct>0?1:.45,transition:"all .2s"}}>
+        <div style={{fontSize:"18px",fontWeight:800,color:ct>0?cfg.c:T.sub}}>{ct}</div>
+        <div style={{fontSize:"9px",fontWeight:700,color:ct>0?cfg.c:T.sub,textTransform:"uppercase",letterSpacing:".3px",lineHeight:"1.2"}}>{s.label}</div>
+      </div>;})}
+    </div>
+    {nonEmpty.map(s=>{const cfg=STATUS_CFG[s.key]||{c:T.sub,bg:T.goldSoft,i:"?"};return <div key={s.key} style={{marginBottom:"10px"}}>
+      <div style={{fontSize:"11px",fontWeight:700,color:cfg.c,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",display:"flex",alignItems:"center",gap:"5px"}}>{cfg.i} {s.label} ({grouped[s.key].length})</div>
+      {grouped[s.key].map(d=><div key={d.id} onClick={()=>onClickDeal&&onClickDeal(d)} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${cfg.c}`,borderRadius:"6px",padding:"7px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:onClickDeal?"pointer":"default",transition:"all .12s"}} onMouseEnter={e=>{if(onClickDeal)e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+        <div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:"6px"}}><span style={{fontWeight:800,fontSize:"12px",color:T.gold}}>{f(d.amount)}</span><Badge s={d.status} sm/></div>
+      </div>)}
+    </div>;})}
+  </div>;
+};
+
+// ─── CONTENT DELIVERABLES PIPELINE COMPONENT ───
+const ContentPipeline = ({deals:dls, onClickDeal}) => {
+  const allDels = [];
+  dls.forEach(d=>{
+    if(!d.dels) return;
+    d.dels.forEach((dl,i)=>{
+      if(!["rejected","dropped","pending","renegotiate"].includes(d.status))
+        allDels.push({...dl,dealId:d.id,inf:d.inf,product:d.products?d.products.map(p=>p.name).join(", "):d.product,deal:d});
+    });
+  });
+  if(allDels.length===0) return <div style={{fontSize:"13px",color:T.sub,padding:"10px 0"}}>No active deliverables</div>;
+  const grouped = {};
+  CONTENT_STAGES.forEach(s=>grouped[s.key]=[]);
+  allDels.forEach(dl=>{ if(grouped[dl.st]) grouped[dl.st].push(dl); });
+  const nonEmpty = CONTENT_STAGES.filter(s=>grouped[s.key].length>0);
+  if(nonEmpty.length===0) return null;
+  return <div>
+    <div style={{display:"flex",gap:"3px",marginBottom:"12px",flexWrap:"wrap"}}>
+      {CONTENT_STAGES.map(s=>{const ct=grouped[s.key].length;return <div key={s.key} style={{flex:ct>0?"1 1 auto":"0 0 auto",minWidth:ct>0?"90px":"50px",padding:"6px 10px",borderRadius:"6px",background:ct>0?s.bg:"transparent",border:`1px solid ${ct>0?s.c+"33":T.border}`,textAlign:"center",opacity:ct>0?1:.45}}>
+        <div style={{fontSize:"18px",fontWeight:800,color:ct>0?s.c:T.sub}}>{ct}</div>
+        <div style={{fontSize:"9px",fontWeight:700,color:ct>0?s.c:T.sub,textTransform:"uppercase",letterSpacing:".3px",lineHeight:"1.2"}}>{s.label}</div>
+      </div>;})}
+    </div>
+    {nonEmpty.map(s=><div key={s.key} style={{marginBottom:"10px"}}>
+      <div style={{fontSize:"11px",fontWeight:700,color:s.c,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",display:"flex",alignItems:"center",gap:"5px"}}>{s.i} {s.label} ({grouped[s.key].length})</div>
+      {grouped[s.key].map((dl,i)=><div key={dl.dealId+"-"+i} onClick={()=>onClickDeal&&onClickDeal(dl.deal)} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${s.c}`,borderRadius:"6px",padding:"7px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:onClickDeal?"pointer":"default"}} onMouseEnter={e=>{if(onClickDeal)e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+        <div><b>{dl.inf}</b> <span style={{color:T.sub}}>· {dl.type}: {dl.desc||"—"}</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+          {dl.link&&<a href={dl.link.startsWith("http")?dl.link:"https://"+dl.link} target="_blank" rel="noreferrer" style={{fontSize:"11px",color:T.info,fontWeight:600}} onClick={e=>e.stopPropagation()}>🔗</a>}
+          {dl.feedback&&<span style={{fontSize:"10px",color:T.err}} title={dl.feedback}>💬</span>}
+          <span style={{padding:"2px 8px",borderRadius:"4px",fontSize:"10px",fontWeight:700,color:s.c,background:s.bg}}>{s.i} {s.label}</span>
+        </div>
+      </div>)}
+    </div>)}
+  </div>;
+};
+
 export default function InvogueCollabHQ() {
   const [loaded, setLoaded] = useState(false);
   const [campaigns, setCampaigns] = useState([]);
@@ -936,6 +1018,8 @@ export default function InvogueCollabHQ() {
   const markDelivered = (d, deliveryDate, deliveryNote) => {
     const ts = deliveryDate || new Date().toISOString();
     if(deliveryDate && new Date(deliveryDate) > new Date(new Date().toDateString()+' 23:59:59')) return notify("Delivery date cannot be in the future","err");
+    const dispDate = d.ship?.dispAt || d.dispatched_at;
+    if(dispDate && deliveryDate && new Date(deliveryDate).toDateString() !== new Date(dispDate).toDateString() && new Date(deliveryDate) < new Date(dispDate)) return notify("Delivery date cannot be before dispatch date","err");
     const userName = loggedIn?.name||"You (Logistics)";
     supabase.from('shipments').update({status:'delivered',delivered_at:ts}).eq('deal_id',d.id).then(({error})=>{if(error) console.error("Shipment delivered save failed:",error);});
     supabase.from('deals').update({status:'delivered_prod'}).eq('id',d.id).then(({error})=>{if(error) console.error("Delivered prod save failed:",error);});
@@ -1829,6 +1913,16 @@ return (
               </div>;})}
             </div>
           </Section>
+
+          {/* DEAL PIPELINE — ALL STAGES */}
+          <Section title="Deal Pipeline — All Stages" icon="📊" action={<Btn v="ghost" sm onClick={()=>setView("deals")}>View all →</Btn>}>
+            <PipelineView stageKeys={["pending","renegotiate","approved","email_sent","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","payment_requested","payment_approved","partial_paid","paid","rejected","dropped"]} deals={deals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
+          </Section>
+
+          {/* CONTENT DELIVERABLES PIPELINE */}
+          <Section title="Content Pipeline" icon="🎬">
+            <ContentPipeline deals={deals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
+          </Section>
         </>;
       })()}
 
@@ -2118,6 +2212,16 @@ return (
               })}
             </div>
           </Section>
+
+          {/* DEAL PIPELINE */}
+          <Section title="My Deal Pipeline" icon="📊">
+            <PipelineView stageKeys={["pending","renegotiate","approved","email_sent","shipped","delivered_prod","partial_live","live","invoice_ok","payment_requested","payment_approved","partial_paid","paid"]} deals={myDeals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
+          </Section>
+
+          {/* CONTENT DELIVERABLES PIPELINE */}
+          <Section title="Content Pipeline" icon="🎬">
+            <ContentPipeline deals={myDeals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
+          </Section>
         </>;
       })()}
 
@@ -2229,6 +2333,16 @@ return (
               </div>;})}
             </div>
           </Section>
+
+          {/* DEAL PIPELINE — ALL STAGES */}
+          <Section title="Deal Pipeline — All Stages" icon="📊" action={<Btn v="ghost" sm onClick={()=>setView("deals")}>View all →</Btn>}>
+            <PipelineView stageKeys={["pending","renegotiate","approved","email_sent","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","payment_requested","payment_approved","partial_paid","paid"]} deals={deals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
+          </Section>
+
+          {/* CONTENT PIPELINE */}
+          <Section title="Content Pipeline" icon="🎬">
+            <ContentPipeline deals={deals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
+          </Section>
         </>;
       })()}
 
@@ -2300,6 +2414,11 @@ return (
               <span><b>{d.inf}</b> · {getCamp(d.cid)?.name||""}</span>
               <span style={{color:T.ok,fontWeight:700}}>⭐ {f(d.amount)} paid</span>
             </div>)}
+          </Section>
+
+          {/* DEAL PIPELINE — PAYMENT FOCUSED */}
+          <Section title="Deal Pipeline — Payment Stages" icon="📊">
+            <PipelineView stageKeys={["invoice_ok","disputed","payment_requested","payment_approved","partial_paid","paid","approved","email_sent","shipped","delivered_prod","live"]} deals={deals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
           </Section>
         </>;
       })()}
@@ -2438,6 +2557,11 @@ return (
               <span><b>{d.inf}</b> · {d.products?d.products.map(p=>p.name).join(", "):d.product} · {d.ship.carrier}: {d.ship.track}</span>
               <span style={{color:T.ok}}>✓ {d.ship.delAt}</span>
             </div>)}
+          </Section>
+
+          {/* SHIPMENT PIPELINE */}
+          <Section title="Shipment Pipeline" icon="📊">
+            <PipelineView stageKeys={["approved","email_sent","shipped","delivered_prod"]} deals={deals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
           </Section>
         </>;
       })()}
@@ -3048,7 +3172,7 @@ return (
             {inTransit.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"12px"}}>None in transit</div>}
             {inTransit.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} · {d.products?d.products.map(p=>p.name).join(", "):d.product}</div><div style={{fontSize:"11px",color:T.sub}}>📦 {d.ship.carrier}: <span style={{fontWeight:700,color:T.info}}>{d.ship.track}</span> · {d.ship.dispAt}</div></div>
-              {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(d);setModal("markDelivered")}}>✓ Delivered</Btn>}
+              {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(d);setDeliveryF({date:new Date().toISOString().slice(0,10),note:""});setModal("markDelivered")}}>✓ Delivered</Btn>}
             </div>)}
           </Section>
           <Section title="Delivered" icon="✓">
@@ -3573,7 +3697,7 @@ return (
             <div><b>Product:</b> {sel.product}</div>
             <div><b>Carrier:</b> {sel.ship?.carrier}: {sel.ship?.track}</div>
           </div>
-          <Field label="Delivery Date *"><Inp value={deliveryF.date} onChange={e=>setDeliveryF({...deliveryF,date:e.target.value})} type="date"/></Field>
+          <Field label="Delivery Date *"><input value={deliveryF.date} onChange={e=>setDeliveryF({...deliveryF,date:e.target.value})} type="date" min={sel.ship?.dispAt?.slice(0,10)||""} max={new Date().toISOString().slice(0,10)} style={{width:"100%",padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"14px",fontFamily:"Archivo,sans-serif",color:T.text,outline:"none"}}/></Field>
           <Field label="Note (optional)"><Inp value={deliveryF.note} onChange={e=>setDeliveryF({...deliveryF,note:e.target.value})} placeholder="Any delivery notes..."/></Field>
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}>
             <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>

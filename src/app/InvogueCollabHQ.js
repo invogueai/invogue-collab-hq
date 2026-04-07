@@ -40,6 +40,7 @@ const STATUS_CFG = {
 const now = () => new Date().toISOString().slice(0,16).replace("T"," ");
 const f = n => "₹"+Number(n||0).toLocaleString("en-IN");
 const uid = () => crypto.randomUUID();
+const genCollabId = () => "INV-" + Date.now().toString(36).toUpperCase().slice(-4) + Math.random().toString(36).toUpperCase().slice(2,4);
 
 // ─── Simple PIN hashing (SHA-256) ───
 const hashPin = async (pin) => {
@@ -101,13 +102,16 @@ async function loadFromSupabase() {
   });
 
   const deals = (dealsRes.data||[]).map(d => ({
-    id:d.id, inf:d.influencer_name, platform:d.platform, followers:d.followers,
+    id:d.id, collabId:d.collab_id||("INV-"+d.id.slice(0,6).toUpperCase()),
+    inf:d.influencer_name, platform:d.platform, followers:d.followers,
     product:d.product, amount:d.amount, status:d.status, cid:d.campaign_id,
     usage:d.usage_rights, deadline:d.deadline, profile:d.profile_link,
     phone:d.phone, address:d.address, by:d.created_by, at:d.created_at,
     appBy:d.approved_by, appAt:d.approved_at,
     email:d.email||"", payment_terms:d.payment_terms||"", pan_number:d.pan_number||"", pan_name:d.pan_name||"",
     products:d.products||[],
+    paymentFormSent:d.payment_form_sent||false, paymentFormSentAt:d.payment_form_sent_at||null,
+    invoiceGenerated:d.invoice_generated||false, invoiceNumber:d.invoice_number||null, invoiceDate:d.invoice_date||null,
     inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note}:null,
     dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
     ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
@@ -239,6 +243,9 @@ export default function InvogueCollabHQ() {
   const [attachmentMode, setAttachmentMode] = useState({}); // {delId: "link"|"attachment"}
   const [attachmentDesc, setAttachmentDesc] = useState({}); // {delId: description}
   const [revisionFeedback, setRevisionFeedback] = useState({}); // {delId: feedback text}
+
+  // Payment details collection & Invoice generation
+  const [invoiceF, setInvoiceF] = useState({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:""});
 
   // Feature 1: Analytics & Reports
   const [analyticsData, setAnalyticsData] = useState(null);
@@ -621,6 +628,7 @@ export default function InvogueCollabHQ() {
     }
 
     const dealId = uid();
+    const collabId = genCollabId();
     const ts = new Date().toISOString();
     const userName = loggedIn?.name||"You";
 
@@ -630,6 +638,7 @@ export default function InvogueCollabHQ() {
     try {
     const {error:dealErr} = await supabase.from('deals').insert({
       id:dealId,
+      collab_id:collabId,
       influencer_name:nDeal.inf,
       platform:nDeal.platform,
       followers:nDeal.followers,
@@ -696,6 +705,7 @@ export default function InvogueCollabHQ() {
     const d = {
       ...nDeal,
       id:dealId,
+      collabId,
       amount:+nDeal.amount,
       status:"pending",
       by:userName,
@@ -1034,6 +1044,192 @@ export default function InvogueCollabHQ() {
     setSel(null);
     setModal(null);
     notify("Payment request denied","warn");
+  };
+
+  // ─── PAYMENT DETAILS COLLECTION & INVOICE ───
+  const sendPaymentForm = (deal, method) => {
+    const invoiceUrl = getInvoiceCreatorUrl(deal);
+    if(method==="copy") {
+      navigator.clipboard.writeText(invoiceUrl).then(()=>notify("Invoice creator link copied!")).catch(()=>notify("Failed to copy link","err"));
+    } else if(method==="email") {
+      const subject = encodeURIComponent(`Invogue x ${deal.inf} — Please Generate Your Invoice [${deal.collabId||""}]`);
+      const body = encodeURIComponent(
+`Hi ${deal.inf},
+
+Thank you for the amazing collaboration with Invogue!
+
+Your content is now live and we'd like to process your payment of ₹${deal.amount.toLocaleString("en-IN")}.
+
+Please generate your invoice using the link below — it's pre-filled with your collaboration details:
+
+${invoiceUrl}
+
+Your Collaboration ID: ${deal.collabId||"N/A"}
+
+On the invoice creator page, you'll need to fill in:
+• Your name & contact details
+• Bank account, IFSC code & UPI ID
+• PAN card details
+• Mailing address
+
+Your bank details are processed entirely in your browser and are never stored on any server.
+
+Once generated, please save the invoice as PDF and share it with us.
+
+Warm regards,
+${loggedIn?.name || "Team Invogue"}
+Invogue · invogue.shop`
+      );
+      window.open(`mailto:${deal.email}?subject=${subject}&body=${body}`,"_blank");
+    }
+    const ts = new Date().toISOString();
+    supabase.from('deals').update({payment_form_sent:true,payment_form_sent_at:ts}).eq('id',deal.id).then(({error})=>{if(error) console.error("Invoice link sent save failed:",error);});
+    upDeal(deal.id,{paymentFormSent:true,paymentFormSentAt:ts});
+    addLog(deal.id,loggedIn?.name||"You","Invoice creator link sent",`${method==="email"?"Via email":"Link copied"} · ${deal.collabId||""}`);
+    setSel(prev=>prev?{...prev,paymentFormSent:true,paymentFormSentAt:ts}:null);
+    if(method==="email") notify("Email client opened with invoice creator link!");
+  };
+
+  const getInvoiceCreatorUrl = (deal) => {
+    const base = window.location.origin + "/invoice-creator";
+    const params = new URLSearchParams();
+    if(deal.collabId) params.set("collab", deal.collabId);
+    if(deal.inf) params.set("name", deal.inf);
+    if(deal.email) params.set("email", deal.email);
+    if(deal.amount) params.set("amount", deal.amount);
+    const dels = deal.dels.map(d=>d.type).join(", ");
+    if(dels) params.set("deliverables", dels);
+    return base + "?" + params.toString();
+  };
+
+  // generateInvoicePDF kept for admin fallback — generates invoice in a new window
+  const generateInvoicePDF = (deal) => {
+    const inv = invoiceF;
+    const invNumber = `INV-${deal.id.slice(0,6).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+    const invDate = new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
+    const dueDate = new Date(Date.now()+15*86400000).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
+    const tax = calculateTax(deal.amount);
+    const camp = campaigns.find(c=>c.id===deal.cid);
+    const w = window.open("","_blank","width=800,height=1000");
+    if(!w) return notify("Pop-up blocked — please allow pop-ups","err");
+    w.document.write(`<!DOCTYPE html><html><head><title>Invoice ${invNumber}</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@600;700;800&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Archivo,sans-serif;color:#1A1A1A;padding:40px;max-width:800px;margin:0 auto;font-size:13px;line-height:1.6}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #770A1C}
+.brand{font-family:Barlow,sans-serif;font-size:22px;font-weight:800;color:#770A1C;letter-spacing:3px;text-transform:uppercase}
+.brand-sub{font-size:10px;color:#7D766A;letter-spacing:1px;font-weight:600}
+.invoice-title{font-family:Barlow,sans-serif;font-size:28px;font-weight:800;color:#770A1C;text-align:right}
+.invoice-meta{text-align:right;font-size:12px;color:#7D766A;margin-top:4px}
+.invoice-meta b{color:#1A1A1A}
+.section{margin-bottom:20px}
+.section-title{font-family:Barlow,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#770A1C;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #eee}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px}
+.info-block{font-size:12px;line-height:1.7}
+.info-block b{font-size:13px;display:block;margin-bottom:2px}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+th{background:#770A1C;color:#F6DFC1;padding:8px 12px;text-align:left;font-family:Barlow,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+td{padding:8px 12px;border-bottom:1px solid #eee;font-size:12px}
+.total-row{background:#F6F4F0}
+.total-row td{font-weight:700;font-size:13px}
+.grand-total td{background:#770A1C;color:#F6DFC1;font-size:15px;font-weight:800;font-family:Barlow,sans-serif}
+.payment-box{background:#F6F4F0;border:1px solid #ddd;border-radius:6px;padding:16px;margin-bottom:20px}
+.payment-box .row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px}
+.payment-box .row b{color:#1A1A1A}
+.footer{margin-top:32px;padding-top:16px;border-top:2px solid #770A1C;text-align:center;font-size:11px;color:#7D766A}
+.stamp{display:inline-block;padding:6px 20px;border:2px solid #770A1C;color:#770A1C;font-family:Barlow,sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:2px;transform:rotate(-5deg);margin-top:16px}
+.note{background:#FEF4DD;border:1px solid #E8D5A3;border-radius:4px;padding:10px;font-size:11px;color:#7D766A;margin-bottom:16px}
+@media print{body{padding:20px}button{display:none!important}.no-print{display:none!important}}
+</style></head><body>
+<div class="no-print" style="text-align:center;margin-bottom:20px">
+<button onclick="window.print()" style="background:#770A1C;color:#F6DFC1;border:none;padding:10px 24px;border-radius:4px;font-family:Barlow,sans-serif;font-weight:700;font-size:14px;cursor:pointer;letter-spacing:1px;text-transform:uppercase">Download / Print Invoice</button>
+</div>
+
+<div class="header">
+<div>
+<div class="brand">INVOGUE</div>
+<div class="brand-sub">SHAPEWEAR & LIFESTYLE</div>
+<div style="font-size:11px;color:#7D766A;margin-top:8px">invogue.shop<br>contact@invogue.shop</div>
+</div>
+<div>
+<div class="invoice-title">INVOICE</div>
+<div class="invoice-meta">
+<b>${invNumber}</b><br>
+Date: ${invDate}<br>
+Due: ${dueDate}<br>
+${deal.paymentTerms||"Net 15 days"}
+</div>
+</div>
+</div>
+
+<div class="two-col">
+<div class="section">
+<div class="section-title">Bill To</div>
+<div class="info-block">
+<b>${inv.beneficiary || deal.inf}</b>
+${inv.address ? inv.address+"<br>" : (deal.address ? deal.address+"<br>" : "")}
+${inv.phone ? "Phone: "+inv.phone+"<br>" : (deal.phone ? "Phone: "+deal.phone+"<br>" : "")}
+${deal.email ? "Email: "+deal.email : ""}
+${inv.pan ? "<br>PAN: "+inv.pan+(inv.panName?" ("+inv.panName+")":"") : ""}
+${inv.gstNumber ? "<br>GST: "+inv.gstNumber : ""}
+</div>
+</div>
+<div class="section">
+<div class="section-title">Campaign Details</div>
+<div class="info-block">
+<b>${camp?.name||"—"}</b>
+Platform: ${deal.platform}<br>
+Usage Rights: ${deal.usage}<br>
+Content Deadline: ${deal.deadline}<br>
+Followers: ${deal.followers||"—"}
+</div>
+</div>
+</div>
+
+<table>
+<thead><tr><th>#</th><th>Deliverable</th><th>Description</th><th>Status</th><th style="text-align:right">Amount</th></tr></thead>
+<tbody>
+${deal.dels.map((dl,i)=>`<tr><td>${i+1}</td><td>${dl.type}</td><td>${dl.desc||"—"}</td><td>${dl.st==="live"?"✓ Live":"Pending"}</td><td style="text-align:right">${i===0?"₹"+deal.amount.toLocaleString("en-IN"):"—"}</td></tr>`).join("")}
+<tr class="total-row"><td colspan="4" style="text-align:right">Subtotal</td><td style="text-align:right">₹${tax.base.toLocaleString("en-IN")}</td></tr>
+${+gstRate>0?`<tr><td colspan="4" style="text-align:right">GST (${gstRate}%)</td><td style="text-align:right">₹${tax.gst.toLocaleString("en-IN")}</td></tr>`:""}
+${+tdsRate>0?`<tr><td colspan="4" style="text-align:right">TDS Deduction (${tdsRate}%)</td><td style="text-align:right;color:#B42318">-₹${tax.tds.toLocaleString("en-IN")}</td></tr>`:""}
+<tr class="grand-total"><td colspan="4" style="text-align:right">NET PAYABLE</td><td style="text-align:right">₹${tax.netPayable.toLocaleString("en-IN")}</td></tr>
+</tbody>
+</table>
+
+${inv.bank||inv.account||inv.ifsc||inv.upi ? `
+<div class="section">
+<div class="section-title">Payment Details</div>
+<div class="payment-box">
+${inv.beneficiary ? `<div class="row"><span>Beneficiary Name</span><b>${inv.beneficiary}</b></div>` : ""}
+${inv.bank ? `<div class="row"><span>Bank</span><b>${inv.bank}</b></div>` : ""}
+${inv.account ? `<div class="row"><span>Account Number</span><b>${inv.account}</b></div>` : ""}
+${inv.ifsc ? `<div class="row"><span>IFSC Code</span><b>${inv.ifsc}</b></div>` : ""}
+${inv.upi ? `<div class="row"><span>UPI ID</span><b>${inv.upi}</b></div>` : ""}
+</div>
+</div>` : ""}
+
+${inv.notes ? `<div class="note"><b>Notes:</b> ${inv.notes}</div>` : ""}
+
+<div style="text-align:right;margin-top:40px">
+<div class="stamp">AUTHORIZED</div>
+<div style="font-size:11px;color:#7D766A;margin-top:8px">${loggedIn?.name||"Invogue Team"}</div>
+</div>
+
+<div class="footer">
+<div style="font-family:Barlow,sans-serif;font-weight:700;color:#770A1C;letter-spacing:2px;margin-bottom:4px">INVOGUE</div>
+This is a system-generated invoice from Invogue Collab HQ<br>
+invogue.shop · contact@invogue.shop
+</div>
+</body></html>`);
+    w.document.close();
+    // Log it
+    addLog(deal.id,loggedIn?.name||"You","Invoice generated",`${invNumber} — ₹${tax.netPayable.toLocaleString("en-IN")}`);
+    upDeal(deal.id,{invoiceGenerated:true,invoiceNumber:invNumber,invoiceDate:invDate});
+    supabase.from('deals').update({invoice_generated:true,invoice_number:invNumber,invoice_date:invDate}).eq('id',deal.id).then(({error})=>{if(error) console.error("Invoice log failed:",error);});
+    setSel(prev=>prev?{...prev,invoiceGenerated:true,invoiceNumber:invNumber,invoiceDate:invDate}:null);
+    notify("Invoice generated! Use Print/Save as PDF.");
   };
 
   const dropCollab = (d, reason) => {
@@ -2841,7 +3037,8 @@ return (
               <div style={{display:"flex",gap:"5px",alignItems:"center"}}><Badge s={sel.status}/>{camp&&<span style={{fontSize:"11px",color:T.gold,fontWeight:700}}>🎯 {camp.name}</span>}</div>
               <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
                 {(()=>{const inf=influencers.find(x=>x.name===sel.inf); return inf?<Btn v="ghost" sm onClick={()=>{setModal(null);setSel(null);setInfProfile(inf)}}>⭐ View Profile</Btn>:null;})()}
-                <span style={{fontSize:"10px",color:T.sub}}>#{sel.id} · {sel.by} · {sel.at}</span>
+                <span style={{fontSize:"11px",fontWeight:700,color:T.brand,background:T.goldSoft,padding:"2px 8px",borderRadius:"4px",fontFamily:"Barlow,sans-serif",letterSpacing:".5px"}}>{sel.collabId||"—"}</span>
+                <span style={{fontSize:"10px",color:T.sub}}>{sel.by} · {sel.at}</span>
               </div>
             </div>
 
@@ -2874,6 +3071,26 @@ return (
                 <div><span style={{fontWeight:700,textTransform:"capitalize"}}>{p.type}</span> <span style={{color:T.sub}}>· {p.note}</span></div>
                 <div><b style={{color:T.ok}}>{f(p.amount)}</b> <span style={{color:T.sub,fontSize:"11px"}}>· {p.date}</span></div>
               </div>)}
+            </Section>}
+
+            {/* Payment Workflow Tracker */}
+            {["live","partial_live","invoice_ok","payment_requested","payment_approved","partial_paid","paid"].includes(sel.status)&&(role==="negotiator"||role==="admin"||role==="approver"||role==="finance")&&<Section title="Payment Workflow" icon="💸">
+              <div style={{display:"flex",gap:"4px",alignItems:"center",marginBottom:"4px"}}>
+                {[
+                  {label:"Link Sent",done:!!sel.paymentFormSent,icon:"📩"},
+                  {label:"Invoice Received",done:!!sel.invoiceGenerated,icon:"📄"},
+                  {label:"Amount Verified",done:!!sel.inv,icon:"🧾"},
+                  {label:"Sent to Finance",done:["payment_requested","payment_approved","partial_paid","paid"].includes(sel.status),icon:"💸"},
+                  {label:"Paid",done:sel.status==="paid",icon:"✅"},
+                ].map((step,si)=><div key={si} style={{display:"contents"}}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",flex:1}}>
+                    <div style={{width:"28px",height:"28px",borderRadius:"50%",background:step.done?T.ok:T.border,color:step.done?"#fff":T.sub,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",fontWeight:700}}>{step.done?"✓":si+1}</div>
+                    <div style={{fontSize:"9px",fontWeight:700,color:step.done?T.ok:T.sub,textAlign:"center",marginTop:"3px",textTransform:"uppercase",letterSpacing:".3px"}}>{step.label}</div>
+                  </div>
+                  {si<4&&<div style={{flex:0,width:"20px",height:"2px",background:step.done?T.ok:T.border,marginBottom:"16px"}}/>}
+                </div>)}
+              </div>
+              {sel.invoiceNumber&&<div style={{fontSize:"11px",color:T.sub,marginTop:"6px"}}>Invoice: <b style={{color:T.text}}>{sel.invoiceNumber}</b> · {sel.invoiceDate}</div>}
             </Section>}
 
             {/* Deliverables — Content Approval Workflow */}
@@ -3007,7 +3224,9 @@ return (
               {(role==="negotiator"||role==="admin")&&sel.status==="approved"&&<Btn v="gold" onClick={()=>sendEmail(sel)}>✉ Send Confirmation Email</Btn>}
               {(role==="negotiator"||role==="admin")&&["pending","approved","email_sent","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
               {(role==="logistics"||role==="admin")&&["approved","email_sent"].includes(sel.status)&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC"});setModal("ship")}}>📦 Dispatch</Btn>}
-              {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&!sel.inv&&<Btn v="gold" onClick={()=>{setInvF("");setModal("invoice")}}>🧾 Submit Invoice</Btn>}
+              {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&<Btn v="primary" onClick={()=>setModal("collectPayment")}>{sel.paymentFormSent?"✅ Link Sent — Resend":"📩 Send Invoice Creator"}</Btn>}
+              {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&<Btn v="gold" onClick={()=>{setInvoiceF({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:""});setModal("uploadInvoice")}}>{sel.invoiceGenerated?"✅ Invoice Received":"📄 Upload Invoice"}</Btn>}
+              {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&!sel.inv&&<Btn v="gold" onClick={()=>{setInvF("");setModal("invoice")}}>🧾 Submit Invoice Amount</Btn>}
               {role==="finance"&&!["pending","renegotiate","rejected","dropped"].includes(sel.status)&&rem>0&&<Btn v="ok" onClick={()=>{setPayF({type:paid===0?"advance":"partial",amount:"",note:""});setModal("payment")}}>💰 Record Payment</Btn>}
               {(role==="negotiator"||role==="admin")&&["live","invoice_ok","payment_requested"].includes(sel.status)&&<Btn v="gold" onClick={()=>{setPanF({number:"",name:""});setModal("sendForPayment")}}>💸 Send for Payment</Btn>}
               {(role==="approver"||role==="admin")&&sel.status==="payment_requested"&&<>
@@ -3055,6 +3274,91 @@ return (
       </Modal>
 
       {/* SEND FOR PAYMENT MODAL */}
+      {/* COLLECT PAYMENT DETAILS MODAL */}
+      <Modal open={modal==="collectPayment"} onClose={()=>setModal("detail")} title={`Send Invoice Creator — ${sel?.inf}`} w={520}>
+        {sel&&<>
+          <div style={{padding:"12px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>Amount: <b style={{fontSize:"20px",color:T.gold}}>{f(sel.amount)}</b></div>
+              <span style={{fontSize:"12px",fontWeight:700,color:T.brand,background:"#fff",padding:"3px 10px",borderRadius:"4px",fontFamily:"Barlow,sans-serif",letterSpacing:".5px"}}>{sel.collabId||"—"}</span>
+            </div>
+            <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product} · {sel.dels.filter(d=>d.st==="live").length}/{sel.dels.length} live</div>
+          </div>
+          <div style={{padding:"10px",background:T.infoBg,borderRadius:"6px",marginBottom:"14px",fontSize:"12px",color:T.info}}>
+            <b>🔒 Secure Process:</b> The influencer generates their own invoice with bank details using our Invoice Creator tool. Their details are processed entirely in their browser and are <b>never stored</b> on any server. They send the PDF back to you.
+          </div>
+
+          {sel.paymentFormSent&&<div style={{padding:"8px 10px",background:T.okBg,borderRadius:"5px",marginBottom:"10px",fontSize:"12px",color:T.ok}}>
+            ✅ Link already sent on {sel.paymentFormSentAt?new Date(sel.paymentFormSentAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}
+          </div>}
+
+          {/* How it works */}
+          <div style={{padding:"10px 12px",background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"6px",marginBottom:"14px",fontSize:"12px"}}>
+            <div style={{fontWeight:700,marginBottom:"6px",fontSize:"10px",color:T.sub,textTransform:"uppercase",letterSpacing:".5px"}}>How it works</div>
+            <div style={{display:"flex",gap:"8px",alignItems:"flex-start",marginBottom:"4px"}}><span style={{fontSize:"14px"}}>1️⃣</span><span>You send the Invoice Creator link to the influencer (pre-filled with their collab details)</span></div>
+            <div style={{display:"flex",gap:"8px",alignItems:"flex-start",marginBottom:"4px"}}><span style={{fontSize:"14px"}}>2️⃣</span><span>Influencer fills in their bank details, PAN, and address — generates a PDF invoice</span></div>
+            <div style={{display:"flex",gap:"8px",alignItems:"flex-start"}}><span style={{fontSize:"14px"}}>3️⃣</span><span>Influencer sends you the invoice PDF — you upload it and submit to finance</span></div>
+          </div>
+
+          {/* Email Preview */}
+          <div style={{padding:"10px 12px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",marginBottom:"14px",fontSize:"11px"}}>
+            <div style={{fontWeight:700,marginBottom:"4px",fontSize:"10px",color:T.sub,textTransform:"uppercase",letterSpacing:".5px"}}>Email Preview</div>
+            <div><b>To:</b> {sel.email||"—"}</div>
+            <div><b>Subject:</b> Invogue x {sel.inf} — Please Generate Your Invoice [{sel.collabId||""}]</div>
+            <div style={{marginTop:"4px",color:T.sub}}>Includes: invoice creator link (pre-filled), collab ID, amount, deliverables list</div>
+          </div>
+
+          <div style={{display:"flex",gap:"8px",justifyContent:"flex-end",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>
+            <Btn v="outline" onClick={()=>setModal("detail")}>Back</Btn>
+            <Btn v="outline" onClick={()=>sendPaymentForm(sel,"copy")}>📋 Copy Link</Btn>
+            <Btn v="gold" onClick={()=>sendPaymentForm(sel,"email")}>✉ Send Email</Btn>
+          </div>
+        </>}
+      </Modal>
+
+      {/* GENERATE INVOICE MODAL */}
+      <Modal open={modal==="uploadInvoice"} onClose={()=>setModal("detail")} title={`Upload Invoice — ${sel?.inf}`} w={480}>
+        {sel&&<>
+          <div style={{padding:"12px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>Amount: <b style={{fontSize:"20px",color:T.gold}}>{f(sel.amount)}</b></div>
+              <span style={{fontSize:"12px",fontWeight:700,color:T.brand,fontFamily:"Barlow,sans-serif"}}>{sel.collabId||"—"}</span>
+            </div>
+          </div>
+
+          {sel.invoiceGenerated&&<div style={{padding:"8px 10px",background:T.okBg,borderRadius:"5px",marginBottom:"10px",fontSize:"12px",color:T.ok}}>
+            ✅ Invoice received · #{sel.invoiceNumber} · {sel.invoiceDate}
+          </div>}
+
+          <div style={{padding:"10px",background:T.infoBg,borderRadius:"6px",marginBottom:"14px",fontSize:"12px",color:T.info}}>
+            Upload the invoice PDF received from <b>{sel.inf}</b>. The invoice should have been generated using the Invoice Creator tool with collab ID <b>{sel.collabId||"—"}</b>.
+          </div>
+
+          <Field label="Invoice Link or Reference *">
+            <Inp value={invoiceF.notes} onChange={e=>setInvoiceF({...invoiceF,notes:e.target.value})} placeholder="Paste the invoice URL (Google Drive, email link, etc.)"/>
+          </Field>
+          <Field label="Invoice Number (from the PDF)">
+            <Inp value={invoiceF.beneficiary} onChange={e=>setInvoiceF({...invoiceF,beneficiary:e.target.value})} placeholder="e.g. INV-A3F2XK-ABCD"/>
+          </Field>
+
+          <div style={{display:"flex",gap:"8px",justifyContent:"flex-end",marginTop:"14px",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>
+            <Btn v="outline" onClick={()=>setModal("detail")}>Back</Btn>
+            <Btn v="ok" onClick={()=>{
+              if(!invoiceF.notes) return notify("Please enter the invoice link or reference","err");
+              const invNum = invoiceF.beneficiary || `INV-${sel.collabId||sel.id.slice(0,6)}`;
+              const invDate = new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
+              addLog(sel.id,loggedIn?.name||"You","Invoice uploaded",`${invNum} · ${invoiceF.notes}`);
+              upDeal(sel.id,{invoiceGenerated:true,invoiceNumber:invNum,invoiceDate:invDate});
+              supabase.from('deals').update({invoice_generated:true,invoice_number:invNum,invoice_date:invDate}).eq('id',sel.id).then(({error})=>{if(error) console.error("Invoice log failed:",error);});
+              setSel(prev=>prev?{...prev,invoiceGenerated:true,invoiceNumber:invNum,invoiceDate:invDate}:null);
+              setInvoiceF({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:""});
+              setModal("detail");
+              notify("Invoice recorded! You can now submit the invoice amount.");
+            }}>✅ Confirm Invoice Received</Btn>
+          </div>
+        </>}
+      </Modal>
+
       <Modal open={modal==="sendForPayment"} onClose={()=>setModal(null)} title={`Send for Payment — ${sel?.inf}`} w={460}>
         {sel&&<>
           <div style={{padding:"10px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>

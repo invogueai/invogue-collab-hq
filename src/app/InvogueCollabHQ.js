@@ -139,6 +139,7 @@ const ROLE_CFG = {
 
 // ─── REUSABLE COMPONENTS ───
 const Badge = ({s,sm}) => { const x=STATUS_CFG[s]||{l:s,c:T.sub,bg:T.goldSoft,i:"?"}; return <span style={{display:"inline-flex",alignItems:"center",gap:"4px",padding:sm?"3px 8px":"4px 12px",borderRadius:"4px",fontSize:sm?"10px":"11px",fontWeight:600,color:x.c,background:x.bg,whiteSpace:"nowrap",letterSpacing:".5px",textTransform:"uppercase",border:"none",fontFamily:"Barlow,sans-serif"}}>{x.i} {x.l}</span>; };
+const ensureUrl = (url) => url && !url.match(/^https?:\/\//) ? "https://"+url : url;
 const DBadge = ({s}) => { const m={pending:{l:"Pending",c:T.warn,bg:T.warnBg},submitted:{l:"Submitted",c:T.info,bg:T.infoBg},under_review:{l:"Under Review",c:T.purple,bg:T.purpleBg},revision_requested:{l:"Revision Needed",c:T.err,bg:T.errBg},approved:{l:"Approved",c:T.ok,bg:T.okBg},live:{l:"Live",c:T.ok,bg:T.okBg}}; const x=m[s]||m.pending; return <span style={{padding:"2px 8px",borderRadius:"8px",fontSize:"11px",fontWeight:700,color:x.c,background:x.bg}}>{x.l}</span>; };
 
 const Btn = ({children,onClick,v="primary",sm,disabled,sx})=>{
@@ -920,8 +921,9 @@ export default function InvogueCollabHQ() {
     if(!deal.ship || deal.ship.st !== "delivered") return notify("Product must be delivered before content can be submitted","err");
     if(!contentUrl) return notify("Content URL/link is required","err");
     const delId = deal.dels[delIdx].id;
-    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"submitted",link:contentUrl}:dl);
-    supabase.from('deliverables').update({status:'submitted',live_link:contentUrl,submitted_at:new Date().toISOString()}).eq('id',delId).then(({error})=>{if(error) console.error("Submit content failed:",error);});
+    const ts = new Date().toISOString();
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"submitted",link:contentUrl,history:[...(dl.history||[]),{action:"submitted",by:loggedIn?.name||"You",at:ts,link:contentUrl}]}:dl);
+    supabase.from('deliverables').update({status:'submitted',live_link:contentUrl,submitted_at:ts}).eq('id',delId).then(({error})=>{if(error) console.error("Submit content failed:",error);});
     upDeal(deal.id,{dels:newDels});
     addLog(deal.id,loggedIn?.name||"You","Content submitted for review",`${deal.dels[delIdx].type}: ${contentUrl}`);
     setSel(prev=>prev?{...prev,dels:newDels}:null);
@@ -931,8 +933,9 @@ export default function InvogueCollabHQ() {
 
   const approveContent = (deal, delIdx) => {
     const delId = deal.dels[delIdx].id;
-    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"approved"}:dl);
-    supabase.from('deliverables').update({status:'approved',approved_at:new Date().toISOString()}).eq('id',delId).then(({error})=>{if(error) console.error("Approve content failed:",error);});
+    const ts = new Date().toISOString();
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"approved",history:[...(dl.history||[]),{action:"approved",by:loggedIn?.name||"You",at:ts}]}:dl);
+    supabase.from('deliverables').update({status:'approved',approved_at:ts}).eq('id',delId).then(({error})=>{if(error) console.error("Approve content failed:",error);});
     upDeal(deal.id,{dels:newDels});
     addLog(deal.id,loggedIn?.name||"You","Content approved",`${deal.dels[delIdx].type}: ${deal.dels[delIdx].desc}`);
     setSel(prev=>prev?{...prev,dels:newDels}:null);
@@ -942,8 +945,9 @@ export default function InvogueCollabHQ() {
   const requestRevision = (deal, delIdx, feedback) => {
     if(!feedback) return notify("Please provide feedback for the revision","err");
     const delId = deal.dels[delIdx].id;
-    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"revision_requested",feedback,link:""}:dl);
-    supabase.from('deliverables').update({status:'revision_requested',feedback:feedback,revision_requested_at:new Date().toISOString()}).eq('id',delId).then(({error})=>{if(error) console.error("Revision request failed:",error);});
+    const ts = new Date().toISOString();
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"revision_requested",feedback,link:"",history:[...(dl.history||[]),{action:"revision_requested",by:loggedIn?.name||"You",at:ts,feedback}]}:dl);
+    supabase.from('deliverables').update({status:'revision_requested',feedback:feedback,revision_requested_at:ts}).eq('id',delId).then(({error})=>{if(error) console.error("Revision request failed:",error);});
     upDeal(deal.id,{dels:newDels});
     addLog(deal.id,loggedIn?.name||"You","Revision requested",`${deal.dels[delIdx].type}: ${feedback}`);
     setSel(prev=>prev?{...prev,dels:newDels}:null);
@@ -1681,8 +1685,10 @@ return (
           (d.status==="approved") || // needs email sent
           (d.status==="email_sent"&&!d.ship) || // waiting for logistics
           (["shipped","delivered_prod","email_sent","partial_live"].includes(d.status)&&d.dels.some(dl=>dl.st==="pending")) || // deliverables to mark
-          (["live","partial_live"].includes(d.status)&&!d.inv) // needs invoice
+          (["live","partial_live"].includes(d.status)&&!d.inv) || // needs invoice
+          d.dels.some(dl=>dl.st==="revision_requested") // content needs revision
         );
+        const myRevisions = myDeals.filter(d=>d.dels.some(dl=>dl.st==="revision_requested"));
         const myActive = myDeals.filter(d=>!["rejected","paid","pending","renegotiate","dropped"].includes(d.status));
         const myCompleted = myDeals.filter(d=>d.status==="paid");
         const myDropped = myDeals.filter(d=>d.status==="dropped");
@@ -1695,7 +1701,7 @@ return (
             <StatBox l="Needs My Action" v={myNeedAction.length} c={myNeedAction.length>0?T.warn:T.ok} sub="Do these now"/>
             <StatBox l="Pending Approval" v={myPending.length} c={myPending.length>0?T.warn:T.ok} sub="With manager"/>
             <StatBox l="Active Collabs" v={myActive.length} c={T.info}/>
-            <StatBox l="Content Pending" v={myDeals.filter(d=>!["rejected","pending","renegotiate","dropped"].includes(d.status)).reduce((s,d)=>s+d.dels.filter(x=>x.st==="pending").length,0)} c={T.purple}/>
+            <StatBox l="Revisions Needed" v={myRevisions.reduce((s,d)=>s+d.dels.filter(x=>x.st==="revision_requested").length,0)} c={myRevisions.length>0?T.err:T.ok}/>
             <StatBox l="Completed" v={myCompleted.length} c={T.ok}/>
           </div>
 
@@ -1704,7 +1710,9 @@ return (
             {myNeedAction.map(d=>{
               let actionLabel = "";
               let actionColor = T.warn;
-              if(d.status==="approved") { actionLabel="Send Confirmation Email"; actionColor=T.info; }
+              const revCount = d.dels.filter(dl=>dl.st==="revision_requested").length;
+              if(revCount>0) { actionLabel=`${revCount} revision${revCount>1?"s":""} requested by manager`; actionColor=T.err; }
+              else if(d.status==="approved") { actionLabel="Send Confirmation Email"; actionColor=T.info; }
               else if(["shipped","delivered_prod","email_sent","partial_live"].includes(d.status)&&d.dels.some(dl=>dl.st==="pending")) { actionLabel=`${d.dels.filter(dl=>dl.st==="pending").length} deliverables to mark live`; actionColor=T.purple; }
               else if(["live","partial_live"].includes(d.status)&&!d.inv) { actionLabel="Submit Invoice"; actionColor=T.gold; }
               else if(d.status==="payment_requested") { actionLabel="Payment Requested - with Manager"; actionColor=T.info; }
@@ -1722,6 +1730,19 @@ return (
                 </div>
               </div>;
             })}
+          </Section>}
+
+          {/* Content Revisions Needed */}
+          {myRevisions.length>0&&<Section title={`Content Revisions Needed (${myRevisions.reduce((s,d)=>s+d.dels.filter(x=>x.st==="revision_requested").length,0)})`} icon="✏️" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Revision Required</span>}>
+            {myRevisions.map(d=>d.dels.filter(dl=>dl.st==="revision_requested").map((dl,di)=><div key={d.id+"-"+di} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.errBg,border:`1px solid ${T.err}22`,borderLeft:`3px solid ${T.err}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}
+              onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"4px"}}>
+                <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"13px"}}>· {dl.type}: {dl.desc||"—"}</span></div>
+                <DBadge s="revision_requested"/>
+              </div>
+              {dl.feedback&&<div style={{fontSize:"13px",color:T.err,marginTop:"2px"}}>💬 "{dl.feedback}"</div>}
+            </div>))}
           </Section>}
 
           {/* Pending Approval */}
@@ -1814,7 +1835,7 @@ return (
               <div>
                 <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"13px"}}>· {d.platform}</span></div>
                 <div style={{fontSize:"11px",color:T.sub}}>{d.type}: {d.desc||"—"} · {getCamp(d.cid)?.name||""}</div>
-                {d.link&&<a href={d.link} target="_blank" rel="noreferrer" style={{fontSize:"11px",color:T.info,fontWeight:600}} onClick={e=>e.stopPropagation()}>🔗 View Content</a>}
+                {d.link&&<a href={ensureUrl(d.link)} target="_blank" rel="noreferrer" style={{fontSize:"11px",color:T.info,fontWeight:600}} onClick={e=>e.stopPropagation()}>🔗 View Content</a>}
               </div>
               <DBadge s="submitted"/>
             </div>;})}
@@ -2530,7 +2551,7 @@ return (
               const overdue = d.st==="pending"&&new Date(d.deadline)<new Date();
               return <div key={i} style={{display:"grid",gridTemplateColumns:"1.8fr 1.5fr 1.2fr 0.8fr 0.8fr 0.7fr",padding:"8px 12px",borderBottom:`1px solid ${T.border}`,fontSize:"13px",alignItems:"center",background:overdue?T.errBg:d.st==="revision_requested"?"#FFF5F5":"transparent"}}>
                 <div style={{fontWeight:700}}>{d.inf}</div>
-                <div><span style={{color:T.sub}}>{d.type}</span> — {d.desc||"—"}{d.link?<a href={d.link} target="_blank" rel="noreferrer" style={{marginLeft:"4px",fontSize:"11px",color:T.info}}>🔗</a>:null}</div>
+                <div><span style={{color:T.sub}}>{d.type}</span> — {d.desc||"—"}{d.link?<a href={ensureUrl(d.link)} target="_blank" rel="noreferrer" style={{marginLeft:"4px",fontSize:"11px",color:T.info}}>🔗</a>:null}</div>
                 <div style={{fontSize:"11px",color:T.gold,fontWeight:700}}>{getCamp(d.cid)?.name||"—"}</div>
                 <div>{d.platform}</div>
                 <div style={{color:overdue?T.err:T.text,fontWeight:overdue?700:400}}>{d.deadline}{overdue?" ⚠":""}</div>
@@ -2868,7 +2889,7 @@ return (
                     <div style={{flex:1}}>
                       <span style={{fontSize:"14px",fontWeight:700}}>{dl.type}</span>
                       <span style={{fontSize:"13px",color:T.sub,marginLeft:"6px"}}>{dl.desc}</span>
-                      {dl.link&&dl.st!=="revision_requested"&&<div style={{fontSize:"12px",color:T.info,marginTop:"3px"}}>🔗 <a href={dl.link} target="_blank" rel="noopener" style={{color:T.info}}>{dl.link}</a></div>}
+                      {dl.link&&dl.st!=="revision_requested"&&<div style={{fontSize:"12px",color:T.info,marginTop:"3px"}}>🔗 <a href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info}}>{dl.link}</a></div>}
                     </div>
                     <DBadge s={dl.st}/>
                   </div>
@@ -2877,6 +2898,26 @@ return (
                   {dl.st==="revision_requested"&&dl.feedback&&<div style={{background:T.errBg,border:`1px solid ${T.err}22`,borderRadius:"4px",padding:"10px 12px",marginBottom:"10px",fontSize:"13px"}}>
                     <div style={{fontWeight:700,color:T.err,fontSize:"11px",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Barlow,sans-serif"}}>Manager Feedback</div>
                     <div style={{color:T.text}}>{dl.feedback}</div>
+                  </div>}
+
+                  {/* Feedback & revision trail */}
+                  {dl.history&&dl.history.length>0&&<div style={{marginBottom:"10px",borderLeft:`2px solid ${T.border}`,paddingLeft:"10px"}}>
+                    <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>Activity Trail</div>
+                    {dl.history.map((h,hi)=>{
+                      const icon = h.action==="submitted"?"📤":h.action==="approved"?"✅":h.action==="revision_requested"?"✏️":"📋";
+                      const label = h.action==="submitted"?"Content submitted":h.action==="approved"?"Content approved":h.action==="revision_requested"?"Revision requested":"Action";
+                      const color = h.action==="submitted"?T.info:h.action==="approved"?T.ok:h.action==="revision_requested"?T.err:T.sub;
+                      return <div key={hi} style={{marginBottom:"6px",fontSize:"12px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                          <span>{icon}</span>
+                          <span style={{fontWeight:700,color}}>{label}</span>
+                          <span style={{color:T.sub}}>by {h.by}</span>
+                          <span style={{color:T.faint,fontSize:"11px"}}>{new Date(h.at).toLocaleDateString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</span>
+                        </div>
+                        {h.link&&<div style={{fontSize:"11px",color:T.info,marginLeft:"22px",marginTop:"1px"}}>🔗 <a href={ensureUrl(h.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info}}>{h.link}</a></div>}
+                        {h.feedback&&<div style={{fontSize:"12px",color:T.err,marginLeft:"22px",marginTop:"1px",fontStyle:"italic"}}>"{h.feedback}"</div>}
+                      </div>;
+                    })}
                   </div>}
 
                   {/* Negotiator: Submit content for review */}
@@ -2891,7 +2932,7 @@ return (
                   {/* Manager: Review & approve or request revision */}
                   {canReview&&<div style={{background:T.purpleBg,borderRadius:"4px",padding:"10px 12px"}}>
                     <div style={{fontSize:"11px",fontWeight:700,color:T.purple,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>Review Content</div>
-                    {dl.link&&<div style={{fontSize:"12px",color:T.info,marginBottom:"8px"}}>🔗 <a href={dl.link} target="_blank" rel="noopener" style={{color:T.info}}>{dl.link}</a></div>}
+                    {dl.link&&<div style={{fontSize:"12px",color:T.info,marginBottom:"8px"}}>🔗 <a href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info}}>{dl.link}</a></div>}
                     <div style={{display:"flex",gap:"6px",marginBottom:"8px"}}>
                       <Btn v="ok" sm onClick={()=>approveContent(sel,i)}>✅ Approve Content</Btn>
                       <Btn v="danger" sm onClick={()=>{const fb=revisionFeedback[dl.id];if(!fb){notify("Enter feedback before requesting revision","err");return;}requestRevision(sel,i,fb)}}>↩ Request Revision</Btn>

@@ -935,8 +935,7 @@ export default function InvogueCollabHQ() {
 
   const markDelivered = (d, deliveryDate, deliveryNote) => {
     const ts = deliveryDate || new Date().toISOString();
-    if(deliveryDate && new Date(deliveryDate) > new Date()) return notify("Delivery date cannot be in the future","err");
-    if(d.ship?.dispAt && deliveryDate && new Date(deliveryDate).toISOString().slice(0,10) < new Date(d.ship.dispAt).toISOString().slice(0,10)) return notify("Delivery date cannot be before dispatch date","err");
+    if(deliveryDate && new Date(deliveryDate) > new Date(new Date().toDateString()+' 23:59:59')) return notify("Delivery date cannot be in the future","err");
     const userName = loggedIn?.name||"You (Logistics)";
     supabase.from('shipments').update({status:'delivered',delivered_at:ts}).eq('deal_id',d.id).then(({error})=>{if(error) console.error("Shipment delivered save failed:",error);});
     supabase.from('deals').update({status:'delivered_prod'}).eq('id',d.id).then(({error})=>{if(error) console.error("Delivered prod save failed:",error);});

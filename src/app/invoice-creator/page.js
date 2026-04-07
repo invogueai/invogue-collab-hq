@@ -21,10 +21,13 @@ export default function InvoiceCreator() {
   });
   const [errors, setErrors] = useState({});
   const [generated, setGenerated] = useState(false);
+  const [urlParams, setUrlParams] = useState({});
 
   // Pre-fill from URL params
   useEffect(() => {
+    if(typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
+    setUrlParams({collab:params.get("collab"),amount:params.get("amount")});
     const updates = {};
     if(params.get("collab")) updates.collabId = params.get("collab");
     if(params.get("name")) updates.influencerName = params.get("name");
@@ -274,13 +277,13 @@ ${form.collabId ? `Collaboration ID: ${form.collabId} · ` : ""}invogue.shop
           <div style={{fontFamily:"'Barlow',sans-serif",fontSize:"13px",fontWeight:700,color:T.brand,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"14px",paddingBottom:"8px",borderBottom:`2px solid ${T.brand}`}}>Invoice Details</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px"}}>
             <Field label="Collab ID">
-              <Inp value={form.collabId} onChange={e=>set("collabId",e.target.value)} placeholder="e.g. INV-A3F2XK" disabled={!!new URLSearchParams(window.location.search).get("collab")}/>
+              <Inp value={form.collabId} onChange={e=>set("collabId",e.target.value)} placeholder="e.g. INV-A3F2XK" disabled={!!urlParams.collab}/>
             </Field>
             <Field label="Invoice Date">
               <Inp value={form.invoiceDate} onChange={e=>set("invoiceDate",e.target.value)} type="date"/>
             </Field>
             <Field label="Amount (₹)" required error={errors.amount}>
-              <Inp value={form.amount} onChange={e=>set("amount",e.target.value)} placeholder="25000" type="number" disabled={!!new URLSearchParams(window.location.search).get("amount")}/>
+              <Inp value={form.amount} onChange={e=>set("amount",e.target.value)} placeholder="25000" type="number" disabled={!!urlParams.amount}/>
             </Field>
             <Field label="Invoice Number">
               <Inp value={form.invoiceNumber} onChange={e=>set("invoiceNumber",e.target.value)} placeholder="Auto-generated if empty"/>

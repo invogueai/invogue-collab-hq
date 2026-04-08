@@ -332,7 +332,7 @@ export default function InvogueCollabHQ() {
   const [revisionFeedback, setRevisionFeedback] = useState({}); // {delId: feedback text}
 
   // Payment details collection & Invoice generation
-  const [invoiceF, setInvoiceF] = useState({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:""});
+  const [invoiceF, setInvoiceF] = useState({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:"",amount:"",panNumber:""});
 
   // Feature 1: Analytics & Reports
   const [analyticsData, setAnalyticsData] = useState(null);
@@ -1197,6 +1197,60 @@ export default function InvogueCollabHQ() {
     setModal(null);
     setInvF("");
     if(match) notify("Invoice submitted — matched!"); else notify("MISMATCH — flagged for review!","err");
+  };
+
+  // ─── UNIFIED INVOICE SUBMISSION ───
+  // Single-step: negotiator uploads invoice + amount + PAN → auto-queued to finance.
+  // If amount matches locked amount → status=invoice_ok (ready for finance to pay).
+  // If amount mismatches → status=disputed (needs approver/admin resolution).
+  const submitInvoiceComplete = (deal) => {
+    if(!invoiceF.notes) return notify("Paste the invoice link or reference","err");
+    if(!invoiceF.amount) return notify("Enter the invoice amount","err");
+    if(+invoiceF.amount <= 0) return notify("Invoice amount must be positive","err");
+    if(!invoiceF.panNumber) return notify("PAN number is mandatory","err");
+    if(!invoiceF.panName) return notify("Legal name (as on PAN) is mandatory","err");
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+    if(!panRegex.test(invoiceF.panNumber.toUpperCase())) return notify("Invalid PAN format (e.g. ABCDE1234F)","err");
+
+    const match = +invoiceF.amount === deal.amount;
+    const newStatus = match?"invoice_ok":"disputed";
+    const ts = new Date().toISOString();
+    const invNum = invoiceF.beneficiary || `INV-${deal.collabId||deal.id.slice(0,6)}`;
+    const invDate = new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
+    const userName = loggedIn?.name||"You";
+    const panUpper = invoiceF.panNumber.toUpperCase();
+
+    supabase.from('deals').update({
+      status:newStatus,
+      invoice_amount:+invoiceF.amount,
+      invoice_match:match,
+      invoice_at:ts,
+      invoice_note:match?null:"Invoice amount does not match locked amount",
+      invoice_generated:true,
+      invoice_number:invNum,
+      invoice_date:invDate,
+      pan_number:panUpper,
+      pan_name:invoiceF.panName
+    }).eq('id',deal.id).then(({error})=>{if(error) console.error("Invoice submit failed:",error);});
+
+    upDeal(deal.id,{
+      status:newStatus,
+      inv:{amount:+invoiceF.amount,match,at:ts,note:match?"":"Invoice amount does not match locked amount",link:invoiceF.notes},
+      invoiceGenerated:true,
+      invoiceNumber:invNum,
+      invoiceDate:invDate,
+      pan:{number:panUpper,name:invoiceF.panName}
+    });
+
+    addLog(deal.id,userName,match?"Invoice sent to Finance":"Invoice flagged as DISPUTE",
+      `${invNum} · ${f(invoiceF.amount)}${match?" ✓ matched":" ⚠ MISMATCH (locked: "+f(deal.amount)+")"} · PAN: ${panUpper}`);
+
+    setSel(null);
+    setModal(null);
+    setInvoiceF({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:"",amount:"",panNumber:""});
+
+    if(match) notify("Invoice submitted — sent to Finance for payment!");
+    else notify("MISMATCH — flagged as dispute for manager review","err");
   };
 
   const recordPayment = () => {
@@ -2284,19 +2338,17 @@ return (
             </div>)}
           </Section>}
 
-          {/* PAYMENT REQUESTS */}
+          {/* LEGACY: Payment Requests (only shown if any old-flow deals still exist) */}
           {(()=>{
             const payReqs = deals.filter(d=>d.status==="payment_requested");
-            return payReqs.length>0 && <Section title={`Payment Requests (${payReqs.length})`} icon="💸" action={<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Review Required</span>}>
-              {payReqs.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.info}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            return payReqs.length>0 && <Section title={`Legacy Payment Requests (${payReqs.length})`} icon="💸" action={<span style={{fontSize:"11px",color:T.sub,fontWeight:700}}>Auto-forwarded to Finance</span>}>
+              <div style={{fontSize:"11px",color:T.sub,padding:"4px 0 8px",fontStyle:"italic"}}>These are from the old flow. They're now visible to Finance directly.</div>
+              {payReqs.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.info}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
                 <div>
                   <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"13px"}}>· {f(d.amount)}</span></div>
-                  <div style={{fontSize:"11px",color:T.sub}}>{d.product} · PAN: {d.pan?.number||"N/A"}</div>
+                  <div style={{fontSize:"11px",color:T.sub}}>{d.product} · PAN: {d.pan?.number||d.pan_number||"N/A"}</div>
                 </div>
-                <div style={{display:"flex",gap:"5px"}}>
-                  <Btn v="ok" sm onClick={()=>setConfirmAction({title:"Approve Payment",msg:`Approve payment request of ${f(d.amount)} for ${d.inf}? This will forward to finance.`,onConfirm:()=>{approvePaymentRequest(d);setConfirmAction(null)}})}>✅ Approve</Btn>
-                  <Btn v="danger" sm onClick={()=>setConfirmAction({title:"Deny Payment",msg:`Deny payment request for ${d.inf}?`,onConfirm:()=>{denyPaymentRequest(d);setConfirmAction(null)}})}>❌ Deny</Btn>
-                </div>
+                <span style={{fontSize:"11px",color:T.ok,fontWeight:700}}>✓ In Finance Queue</span>
               </div>)}
             </Section>;
           })()}
@@ -2350,7 +2402,7 @@ return (
           FINANCE DASHBOARD — Payment Center
          ═══════════════════════════════════════════════════════ */}
       {view==="dashboard"&&role==="finance"&&(()=>{
-        const pendingPayments = deals.filter(d=>["payment_approved","invoice_ok","partial_paid"].includes(d.status)&&remaining(d)>0);
+        const pendingPayments = deals.filter(d=>["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0);
         const disputed = deals.filter(d=>d.status==="disputed");
         const advanceDue = deals.filter(d=>["approved","email_sent","shipped","delivered_prod"].includes(d.status)&&totalPaid(d)===0);
         const recentPaid = deals.filter(d=>d.status==="paid").slice(0,5);
@@ -2383,18 +2435,70 @@ return (
             </div>)}
           </Section>}
 
-          {/* READY TO PAY — Invoice Matched */}
+          {/* READY TO PAY — Full deal terms + invoice details for finance */}
           <Section title={`Ready to Pay (${pendingPayments.length})`} icon="💳" action={<span style={{fontSize:"11px",color:T.sub}}>{f(pendingPayments.reduce((s,d)=>s+remaining(d),0))} total</span>}>
             {pendingPayments.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>No invoices pending payment</div>}
             {pendingPayments.map(d=>{
               const paid=totalPaid(d),rem=remaining(d);
-              return <div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"5px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div>
-                  <div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"13px"}}>· {getCamp(d.cid)?.name||""}</span></div>
-                  <div style={{fontSize:"11px",color:T.sub}}>Locked: {f(d.amount)} · Paid: {f(paid)} · <b style={{color:T.warn}}>Due: {f(rem)}</b></div>
-                  {paid>0&&<div style={{height:"3px",borderRadius:"2px",background:T.border,marginTop:"4px",width:"120px"}}><div style={{height:"100%",width:`${(paid/d.amount)*100}%`,background:T.ok,borderRadius:"2px"}}/></div>}
+              const invLink=d.inv?.link||d.invoice_note||"";
+              return <div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.ok}`,borderRadius:"8px",padding:"14px 16px",marginBottom:"10px"}}>
+                {/* Header: Influencer + Campaign + Action */}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
+                  <div>
+                    <div style={{fontWeight:800,fontSize:"15px",color:T.text}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"12px",marginLeft:"4px"}}>· {d.platform||""}</span></div>
+                    <div style={{fontSize:"11px",color:T.sub,marginTop:"1px"}}>{getCamp(d.cid)?.name||"—"} · {d.collabId||d.id.slice(0,8)}</div>
+                  </div>
+                  <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                    <Btn v="outline" sm onClick={()=>{setSel(d);setModal("detail")}}>View Details</Btn>
+                    <Btn v="ok" sm onClick={()=>{setSel(d);setPayF({type:paid===0?"final":"final",amount:String(rem),note:"Paying on matched invoice"});setModal("payment")}}>💰 Pay {f(rem)}</Btn>
+                  </div>
                 </div>
-                <Btn v="ok" sm onClick={()=>{setSel(d);setPayF({type:paid===0?"advance":"final",amount:String(rem),note:""});setModal("payment")}}>Pay {f(rem)}</Btn>
+
+                {/* Amount Summary Bar */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"6px",marginBottom:"10px"}}>
+                  <div style={{background:T.goldSoft,padding:"6px 8px",borderRadius:"5px"}}>
+                    <div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".3px"}}>Locked</div>
+                    <div style={{fontSize:"13px",fontWeight:800,color:T.gold}}>{f(d.amount)}</div>
+                  </div>
+                  <div style={{background:d.inv?.match===false?T.errBg:T.infoBg,padding:"6px 8px",borderRadius:"5px"}}>
+                    <div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".3px"}}>Invoice</div>
+                    <div style={{fontSize:"13px",fontWeight:800,color:d.inv?.match===false?T.err:T.info}}>{f(d.inv?.amount||d.amount)}{d.inv?.match===false?" ⚠":" ✓"}</div>
+                  </div>
+                  <div style={{background:T.okBg,padding:"6px 8px",borderRadius:"5px"}}>
+                    <div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".3px"}}>Paid</div>
+                    <div style={{fontSize:"13px",fontWeight:800,color:T.ok}}>{f(paid)}</div>
+                  </div>
+                  <div style={{background:T.warnBg,padding:"6px 8px",borderRadius:"5px"}}>
+                    <div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".3px"}}>Due Now</div>
+                    <div style={{fontSize:"13px",fontWeight:800,color:T.warn}}>{f(rem)}</div>
+                  </div>
+                </div>
+
+                {/* Deal Terms Grid */}
+                <div style={{background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"10px 12px",marginBottom:"8px"}}>
+                  <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>📋 Original Deal Terms</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 12px",fontSize:"12px"}}>
+                    <div><span style={{color:T.sub}}>Product:</span> <b>{d.products?d.products.map(p=>p.name).join(", "):d.product}</b></div>
+                    <div><span style={{color:T.sub}}>Usage Rights:</span> <b>{d.usage||"—"}</b></div>
+                    <div><span style={{color:T.sub}}>Deadline:</span> <b>{d.deadline||"—"}</b></div>
+                    <div><span style={{color:T.sub}}>Payment Terms:</span> <b>{d.paymentTerms||"Net 15 days"}</b></div>
+                    <div style={{gridColumn:"1 / -1"}}><span style={{color:T.sub}}>Deliverables:</span> <b>{d.dels.map(dl=>`${dl.type} (${dl.st==="live"?"✓ Live":dl.st})`).join(" · ")}</b></div>
+                  </div>
+                </div>
+
+                {/* Invoice + PAN Details */}
+                <div style={{background:T.infoBg,border:`1px solid ${T.info}33`,borderRadius:"6px",padding:"10px 12px"}}>
+                  <div style={{fontSize:"10px",fontWeight:700,color:T.info,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>🧾 Invoice & Payment Details</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 12px",fontSize:"12px"}}>
+                    <div><span style={{color:T.sub}}>Invoice #:</span> <b>{d.invoiceNumber||"—"}</b></div>
+                    <div><span style={{color:T.sub}}>Invoice Date:</span> <b>{d.invoiceDate||"—"}</b></div>
+                    {invLink&&<div style={{gridColumn:"1 / -1"}}><span style={{color:T.sub}}>Invoice Link:</span> <a href={ensureUrl(invLink)} target="_blank" rel="noopener noreferrer" style={{color:T.info,fontWeight:700,wordBreak:"break-all"}}>🔗 {invLink}</a></div>}
+                    <div><span style={{color:T.sub}}>PAN:</span> <b style={{fontFamily:"monospace"}}>{d.pan?.number||d.pan_number||"—"}</b></div>
+                    <div><span style={{color:T.sub}}>Legal Name:</span> <b>{d.pan?.name||d.pan_name||"—"}</b></div>
+                  </div>
+                </div>
+
+                {paid>0&&<div style={{height:"3px",borderRadius:"2px",background:T.border,marginTop:"8px"}}><div style={{height:"100%",width:`${(paid/d.amount)*100}%`,background:T.ok,borderRadius:"2px"}}/></div>}
               </div>;
             })}
           </Section>
@@ -3281,8 +3385,20 @@ return (
       </Modal>
 
       {/* PAYMENT */}
-      <Modal open={modal==="payment"} onClose={()=>setModal("detail")} title={`Payment — ${sel?.inf}`} w={420}>
+      <Modal open={modal==="payment"} onClose={()=>setModal("detail")} title={`Payment — ${sel?.inf}`} w={460}>
         {sel&&<>
+          {/* Invoice Details — Prominent for Finance */}
+          {sel.inv&&<div style={{padding:"10px 12px",background:sel.inv.match===false?T.errBg:T.okBg,border:`1px solid ${sel.inv.match===false?T.err:T.ok}33`,borderRadius:"6px",marginBottom:"10px",fontSize:"12px"}}>
+            <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Barlow,sans-serif"}}>🧾 Invoice Details</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3px 10px"}}>
+              <div><span style={{color:T.sub}}>Invoice #:</span> <b>{sel.invoiceNumber||"—"}</b></div>
+              <div><span style={{color:T.sub}}>Date:</span> <b>{sel.invoiceDate||"—"}</b></div>
+              <div><span style={{color:T.sub}}>Invoice Amt:</span> <b style={{color:sel.inv.match===false?T.err:T.ok}}>{f(sel.inv.amount)}{sel.inv.match===false?" ⚠":" ✓"}</b></div>
+              <div><span style={{color:T.sub}}>Locked Amt:</span> <b>{f(sel.amount)}</b></div>
+            </div>
+            {(sel.inv.link||sel.inv.note)&&<div style={{marginTop:"4px"}}><span style={{color:T.sub}}>Link:</span> <a href={ensureUrl(sel.inv.link||sel.inv.note)} target="_blank" rel="noopener noreferrer" style={{color:T.info,fontWeight:700,wordBreak:"break-all"}}>🔗 {sel.inv.link||sel.inv.note}</a></div>}
+          </div>}
+
           {/* Deal Context */}
           <div style={{padding:"10px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",marginBottom:"12px",fontSize:"13px"}}>
             <div style={{fontWeight:700,marginBottom:"6px",fontSize:"12px"}}>📋 Deal Terms</div>
@@ -3292,7 +3408,7 @@ return (
               <div><span style={{color:T.sub}}>Deadline:</span> <b>{sel.deadline}</b></div>
               <div><span style={{color:T.sub}}>Payment Terms:</span> <b>{sel.paymentTerms||"Net 15 days"}</b></div>
             </div>
-            {sel.pan&&<div style={{marginTop:"4px",padding:"4px 6px",background:T.infoBg,borderRadius:"4px"}}><span style={{color:T.info,fontWeight:600}}>PAN:</span> {sel.pan.number} ({sel.pan.name})</div>}
+            {(sel.pan||sel.pan_number)&&<div style={{marginTop:"4px",padding:"4px 6px",background:T.infoBg,borderRadius:"4px"}}><span style={{color:T.info,fontWeight:600}}>PAN:</span> {sel.pan?.number||sel.pan_number} ({sel.pan?.name||sel.pan_name})</div>}
             <div style={{marginTop:"6px",fontWeight:700,fontSize:"11px",color:T.sub}}>Deliverables:</div>
             {sel.dels.map((dl,i)=><div key={i} style={{fontSize:"11px",padding:"2px 0"}}>{dl.type}: {dl.desc} — <span style={{color:dl.st==="live"?T.ok:T.warn,fontWeight:600}}>{dl.st==="live"?"Live":"Pending"}</span></div>)}
           </div>
@@ -3658,14 +3774,10 @@ return (
               {(role==="negotiator"||role==="admin")&&["pending","approved","email_sent","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
               {(role==="logistics"||role==="admin")&&["approved","email_sent"].includes(sel.status)&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC"});setModal("ship")}}>📦 Dispatch</Btn>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&<Btn v="primary" onClick={()=>setModal("collectPayment")}>{sel.paymentFormSent?"✅ Link Sent — Resend":"📩 Send Invoice Creator"}</Btn>}
-              {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&<Btn v="gold" onClick={()=>{setInvoiceF({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:""});setModal("uploadInvoice")}}>{sel.invoiceGenerated?"✅ Invoice Received":"📄 Upload Invoice"}</Btn>}
-              {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&!sel.inv&&<Btn v="gold" onClick={()=>{setInvF("");setModal("invoice")}}>🧾 Submit Invoice Amount</Btn>}
+              {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&!sel.inv&&<Btn v="gold" onClick={()=>{setInvoiceF({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:"",amount:"",panNumber:""});setModal("uploadInvoice")}}>📄 Upload Invoice & Send to Finance</Btn>}
+              {sel.inv&&sel.status==="invoice_ok"&&(role==="negotiator"||role==="admin")&&<div style={{fontSize:"12px",color:T.ok,fontWeight:700,padding:"6px 10px",background:T.okBg,borderRadius:"4px"}}>✓ Invoice sent to Finance — awaiting payment</div>}
+              {sel.inv&&sel.status==="disputed"&&(role==="negotiator"||role==="admin")&&<div style={{fontSize:"12px",color:T.err,fontWeight:700,padding:"6px 10px",background:T.errBg,borderRadius:"4px"}}>⚠ Dispute — awaiting manager resolution</div>}
               {role==="finance"&&!["pending","renegotiate","rejected","dropped"].includes(sel.status)&&rem>0&&<Btn v="ok" onClick={()=>{setPayF({type:paid===0?"advance":"partial",amount:"",note:""});setModal("payment")}}>💰 Record Payment</Btn>}
-              {(role==="negotiator"||role==="admin")&&["live","invoice_ok","payment_requested"].includes(sel.status)&&<Btn v="gold" onClick={()=>{setPanF({number:"",name:""});setModal("sendForPayment")}}>💸 Send for Payment</Btn>}
-              {(role==="approver"||role==="admin")&&sel.status==="payment_requested"&&<>
-                <Btn v="ok" sm onClick={()=>{sendForPayment(sel,sel.pan_number,sel.pan_name)}}>✓ Approve Payment</Btn>
-                <Btn v="outline" sm onClick={()=>notify("Sent back to negotiator","warn")}>↩ Request Changes</Btn>
-              </>}
               {(role==="finance"||role==="admin")&&sel.status==="disputed"&&<>
                 <Btn v="ok" sm onClick={()=>{setPayF({type:"final",amount:String(sel.amount-paid),note:"Paying approved amount per dispute resolution"});setModal("payment")}}>Pay Approved Amount</Btn>
                 <Btn v="danger" sm onClick={()=>notify("Escalated to founder","warn")}>Escalate</Btn>
@@ -3846,44 +3958,46 @@ return (
       </Modal>
 
       {/* GENERATE INVOICE MODAL */}
-      <Modal open={modal==="uploadInvoice"} onClose={()=>setModal("detail")} title={`Upload Invoice — ${sel?.inf}`} w={480}>
+      <Modal open={modal==="uploadInvoice"} onClose={()=>setModal("detail")} title={`Upload Invoice & Send to Finance — ${sel?.inf}`} w={520}>
         {sel&&<>
           <div style={{padding:"12px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div>Amount: <b style={{fontSize:"20px",color:T.gold}}>{f(sel.amount)}</b></div>
+              <div>🔒 Locked Amount: <b style={{fontSize:"20px",color:T.gold}}>{f(sel.amount)}</b></div>
               <span style={{fontSize:"12px",fontWeight:700,color:T.brand,fontFamily:"Barlow,sans-serif"}}>{sel.collabId||"—"}</span>
             </div>
+            <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product} · {sel.dels.length} deliverables · {sel.paymentTerms||"Net 15 days"}</div>
           </div>
 
-          {sel.invoiceGenerated&&<div style={{padding:"8px 10px",background:T.okBg,borderRadius:"5px",marginBottom:"10px",fontSize:"12px",color:T.ok}}>
-            ✅ Invoice received · #{sel.invoiceNumber} · {sel.invoiceDate}
-          </div>}
-
-          <div style={{padding:"10px",background:T.infoBg,borderRadius:"6px",marginBottom:"14px",fontSize:"12px",color:T.info}}>
-            Upload the invoice PDF received from <b>{sel.inf}</b>. The invoice should have been generated using the Invoice Creator tool with collab ID <b>{sel.collabId||"—"}</b>.
+          <div style={{padding:"10px",background:T.infoBg,borderRadius:"6px",marginBottom:"14px",fontSize:"12px",color:T.info,lineHeight:1.5}}>
+            <b>One-step submission.</b> Fill in all fields below. On submit, the invoice goes directly to Finance for payment. If the amount matches the locked amount, Finance can pay immediately. If it doesn't match, it will be flagged as a dispute for manager review.
           </div>
 
-          <Field label="Invoice Link or Reference *">
+          <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>📄 Invoice Document</div>
+          <Field label="Invoice Link / Reference *">
             <Inp value={invoiceF.notes} onChange={e=>setInvoiceF({...invoiceF,notes:e.target.value})} placeholder="Paste the invoice URL (Google Drive, email link, etc.)"/>
           </Field>
           <Field label="Invoice Number (from the PDF)">
-            <Inp value={invoiceF.beneficiary} onChange={e=>setInvoiceF({...invoiceF,beneficiary:e.target.value})} placeholder="e.g. INV-A3F2XK-ABCD"/>
+            <Inp value={invoiceF.beneficiary} onChange={e=>setInvoiceF({...invoiceF,beneficiary:e.target.value})} placeholder="e.g. INV-A3F2XK-ABCD (auto-filled if blank)"/>
+          </Field>
+
+          <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginTop:"10px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>💰 Amount</div>
+          <Field label="Invoice Amount *">
+            <Inp value={invoiceF.amount} onChange={e=>setInvoiceF({...invoiceF,amount:e.target.value})} type="number" prefix="₹" placeholder={String(sel.amount)}/>
+          </Field>
+          {invoiceF.amount&&+invoiceF.amount!==sel.amount&&<div style={{padding:"6px 8px",background:T.errBg,borderRadius:"4px",fontSize:"11px",color:T.err,marginTop:"-4px",marginBottom:"8px"}}>⚠ MISMATCH: Invoice {f(invoiceF.amount)} ≠ Locked {f(sel.amount)}. Will be flagged as dispute for manager review.</div>}
+          {invoiceF.amount&&+invoiceF.amount===sel.amount&&<div style={{padding:"6px 8px",background:T.okBg,borderRadius:"4px",fontSize:"11px",color:T.ok,marginTop:"-4px",marginBottom:"8px"}}>✓ Matches locked amount — Finance can pay immediately.</div>}
+
+          <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginTop:"10px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>🪪 PAN Details (required for payment)</div>
+          <Field label="PAN Number *">
+            <Inp value={invoiceF.panNumber} onChange={e=>setInvoiceF({...invoiceF,panNumber:e.target.value.toUpperCase()})} placeholder="ABCDE1234F"/>
+          </Field>
+          <Field label="Legal Name (as on PAN) *">
+            <Inp value={invoiceF.panName} onChange={e=>setInvoiceF({...invoiceF,panName:e.target.value})} placeholder="Full legal name"/>
           </Field>
 
           <div style={{display:"flex",gap:"8px",justifyContent:"flex-end",marginTop:"14px",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>
-            <Btn v="outline" onClick={()=>setModal("detail")}>Back</Btn>
-            <Btn v="ok" onClick={()=>{
-              if(!invoiceF.notes) return notify("Please enter the invoice link or reference","err");
-              const invNum = invoiceF.beneficiary || `INV-${sel.collabId||sel.id.slice(0,6)}`;
-              const invDate = new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
-              addLog(sel.id,loggedIn?.name||"You","Invoice uploaded",`${invNum} · ${invoiceF.notes}`);
-              upDeal(sel.id,{invoiceGenerated:true,invoiceNumber:invNum,invoiceDate:invDate});
-              supabase.from('deals').update({invoice_generated:true,invoice_number:invNum,invoice_date:invDate}).eq('id',sel.id).then(({error})=>{if(error) console.error("Invoice log failed:",error);});
-              setSel(prev=>prev?{...prev,invoiceGenerated:true,invoiceNumber:invNum,invoiceDate:invDate}:null);
-              setInvoiceF({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:""});
-              setModal("detail");
-              notify("Invoice recorded! You can now submit the invoice amount.");
-            }}>✅ Confirm Invoice Received</Btn>
+            <Btn v="outline" onClick={()=>setModal("detail")}>Cancel</Btn>
+            <Btn v="ok" onClick={()=>submitInvoiceComplete(sel)} disabled={!invoiceF.notes||!invoiceF.amount||!invoiceF.panNumber||!invoiceF.panName}>💸 Submit & Send to Finance</Btn>
           </div>
         </>}
       </Modal>

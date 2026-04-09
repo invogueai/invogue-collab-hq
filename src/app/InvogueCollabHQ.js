@@ -1042,63 +1042,47 @@ export default function InvogueCollabHQ() {
   };
 
   const buildConfirmationEmailHTML = d => {
-    const camp = getCamp(d.cid);
-    const delRows = (d.dels||[]).map((dl,i)=>`<tr><td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:13px;color:#555;width:30px;">${i+1}.</td><td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:13px;"><b style="color:#770A1C">${dl.type}</b></td><td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:13px;color:#555;">${dl.desc||'—'}</td></tr>`).join("");
     const productList = d.products && d.products.length > 0
       ? d.products.map(p=>`${p.name}${p.size?` (${p.size})`:""}${p.qty>1?` × ${p.qty}`:""}`).join(", ")
       : (d.product||"—");
+    // Hosted logo URL — GitHub raw URL is always available and works in every email client
+    const LOGO_URL = process.env.NEXT_PUBLIC_EMAIL_LOGO_URL || "https://raw.githubusercontent.com/invogueai/invogue-collab-hq/main/public/invogue-logo.png";
+    // Try to find the POC assigned to this influencer (from the influencers table)
+    const infRecord = influencers.find(x=>x.name===d.inf);
+    const pocName = infRecord?.poc || "your collab manager";
     return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Collaboration Confirmation</title></head>
 <body style="margin:0;padding:0;background:#F6F4F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1A1A1A;">
 <div style="max-width:620px;margin:0 auto;background:#fff;">
-  <div style="background:#770A1C;padding:28px 32px;text-align:center;">
-    <div style="color:#F6DFC1;font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin-bottom:6px;">Invogue</div>
-    <div style="color:#fff;font-size:20px;font-weight:600;">Collaboration Confirmation</div>
+  <div style="background:#770A1C;padding:32px 32px;text-align:center;">
+    <img src="${LOGO_URL}" alt="Invogue" style="max-height:48px;max-width:220px;display:inline-block;margin-bottom:10px;" />
+    <div style="color:#fff;font-size:18px;font-weight:600;margin-top:4px;">Collaboration Confirmation</div>
   </div>
   <div style="padding:32px;">
     <p style="font-size:15px;line-height:1.6;margin:0 0 16px;">Hi <b>${d.inf}</b>,</p>
-    <p style="font-size:14px;line-height:1.65;color:#444;margin:0 0 18px;">Thank you for partnering with <b>Invogue</b>! We're thrilled to have you as part of this collaboration. Below are the confirmed details of our partnership:</p>
+    <p style="font-size:14px;line-height:1.65;color:#444;margin:0 0 18px;">Thank you for partnering with <b>Invogue</b>! We're thrilled to have you on board for this collaboration. Below are the confirmed details of our partnership:</p>
 
-    <div style="background:#F6DFC1;border-left:4px solid #770A1C;padding:14px 18px;margin:18px 0;border-radius:4px;">
-      <div style="font-size:11px;font-weight:700;color:#770A1C;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Collab ID</div>
-      <div style="font-size:16px;font-weight:700;color:#770A1C;">${d.collabId||"—"}</div>
-    </div>
-
-    <table style="width:100%;border-collapse:collapse;margin:18px 0;">
-      <tr><td style="padding:7px 0;font-size:12px;color:#777;width:140px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Campaign</td><td style="padding:7px 0;font-size:14px;">${camp?.name||"—"}</td></tr>
-      <tr><td style="padding:7px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Platform</td><td style="padding:7px 0;font-size:14px;">${d.platform} · ${d.followers||""} followers</td></tr>
-      <tr><td style="padding:7px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Product</td><td style="padding:7px 0;font-size:14px;">${productList}</td></tr>
-      <tr><td style="padding:7px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Commercial</td><td style="padding:7px 0;font-size:16px;font-weight:700;color:#770A1C;">${f(d.amount)}</td></tr>
-      <tr><td style="padding:7px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Content Deadline</td><td style="padding:7px 0;font-size:14px;">${d.deadline||"—"}</td></tr>
-      <tr><td style="padding:7px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Usage Rights</td><td style="padding:7px 0;font-size:14px;">${d.usage||"—"}</td></tr>
-      ${d.paymentTerms?`<tr><td style="padding:7px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Payment Terms</td><td style="padding:7px 0;font-size:14px;">${d.paymentTerms}</td></tr>`:""}
+    <div style="margin:22px 0 10px;font-size:13px;font-weight:700;color:#770A1C;text-transform:uppercase;letter-spacing:1px;">Collaboration Details</div>
+    <table style="width:100%;border-collapse:collapse;margin:8px 0 18px;">
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;width:150px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Collab ID</td><td style="padding:9px 0;font-size:14px;font-weight:700;color:#770A1C;border-bottom:1px solid #f1ece3;">${d.collabId||"—"}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Product</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${productList}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Commercials</td><td style="padding:9px 0;font-size:16px;font-weight:700;color:#770A1C;border-bottom:1px solid #f1ece3;">${f(d.amount)}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Content Deadline</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${d.deadline||"—"}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Usage Rights</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${d.usage||"—"}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Payment Terms</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${d.paymentTerms||"Net 15 days"}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;vertical-align:top;">Shipping Address</td><td style="padding:9px 0;font-size:14px;line-height:1.55;">${d.address||"—"}</td></tr>
     </table>
 
-    <div style="margin:22px 0 10px;font-size:13px;font-weight:700;color:#770A1C;text-transform:uppercase;letter-spacing:1px;">Deliverables</div>
-    <table style="width:100%;border-collapse:collapse;border:1px solid #eee;border-radius:6px;overflow:hidden;">${delRows}</table>
-
-    ${d.address?`<div style="margin:22px 0 10px;font-size:13px;font-weight:700;color:#770A1C;text-transform:uppercase;letter-spacing:1px;">Shipping Address</div>
-    <div style="padding:12px 14px;background:#f8f6f1;border-radius:6px;font-size:13px;line-height:1.6;color:#444;">${d.address}</div>`:""}
-
-    <div style="margin:28px 0 10px;font-size:13px;font-weight:700;color:#770A1C;text-transform:uppercase;letter-spacing:1px;">What Happens Next</div>
-    <ol style="font-size:14px;line-height:1.7;color:#444;padding-left:20px;margin:8px 0;">
-      <li>Our logistics team will dispatch the product to the address above</li>
-      <li>You'll receive a tracking ID once the package is shipped</li>
-      <li>Create and post content as per the deliverables listed above</li>
-      <li>Share the live links with us for each deliverable</li>
-      <li>Once all content is live, we'll process payment as per the agreed terms</li>
-    </ol>
-
-    <div style="margin-top:28px;padding:14px 16px;background:#FEF4DD;border-radius:6px;font-size:13px;color:#8B6914;">
-      <b>Questions?</b> Just reply to this email and our team will get back to you.
+    <div style="margin-top:28px;padding:14px 16px;background:#F6F4F0;border-left:3px solid #B08D42;border-radius:4px;font-size:12px;color:#6B5B3A;line-height:1.6;">
+      <b style="color:#770A1C;">Note:</b> This is an auto-generated email. In case of any confusions or issues, please reach out to your POC, <b>${pocName}</b>, directly.
     </div>
 
     <p style="font-size:14px;line-height:1.6;margin:24px 0 4px;color:#444;">Looking forward to a successful collaboration!</p>
     <p style="font-size:14px;line-height:1.6;margin:0;"><b>Team Invogue</b></p>
   </div>
-  <div style="background:#1A1A1A;padding:20px 32px;text-align:center;">
-    <div style="color:#F6DFC1;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;">INVOGUE · SHAPEWEAR REIMAGINED</div>
-    <div style="color:#888;font-size:11px;"><a href="https://invogue.shop" style="color:#F6DFC1;text-decoration:none;">invogue.shop</a></div>
+  <div style="background:#770A1C;padding:22px 32px;text-align:center;">
+    <div style="color:#F6DFC1;font-size:13px;font-weight:600;letter-spacing:1.5px;margin-bottom:6px;">Invogue · Own your Inner Bold</div>
+    <div style="color:#F6DFC1;opacity:.75;font-size:11px;"><a href="https://invogue.shop" style="color:#F6DFC1;text-decoration:none;">invogue.shop</a></div>
   </div>
 </div>
 </body></html>`;

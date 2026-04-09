@@ -202,17 +202,6 @@ const StatBox = ({l,v,c,sub,gradient})=>(<div className="stat-hover" style={{bac
 
 const Section = ({title,icon,children,action})=>(<div style={{marginBottom:"20px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",paddingBottom:"10px",borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:"13px",fontWeight:700,color:T.text,textTransform:"uppercase",letterSpacing:"1px",fontFamily:"Barlow,sans-serif"}}>{icon} {title}</span>{action}</div>{children}</div>);
 
-// ─── PIPELINE STAGES (lifecycle order) ───
-const PIPELINE_STAGES = [
-  {key:"pending",label:"Pending Approval"},{key:"renegotiate",label:"Renegotiation"},
-  {key:"approved",label:"Approved"},{key:"email_sent",label:"Email Sent"},
-  {key:"shipped",label:"Shipped"},{key:"delivered_prod",label:"Product Delivered"},
-  {key:"partial_live",label:"Partially Live"},{key:"live",label:"All Content Live"},
-  {key:"invoice_ok",label:"Invoice Matched"},{key:"disputed",label:"Disputed"},
-  {key:"payment_requested",label:"Payment Requested"},{key:"payment_approved",label:"Payment Approved"},
-  {key:"partial_paid",label:"Partially Paid"},{key:"paid",label:"Fully Paid"},
-  {key:"rejected",label:"Rejected"},{key:"dropped",label:"Dropped"},
-];
 const CONTENT_STAGES = [
   {key:"pending",label:"Not Submitted",c:T.sub,bg:T.goldSoft,i:"⏳"},
   {key:"submitted",label:"Submitted for Review",c:T.info,bg:T.infoBg,i:"📤"},
@@ -220,31 +209,6 @@ const CONTENT_STAGES = [
   {key:"revision_requested",label:"Revision Requested",c:T.err,bg:T.errBg,i:"✏️"},
   {key:"live",label:"Live",c:T.ok,bg:T.okBg,i:"🟢"},
 ];
-
-// ─── DEAL PIPELINE COMPONENT ───
-const PipelineView = ({stageKeys, deals:dls, onClickDeal}) => {
-  const stages = PIPELINE_STAGES.filter(s=>stageKeys.includes(s.key));
-  const grouped = {};
-  stages.forEach(s=>grouped[s.key]=[]);
-  dls.forEach(d=>{ if(grouped[d.status]) grouped[d.status].push(d); });
-  const nonEmpty = stages.filter(s=>grouped[s.key].length>0);
-  if(nonEmpty.length===0) return <div style={{fontSize:"13px",color:T.sub,padding:"10px 0"}}>No deals in pipeline</div>;
-  return <div style={{marginBottom:"8px"}}>
-    <div style={{display:"flex",gap:"3px",marginBottom:"12px",flexWrap:"wrap"}}>
-      {stages.map(s=>{const ct=grouped[s.key].length;const cfg=STATUS_CFG[s.key]||{c:T.sub,bg:T.goldSoft,i:"?"};return <div key={s.key} style={{flex:ct>0?"1 1 auto":"0 0 auto",minWidth:ct>0?"80px":"50px",padding:"6px 10px",borderRadius:"6px",background:ct>0?cfg.bg:"transparent",border:`1px solid ${ct>0?cfg.c+"33":T.border}`,textAlign:"center",opacity:ct>0?1:.45,transition:"all .2s"}}>
-        <div style={{fontSize:"18px",fontWeight:800,color:ct>0?cfg.c:T.sub}}>{ct}</div>
-        <div style={{fontSize:"9px",fontWeight:700,color:ct>0?cfg.c:T.sub,textTransform:"uppercase",letterSpacing:".3px",lineHeight:"1.2"}}>{s.label}</div>
-      </div>;})}
-    </div>
-    {nonEmpty.map(s=>{const cfg=STATUS_CFG[s.key]||{c:T.sub,bg:T.goldSoft,i:"?"};return <div key={s.key} style={{marginBottom:"10px"}}>
-      <div style={{fontSize:"11px",fontWeight:700,color:cfg.c,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",display:"flex",alignItems:"center",gap:"5px"}}>{cfg.i} {s.label} ({grouped[s.key].length})</div>
-      {grouped[s.key].map(d=><div key={d.id} onClick={()=>onClickDeal&&onClickDeal(d)} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${cfg.c}`,borderRadius:"6px",padding:"7px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:onClickDeal?"pointer":"default",transition:"all .12s"}} onMouseEnter={e=>{if(onClickDeal)e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
-        <div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div>
-        <div style={{display:"flex",alignItems:"center",gap:"6px"}}><span style={{fontWeight:800,fontSize:"12px",color:T.gold}}>{f(d.amount)}</span><Badge s={d.status} sm/></div>
-      </div>)}
-    </div>;})}
-  </div>;
-};
 
 // ─── CONTENT DELIVERABLES PIPELINE COMPONENT ───
 const ContentPipeline = ({deals:dls, onClickDeal}) => {
@@ -2096,11 +2060,6 @@ return (
             </div>
           </Section>
 
-          {/* DEAL PIPELINE — ALL STAGES */}
-          <Section title="Deal Pipeline — All Stages" icon="📊" action={<Btn v="ghost" sm onClick={()=>setView("deals")}>View all →</Btn>}>
-            <PipelineView stageKeys={["pending","renegotiate","approved","email_sent","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","payment_requested","payment_approved","partial_paid","paid","rejected","dropped"]} deals={deals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
-          </Section>
-
           {/* CONTENT DELIVERABLES PIPELINE */}
           <Section title="Content Pipeline" icon="🎬">
             <ContentPipeline deals={deals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
@@ -2404,11 +2363,6 @@ return (
             </div>
           </Section>
 
-          {/* DEAL PIPELINE */}
-          <Section title="My Deal Pipeline" icon="📊">
-            <PipelineView stageKeys={["pending","renegotiate","approved","email_sent","shipped","delivered_prod","partial_live","live","invoice_ok","payment_requested","payment_approved","partial_paid","paid"]} deals={myDeals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
-          </Section>
-
           {/* CONTENT DELIVERABLES PIPELINE */}
           <Section title="Content Pipeline" icon="🎬">
             <ContentPipeline deals={myDeals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
@@ -2521,11 +2475,6 @@ return (
                 <div style={{fontSize:"11px",color:T.sub}}>{f(comm)} / {f(c.budget)} · {campLocked(c.id)}/{c.target} influencers</div>
               </div>;})}
             </div>
-          </Section>
-
-          {/* DEAL PIPELINE — ALL STAGES */}
-          <Section title="Deal Pipeline — All Stages" icon="📊" action={<Btn v="ghost" sm onClick={()=>setView("deals")}>View all →</Btn>}>
-            <PipelineView stageKeys={["pending","renegotiate","approved","email_sent","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","payment_requested","payment_approved","partial_paid","paid"]} deals={deals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
           </Section>
 
           {/* CONTENT PIPELINE */}
@@ -2659,10 +2608,6 @@ return (
             </div>)}
           </Section>
 
-          {/* DEAL PIPELINE — PAYMENT FOCUSED */}
-          <Section title="Deal Pipeline — Payment Stages" icon="📊">
-            <PipelineView stageKeys={["invoice_ok","disputed","payment_requested","payment_approved","partial_paid","paid","approved","email_sent","shipped","delivered_prod","live"]} deals={deals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
-          </Section>
         </>;
       })()}
 
@@ -2802,10 +2747,6 @@ return (
             </div>)}
           </Section>
 
-          {/* SHIPMENT PIPELINE */}
-          <Section title="Shipment Pipeline" icon="📊">
-            <PipelineView stageKeys={["approved","email_sent","shipped","delivered_prod"]} deals={deals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
-          </Section>
         </>;
       })()}
 

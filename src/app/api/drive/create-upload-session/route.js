@@ -1,0 +1,116 @@
+// POST /api/drive/create-upload-session
+// Initiates a Google Drive resumable upload session.
+// Client then PUTs the file bytes directly to Google's upload URL (bypassing Vercel).
+//
+// Body: {
+//   dealId, collabId, campaignName, influencerName, productLabel,
+//   deliverableId,            // null for raw clips
+//   deliverableType,          // "Reel" | "Story" | ... (ignored for raw)
+//   isRaw: boolean,
+//   fileName,                 // original name from user's machine
+//   mimeType,
+//   sizeBytes
+// }
+// Returns: { uploadUrl, finalFileName, version, parentFolderId }
+//
+// The client must then:
+//  1) PUT the file body to `uploadUrl` with the correct Content-Type
+//  2) On success, Google returns a JSON body with the new file ID
+//  3) POST /api/drive/finalize-upload with that fileId to persist to DB
+
+import { createClient } from '@supabase/supabase-js';
+import {
+  ensureDealFolderTree,
+  createResumableUploadSession,
+  buildFileName,
+  nextVersionFor,
+} from '../../../../lib/drive';
+
+export const runtime = 'nodejs';
+export const maxDuration = 30;
+
+// Service-role client — routes run on the server and need to bypass RLS
+function adminSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  return createClient(url, key, { auth: { persistSession: false } });
+}
+
+function extFromFilename(name) {
+  const m = /\.([A-Za-z0-9]+)$/.exec(name || '');
+  return m ? m[1] : '';
+}
+
+export async function POST(req) {
+  try {
+    const body = await req.json();
+    const {
+      dealId, collabId, campaignName, influencerName, productLabel,
+      deliverableId, deliverableType, isRaw, fileName, mimeType, sizeBytes,
+    } = body;
+
+    if (!dealId || !fileName) {
+      return Response.json({ ok: false, error: 'Missing dealId or fileName' }, { status: 400 });
+    }
+
+    const sb = adminSupabase();
+
+    // Ensure folder tree exists (cached after first create)
+    const { collabFolderId, rawFolderId } = await ensureDealFolderTree({
+      campaignName, influencerName, collabId, productLabel,
+    });
+    const parentFolderId = isRaw ? rawFolderId : collabFolderId;
+
+    // Compute next version
+    let version = 1;
+    let rawIndex = 1;
+    if (isRaw) {
+      const { data: existingRaw, error: rawErr } = await sb
+        .from('deliverable_files')
+        .select('id')
+        .eq('deal_id', dealId)
+        .eq('is_raw', true);
+      if (rawErr) throw new Error('DB query (raw count) failed: ' + rawErr.message);
+      rawIndex = (existingRaw?.length || 0) + 1;
+      version = 0;
+    } else {
+      const { data: existingVersions, error: vErr } = await sb
+        .from('deliverable_files')
+        .select('version')
+        .eq('deal_id', dealId)
+        .eq('deliverable_id', deliverableId || null)
+        .eq('is_raw', false);
+      if (vErr) throw new Error('DB query (version) failed: ' + vErr.message);
+      version = nextVersionFor(existingVersions);
+    }
+
+    // Canonical file name
+    const finalFileName = buildFileName({
+      collabId,
+      deliverableType,
+      version,
+      isRaw,
+      rawIndex,
+      originalExt: extFromFilename(fileName),
+    });
+
+    // Create the resumable upload session
+    const { uploadUrl } = await createResumableUploadSession({
+      parentFolderId,
+      fileName: finalFileName,
+      mimeType,
+      sizeBytes,
+    });
+
+    return Response.json({
+      ok: true,
+      uploadUrl,
+      finalFileName,
+      version,
+      parentFolderId,
+    });
+  } catch (e) {
+    console.error('create-upload-session error:', e);
+    return Response.json({ ok: false, error: e.message }, { status: 500 });
+  }
+}

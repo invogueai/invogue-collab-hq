@@ -39,6 +39,15 @@ const STATUS_CFG = {
 
 const now = () => new Date().toISOString().slice(0,16).replace("T"," ");
 const f = n => "₹"+Number(n||0).toLocaleString("en-IN");
+// Returns today's date in the user's LOCAL timezone as YYYY-MM-DD.
+// Never use new Date().toISOString().slice(0,10) for dispatch/delivery dates — it gives UTC date.
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+};
+// Normalize any stored dispatch/delivery value to a YYYY-MM-DD string for comparison.
+// Handles both legacy ISO timestamps ("2026-04-10T05:30:00.000Z") and plain dates ("2026-04-10").
+const toDateOnly = v => (v||"").slice(0,10);
 const uid = () => crypto.randomUUID();
 const genCollabId = () => "INV-" + Date.now().toString(36).toUpperCase().slice(-4) + Math.random().toString(36).toUpperCase().slice(2,4);
 
@@ -1104,7 +1113,9 @@ export default function InvogueCollabHQ() {
     if(!shipF.track) return notify("Enter tracking ID","err");
     if(shipF.track.length < 4) return notify("Tracking ID seems too short","err");
     const userName = loggedIn?.name||"You (Logistics)";
-    const ts = new Date().toISOString();
+    // Store local DATE only (no time component) so day-of comparisons are trivial and
+    // unambiguous — avoids timezone drift between dispatch and delivery checks.
+    const ts = todayLocal();
     supabase.from('shipments').insert({deal_id:sel.id,carrier:shipF.carrier,tracking_id:shipF.track,status:'in_transit',dispatched_by:userName,dispatched_at:ts}).then(({error})=>{if(error) console.error("Shipment insert failed:",error);});
     supabase.from('deals').update({status:'shipped'}).eq('id',sel.id).then(({error})=>{if(error) console.error("Dispatch save failed:",error);});
     upDeal(sel.id,{status:"shipped",ship:{track:shipF.track,carrier:shipF.carrier,st:"in_transit",dispAt:ts,dispBy:userName,delAt:null}});
@@ -1115,14 +1126,16 @@ export default function InvogueCollabHQ() {
   };
 
   const markDelivered = (d, deliveryDate, deliveryNote) => {
-    const ts = deliveryDate || new Date().toISOString();
-    if(deliveryDate && new Date(deliveryDate) > new Date(new Date().toDateString()+' 23:59:59')) return notify("Delivery date cannot be in the future","err");
-    const dispDate = d.ship?.dispAt || d.dispatched_at;
-    if(dispDate && deliveryDate && new Date(deliveryDate).toDateString() !== new Date(dispDate).toDateString() && new Date(deliveryDate) < new Date(dispDate)) return notify("Delivery date cannot be before dispatch date","err");
+    // deliveryDate arrives as YYYY-MM-DD (local) from the modal. No time component needed.
+    const delDate = toDateOnly(deliveryDate) || todayLocal();
+    if(delDate > todayLocal()) return notify("Delivery date cannot be in the future","err");
+    const dispDate = toDateOnly(d.ship?.dispAt || d.dispatched_at);
+    // Simple string compare works because both are YYYY-MM-DD. Same-day delivery is allowed.
+    if(dispDate && delDate < dispDate) return notify("Delivery date cannot be before dispatch date","err");
     const userName = loggedIn?.name||"You (Logistics)";
-    supabase.from('shipments').update({status:'delivered',delivered_at:ts}).eq('deal_id',d.id).then(({error})=>{if(error) console.error("Shipment delivered save failed:",error);});
+    supabase.from('shipments').update({status:'delivered',delivered_at:delDate}).eq('deal_id',d.id).then(({error})=>{if(error) console.error("Shipment delivered save failed:",error);});
     supabase.from('deals').update({status:'delivered_prod'}).eq('id',d.id).then(({error})=>{if(error) console.error("Delivered prod save failed:",error);});
-    upDeal(d.id,{status:"delivered_prod",ship:{...d.ship,st:"delivered",delAt:ts}});
+    upDeal(d.id,{status:"delivered_prod",ship:{...d.ship,st:"delivered",delAt:delDate}});
     addLog(d.id,userName,"Product delivered",deliveryNote||"");
     notify("Marked delivered!");
   };
@@ -1194,7 +1207,9 @@ export default function InvogueCollabHQ() {
   const dispatchReship = (deal, histIdx, trackingId, carrier) => {
     if(!trackingId) return notify("Enter tracking ID","err");
     const userName = loggedIn?.name||"You (Logistics)";
-    const ts = new Date().toISOString();
+    // Store re-dispatch as local DATE only (matches dispatch() behavior) so re-delivery
+    // date comparisons are clean string compares.
+    const ts = todayLocal();
     const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,status:"re_dispatched",reTrack:trackingId,reCarrier:carrier,reDispatchedBy:userName,reDispatchedAt:ts}:h);
     supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error) console.error("Reship dispatch save failed:",error);});
     upDeal(deal.id,{shipHistory});
@@ -1206,12 +1221,14 @@ export default function InvogueCollabHQ() {
 
   const markReshipDelivered = (deal, histIdx, deliveryDate, deliveryNote) => {
     const userName = loggedIn?.name||"You (Logistics)";
-    const ts = deliveryDate || new Date().toISOString();
-    if(deliveryDate && new Date(deliveryDate) > new Date(new Date().toDateString()+' 23:59:59')) return notify("Delivery date cannot be in the future","err");
+    // deliveryDate arrives as YYYY-MM-DD (local) from the modal. Simple string compares only.
+    const delDate = toDateOnly(deliveryDate) || todayLocal();
+    if(delDate > todayLocal()) return notify("Delivery date cannot be in the future","err");
     const reshipEntry = (deal.shipHistory||[])[histIdx];
-    const dispAt = reshipEntry?.reDispatchedAt;
-    if(dispAt && deliveryDate && new Date(deliveryDate).toDateString() !== new Date(dispAt).toDateString() && new Date(deliveryDate) < new Date(dispAt)) return notify("Delivery date cannot be before re-dispatch date","err");
-    const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,status:"re_delivered",reDeliveredAt:ts,reDeliveredBy:userName,reDeliveryNote:deliveryNote||""}:h);
+    const dispAt = toDateOnly(reshipEntry?.reDispatchedAt);
+    // Same-day re-delivery is allowed.
+    if(dispAt && delDate < dispAt) return notify("Delivery date cannot be before re-dispatch date","err");
+    const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,status:"re_delivered",reDeliveredAt:delDate,reDeliveredBy:userName,reDeliveryNote:deliveryNote||""}:h);
     supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error) console.error("Reship delivered save failed:",error);});
     upDeal(deal.id,{shipHistory});
     addLog(deal.id,userName,"Re-shipment delivered",deliveryNote||"New product delivered to influencer");
@@ -2737,7 +2754,7 @@ return (
                   <div style={{fontSize:"13px",marginTop:"2px"}}>{h.reCarrier}: <span style={{color:T.info,fontWeight:700}}>{h.reTrack}</span></div>
                   <div style={{fontSize:"11px",color:T.sub}}>Dispatched: {new Date(h.reDispatchedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div>
                 </div>
-                <Btn v="ok" onClick={()=>{setSel(deal);setReshipDelivF({date:new Date().toISOString().slice(0,10),note:"",histIdx:h.histIdx});setModal("markReshipDelivered")}}>✓ Mark Delivered</Btn>
+                <Btn v="ok" onClick={()=>{setSel(deal);setReshipDelivF({date:todayLocal(),note:"",histIdx:h.histIdx});setModal("markReshipDelivered")}}>✓ Mark Delivered</Btn>
               </div>;
             })}
           </Section>}
@@ -2751,7 +2768,7 @@ return (
                 <div style={{fontSize:"13px",marginTop:"2px"}}>{d.ship.carrier}: <span style={{color:T.info,fontWeight:700}}>{d.ship.track}</span></div>
                 <div style={{fontSize:"11px",color:T.sub}}>Dispatched: {d.ship.dispAt}</div>
               </div>
-              <Btn v="ok" onClick={()=>{setSel(d);setDeliveryF({date:new Date().toISOString().slice(0,10),note:""});setModal("markDelivered")}}>✓ Mark Delivered</Btn>
+              <Btn v="ok" onClick={()=>{setSel(d);setDeliveryF({date:todayLocal(),note:""});setModal("markDelivered")}}>✓ Mark Delivered</Btn>
             </div>)}
           </Section>
 
@@ -3363,7 +3380,7 @@ return (
               const deal = deals.find(d=>d.id===h.dealId);
               return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.purple,fontWeight:600}}>· Re-shipment</span></div><div style={{fontSize:"11px",color:T.sub}}>{h.reCarrier}: <span style={{color:T.info,fontWeight:700}}>{h.reTrack}</span></div></div>
-                {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(deal);setReshipDelivF({date:new Date().toISOString().slice(0,10),note:"",histIdx:h.histIdx});setModal("markReshipDelivered")}}>✓ Delivered</Btn>}
+                {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(deal);setReshipDelivF({date:todayLocal(),note:"",histIdx:h.histIdx});setModal("markReshipDelivered")}}>✓ Delivered</Btn>}
               </div>;
             })}
           </Section>}
@@ -3372,7 +3389,7 @@ return (
             {inTransit.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"12px"}}>None in transit</div>}
             {inTransit.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} · {d.products?d.products.map(p=>p.name).join(", "):d.product}</div><div style={{fontSize:"11px",color:T.sub}}>📦 {d.ship.carrier}: <span style={{fontWeight:700,color:T.info}}>{d.ship.track}</span> · {d.ship.dispAt}</div></div>
-              {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(d);setDeliveryF({date:new Date().toISOString().slice(0,10),note:""});setModal("markDelivered")}}>✓ Delivered</Btn>}
+              {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(d);setDeliveryF({date:todayLocal(),note:""});setModal("markDelivered")}}>✓ Delivered</Btn>}
             </div>)}
           </Section>
           <Section title="Delivered" icon="✓">
@@ -3973,11 +3990,11 @@ return (
             <div><b>Product:</b> {sel.product}</div>
             <div><b>Carrier:</b> {sel.ship?.carrier}: {sel.ship?.track}</div>
           </div>
-          <Field label="Delivery Date *"><input value={deliveryF.date} onChange={e=>setDeliveryF({...deliveryF,date:e.target.value})} type="date" min={sel.ship?.dispAt?.slice(0,10)||""} max={new Date().toISOString().slice(0,10)} style={{width:"100%",padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"14px",fontFamily:"Archivo,sans-serif",color:T.text,outline:"none"}}/></Field>
+          <Field label="Delivery Date *"><input value={deliveryF.date} onChange={e=>setDeliveryF({...deliveryF,date:e.target.value})} type="date" min={toDateOnly(sel.ship?.dispAt)} max={todayLocal()} style={{width:"100%",padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"14px",fontFamily:"Archivo,sans-serif",color:T.text,outline:"none"}}/></Field>
           <Field label="Note (optional)"><Inp value={deliveryF.note} onChange={e=>setDeliveryF({...deliveryF,note:e.target.value})} placeholder="Any delivery notes..."/></Field>
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}>
             <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
-            <Btn v="ok" onClick={()=>{if(!deliveryF.date){notify("Delivery date required","err");return;}markDelivered(sel,deliveryF.date+"T12:00:00",deliveryF.note);setModal(null)}}>✅ Mark Delivered</Btn>
+            <Btn v="ok" onClick={()=>{if(!deliveryF.date){notify("Delivery date required","err");return;}markDelivered(sel,deliveryF.date,deliveryF.note);setModal(null)}}>✅ Mark Delivered</Btn>
           </div>
         </>}
       </Modal>
@@ -3986,7 +4003,7 @@ return (
       <Modal open={modal==="markReshipDelivered"} onClose={()=>setModal(null)} title={`Mark Re-shipment Delivered — ${sel?.inf}`} w={440}>
         {sel&&reshipDelivF.histIdx!=null&&(()=>{
           const reship = (sel.shipHistory||[])[reshipDelivF.histIdx];
-          const reDispDate = reship?.reDispatchedAt?.slice(0,10)||"";
+          const reDispDate = toDateOnly(reship?.reDispatchedAt);
           return <>
             <div style={{padding:"10px",background:T.purpleBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px"}}>
               <div style={{fontWeight:700,color:T.purple,fontSize:"11px",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Barlow,sans-serif"}}>📦 Re-shipment Info</div>
@@ -3996,12 +4013,12 @@ return (
               <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>Re-dispatched: {reDispDate}</div>
             </div>
             <Field label="Delivery Date *">
-              <input value={reshipDelivF.date} onChange={e=>setReshipDelivF({...reshipDelivF,date:e.target.value})} type="date" min={reDispDate} max={new Date().toISOString().slice(0,10)} style={{width:"100%",padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"14px",fontFamily:"Archivo,sans-serif",color:T.text,outline:"none"}}/>
+              <input value={reshipDelivF.date} onChange={e=>setReshipDelivF({...reshipDelivF,date:e.target.value})} type="date" min={reDispDate} max={todayLocal()} style={{width:"100%",padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"14px",fontFamily:"Archivo,sans-serif",color:T.text,outline:"none"}}/>
             </Field>
             <Field label="Note (optional)"><Inp value={reshipDelivF.note} onChange={e=>setReshipDelivF({...reshipDelivF,note:e.target.value})} placeholder="Any delivery notes..."/></Field>
             <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}>
               <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
-              <Btn v="ok" onClick={()=>{if(!reshipDelivF.date){notify("Delivery date required","err");return;}markReshipDelivered(sel,reshipDelivF.histIdx,reshipDelivF.date+"T12:00:00",reshipDelivF.note)}}>✅ Mark Delivered</Btn>
+              <Btn v="ok" onClick={()=>{if(!reshipDelivF.date){notify("Delivery date required","err");return;}markReshipDelivered(sel,reshipDelivF.histIdx,reshipDelivF.date,reshipDelivF.note)}}>✅ Mark Delivered</Btn>
             </div>
           </>;
         })()}

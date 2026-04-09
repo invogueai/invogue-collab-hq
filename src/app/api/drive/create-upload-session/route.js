@@ -94,12 +94,22 @@ export async function POST(req) {
       originalExt: extFromFilename(fileName),
     });
 
+    // Origin must be forwarded to Google so the session URL is CORS-whitelisted
+    // for the browser PUT that follows. Fall back to the request's own Origin
+    // header if NEXT_PUBLIC_SITE_URL isn't set.
+    const originHeader =
+      req.headers.get('origin') ||
+      (req.headers.get('referer') ? new URL(req.headers.get('referer')).origin : null) ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      null;
+
     // Create the resumable upload session
     const { uploadUrl } = await createResumableUploadSession({
       parentFolderId,
       fileName: finalFileName,
       mimeType,
       sizeBytes,
+      origin: originHeader,
     });
 
     return Response.json({

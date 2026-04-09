@@ -918,6 +918,14 @@ export default function InvogueCollabHQ() {
     });
   };
 
+  const confirmAndResendEmail = d => {
+    setConfirmAction({
+      title:"Resend Confirmation Email",
+      msg:`Resend the collaboration confirmation to ${d.inf} at ${d.email||"—"}? The email will reflect the latest deal details.`,
+      onConfirm:()=>{sendEmail(d, true);setConfirmAction(null);}
+    });
+  };
+
   const [renegF, setRenegF] = useState(null); // {amount,note,dels} for renegotiation
   const [resubmitF, setResubmitF] = useState(null); // negotiator accepting/revising a renegotiation
 
@@ -1052,13 +1060,14 @@ export default function InvogueCollabHQ() {
 </body></html>`;
   };
 
-  const sendEmail = async d => {
+  const sendEmail = async (d, isResend=false) => {
     if(!d.email) return notify("Influencer email is missing. Add it to the deal first.","err");
     const userName = loggedIn?.name||"Negotiator";
     const html = buildConfirmationEmailHTML(d);
-    const subject = `Collaboration Confirmation — Invogue × ${d.inf} (${d.collabId||"New Deal"})`;
+    const subjectPrefix = isResend ? "Collaboration Confirmation (Resent)" : "Collaboration Confirmation";
+    const subject = `${subjectPrefix} — Invogue × ${d.inf} (${d.collabId||"New Deal"})`;
 
-    notify("Sending email...","info");
+    notify(isResend ? "Resending email..." : "Sending email...","info");
     try {
       const resp = await fetch('/api/send-email', {
         method:'POST',
@@ -1072,12 +1081,19 @@ export default function InvogueCollabHQ() {
       }
 
       const ts = new Date().toISOString();
-      supabase.from('deals').update({status:'email_sent',email_sent_at:ts}).eq('id',d.id).then(({error})=>{if(error) console.error("Email sent save failed:",error);});
-      upDeal(d.id,{status:"email_sent"});
-      addLog(d.id, userName, "Confirmation email sent", `Sent to ${d.email} · Resend ID: ${data.id||"—"}`);
+      // Only advance status on the FIRST send (from "approved" → "email_sent").
+      // On resends from later states (shipped, live, etc.), keep the current status.
+      if(!isResend && d.status === "approved") {
+        supabase.from('deals').update({status:'email_sent',email_sent_at:ts}).eq('id',d.id).then(({error})=>{if(error) console.error("Email sent save failed:",error);});
+        upDeal(d.id,{status:"email_sent"});
+      } else {
+        // Just update the email_sent_at timestamp for audit
+        supabase.from('deals').update({email_sent_at:ts}).eq('id',d.id).then(({error})=>{if(error) console.error("Email resend timestamp save failed:",error);});
+      }
+      addLog(d.id, userName, isResend ? "Confirmation email resent" : "Confirmation email sent", `Sent to ${d.email} · Resend ID: ${data.id||"—"}`);
       setSel(null);
       setModal(null);
-      notify(`Email sent to ${d.email}!`);
+      notify(isResend ? `Email resent to ${d.email}!` : `Email sent to ${d.email}!`);
     } catch(e) {
       console.error("Email network error:",e);
       notify("Network error while sending email","err");
@@ -3918,6 +3934,7 @@ return (
                 <Btn v="gold" onClick={()=>openResubmitModal(sel)}>↩ Review & Resubmit</Btn>
               </>}
               {(role==="negotiator"||role==="admin")&&sel.status==="approved"&&<Btn v="gold" onClick={()=>sendEmail(sel)}>✉ Send Confirmation Email</Btn>}
+              {(role==="negotiator"||role==="admin")&&["email_sent","shipped","delivered_prod","partial_live","live","invoice_ok","disputed"].includes(sel.status)&&<Btn v="ghost" sm onClick={()=>confirmAndResendEmail(sel)}>🔁 Resend Confirmation Email</Btn>}
               {(role==="negotiator"||role==="admin")&&["pending","renegotiate","approved","email_sent","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
               {(role==="logistics"||role==="admin")&&["approved","email_sent"].includes(sel.status)&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC"});setModal("ship")}}>📦 Dispatch</Btn>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&<Btn v="primary" onClick={()=>setModal("collectPayment")}>{sel.paymentFormSent?"✅ Link Sent — Resend":"📩 Send Invoice Creator"}</Btn>}

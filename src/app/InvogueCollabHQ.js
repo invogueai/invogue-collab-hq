@@ -112,7 +112,7 @@ async function loadFromSupabase() {
     products:d.products||(d.products_json?JSON.parse(d.products_json):[])||[],
     paymentFormSent:d.payment_form_sent||false, paymentFormSentAt:d.payment_form_sent_at||null,
     invoiceGenerated:d.invoice_generated||false, invoiceNumber:d.invoice_number||null, invoiceDate:d.invoice_date||null,
-    inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note}:null,
+    inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
     shipHistory:d.ship_history||[],
     dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
     ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
@@ -316,6 +316,7 @@ export default function InvogueCollabHQ() {
   // New state variables for enhanced functionality
   const [confirmAction, setConfirmAction] = useState(null); // {title,msg,onConfirm}
   const [deliveryF, setDeliveryF] = useState({date:"",note:""}); // for marking delivered
+  const [reshipDelivF, setReshipDelivF] = useState({date:"",note:"",histIdx:null}); // for marking re-shipment delivered
   // Logistics: Pickup & Re-shipment
   const [pickupF, setPickupF] = useState({reason:"Product Change",note:""});
   const [reshipF, setReshipF] = useState({products:[],note:"",newAddress:""});
@@ -431,7 +432,7 @@ export default function InvogueCollabHQ() {
             appBy:d.approved_by, appAt:d.approved_at,
             email:d.email||"", payment_terms:d.payment_terms||"", pan_number:d.pan_number||"", pan_name:d.pan_name||"",
             products:d.products||(d.products_json?JSON.parse(d.products_json):[])||[],
-            inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note}:null,
+            inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
             shipHistory:d.ship_history||[],
             dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
             ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
@@ -1105,14 +1106,19 @@ export default function InvogueCollabHQ() {
     notify("Re-shipment dispatched!");
   };
 
-  const markReshipDelivered = (deal, histIdx) => {
+  const markReshipDelivered = (deal, histIdx, deliveryDate, deliveryNote) => {
     const userName = loggedIn?.name||"You (Logistics)";
-    const ts = new Date().toISOString();
-    const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,status:"re_delivered",reDeliveredAt:ts,reDeliveredBy:userName}:h);
+    const ts = deliveryDate || new Date().toISOString();
+    if(deliveryDate && new Date(deliveryDate) > new Date(new Date().toDateString()+' 23:59:59')) return notify("Delivery date cannot be in the future","err");
+    const reshipEntry = (deal.shipHistory||[])[histIdx];
+    const dispAt = reshipEntry?.reDispatchedAt;
+    if(dispAt && deliveryDate && new Date(deliveryDate).toDateString() !== new Date(dispAt).toDateString() && new Date(deliveryDate) < new Date(dispAt)) return notify("Delivery date cannot be before re-dispatch date","err");
+    const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,status:"re_delivered",reDeliveredAt:ts,reDeliveredBy:userName,reDeliveryNote:deliveryNote||""}:h);
     supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error) console.error("Reship delivered save failed:",error);});
     upDeal(deal.id,{shipHistory});
-    addLog(deal.id,userName,"Re-shipment delivered","New product delivered to influencer");
+    addLog(deal.id,userName,"Re-shipment delivered",deliveryNote||"New product delivered to influencer");
     setSel(prev=>prev?{...prev,shipHistory}:null);
+    setModal(null);
     notify("Re-shipment marked as delivered!");
   };
 
@@ -1220,12 +1226,16 @@ export default function InvogueCollabHQ() {
     const userName = loggedIn?.name||"You";
     const panUpper = invoiceF.panNumber.toUpperCase();
 
+    // Always save the invoice link in invoice_note so Finance can see it.
+    // For mismatches, prefix with a dispute marker so it's still human-readable.
+    const noteToSave = match ? invoiceF.notes : `⚠ MISMATCH | LINK: ${invoiceF.notes}`;
+
     supabase.from('deals').update({
       status:newStatus,
       invoice_amount:+invoiceF.amount,
       invoice_match:match,
       invoice_at:ts,
-      invoice_note:match?null:"Invoice amount does not match locked amount",
+      invoice_note:noteToSave,
       invoice_generated:true,
       invoice_number:invNum,
       invoice_date:invDate,
@@ -1235,7 +1245,7 @@ export default function InvogueCollabHQ() {
 
     upDeal(deal.id,{
       status:newStatus,
-      inv:{amount:+invoiceF.amount,match,at:ts,note:match?"":"Invoice amount does not match locked amount",link:invoiceF.notes},
+      inv:{amount:+invoiceF.amount,match,at:ts,note:noteToSave,link:invoiceF.notes},
       invoiceGenerated:true,
       invoiceNumber:invNum,
       invoiceDate:invDate,
@@ -2440,7 +2450,9 @@ return (
             {pendingPayments.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>No invoices pending payment</div>}
             {pendingPayments.map(d=>{
               const paid=totalPaid(d),rem=remaining(d);
-              const invLink=d.inv?.link||d.invoice_note||"";
+              const rawLink=d.inv?.link||d.inv?.note||d.invoice_note||"";
+              // Strip mismatch prefix if present (format: "⚠ MISMATCH | LINK: <url>")
+              const invLink=rawLink.includes("LINK: ")?rawLink.split("LINK: ")[1]:rawLink;
               return <div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.ok}`,borderRadius:"8px",padding:"14px 16px",marginBottom:"10px"}}>
                 {/* Header: Influencer + Campaign + Action */}
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
@@ -2514,7 +2526,7 @@ return (
           {/* RECENT PAYMENTS */}
           <Section title="Recently Completed" icon="✅">
             {recentPaid.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>No completed payments yet</div>}
-            {recentPaid.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",opacity:.7}}>
+            {recentPaid.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",opacity:.85,cursor:"pointer",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.opacity="1";e.currentTarget.style.borderColor=T.maroon}} onMouseLeave={e=>{e.currentTarget.style.opacity=".85";e.currentTarget.style.borderColor=T.border}}>
               <span><b>{d.inf}</b> · {getCamp(d.cid)?.name||""}</span>
               <span style={{color:T.ok,fontWeight:700}}>⭐ {f(d.amount)} paid</span>
             </div>)}
@@ -2637,7 +2649,7 @@ return (
                   <div style={{fontSize:"13px",marginTop:"2px"}}>{h.reCarrier}: <span style={{color:T.info,fontWeight:700}}>{h.reTrack}</span></div>
                   <div style={{fontSize:"11px",color:T.sub}}>Dispatched: {new Date(h.reDispatchedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div>
                 </div>
-                <Btn v="ok" onClick={()=>{markReshipDelivered(deal,h.histIdx)}}>✓ Mark Delivered</Btn>
+                <Btn v="ok" onClick={()=>{setSel(deal);setReshipDelivF({date:new Date().toISOString().slice(0,10),note:"",histIdx:h.histIdx});setModal("markReshipDelivered")}}>✓ Mark Delivered</Btn>
               </div>;
             })}
           </Section>}
@@ -3267,7 +3279,7 @@ return (
               const deal = deals.find(d=>d.id===h.dealId);
               return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.purple,fontWeight:600}}>· Re-shipment</span></div><div style={{fontSize:"11px",color:T.sub}}>{h.reCarrier}: <span style={{color:T.info,fontWeight:700}}>{h.reTrack}</span></div></div>
-                {role==="logistics"&&<Btn v="ok" sm onClick={()=>markReshipDelivered(deal,h.histIdx)}>✓ Delivered</Btn>}
+                {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(deal);setReshipDelivF({date:new Date().toISOString().slice(0,10),note:"",histIdx:h.histIdx});setModal("markReshipDelivered")}}>✓ Delivered</Btn>}
               </div>;
             })}
           </Section>}
@@ -3816,6 +3828,31 @@ return (
             <Btn v="ok" onClick={()=>{if(!deliveryF.date){notify("Delivery date required","err");return;}markDelivered(sel,deliveryF.date+"T12:00:00",deliveryF.note);setModal(null)}}>✅ Mark Delivered</Btn>
           </div>
         </>}
+      </Modal>
+
+      {/* MARK RE-SHIPMENT DELIVERED MODAL */}
+      <Modal open={modal==="markReshipDelivered"} onClose={()=>setModal(null)} title={`Mark Re-shipment Delivered — ${sel?.inf}`} w={440}>
+        {sel&&reshipDelivF.histIdx!=null&&(()=>{
+          const reship = (sel.shipHistory||[])[reshipDelivF.histIdx];
+          const reDispDate = reship?.reDispatchedAt?.slice(0,10)||"";
+          return <>
+            <div style={{padding:"10px",background:T.purpleBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px"}}>
+              <div style={{fontWeight:700,color:T.purple,fontSize:"11px",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Barlow,sans-serif"}}>📦 Re-shipment Info</div>
+              <div><b>Carrier:</b> {reship?.reCarrier}: {reship?.reTrack}</div>
+              {(reship?.products||[]).length>0&&<div><b>Products:</b> {reship.products.map(p=>p.name).join(", ")}</div>}
+              {reship?.newAddress&&<div><b>New Address:</b> {reship.newAddress}</div>}
+              <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>Re-dispatched: {reDispDate}</div>
+            </div>
+            <Field label="Delivery Date *">
+              <input value={reshipDelivF.date} onChange={e=>setReshipDelivF({...reshipDelivF,date:e.target.value})} type="date" min={reDispDate} max={new Date().toISOString().slice(0,10)} style={{width:"100%",padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"14px",fontFamily:"Archivo,sans-serif",color:T.text,outline:"none"}}/>
+            </Field>
+            <Field label="Note (optional)"><Inp value={reshipDelivF.note} onChange={e=>setReshipDelivF({...reshipDelivF,note:e.target.value})} placeholder="Any delivery notes..."/></Field>
+            <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}>
+              <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
+              <Btn v="ok" onClick={()=>{if(!reshipDelivF.date){notify("Delivery date required","err");return;}markReshipDelivered(sel,reshipDelivF.histIdx,reshipDelivF.date+"T12:00:00",reshipDelivF.note)}}>✅ Mark Delivered</Btn>
+            </div>
+          </>;
+        })()}
       </Modal>
 
       {/* PICKUP REQUEST MODAL — Negotiator requests product pickup */}

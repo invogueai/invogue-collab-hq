@@ -265,6 +265,7 @@ export async function createResumableUploadSession({
   fileName,
   mimeType,
   sizeBytes,
+  origin, // browser origin that will PUT the bytes — Google uses this to whitelist CORS on the session URL
 }) {
   const token = await getAccessToken();
   const metadata = {
@@ -277,14 +278,20 @@ export async function createResumableUploadSession({
     supportsAllDrives: 'true',
     fields: 'id,name,mimeType,size,webViewLink,parents',
   });
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json; charset=UTF-8',
+    'X-Upload-Content-Type': metadata.mimeType,
+    ...(sizeBytes ? { 'X-Upload-Content-Length': String(sizeBytes) } : {}),
+  };
+  // CORS handshake: tell Google this session will be used from a browser at `origin`.
+  // Without this, the browser PUT succeeds on Google's side but the response has no
+  // Access-Control-Allow-Origin header, so the browser blocks the response body →
+  // XHR fires onerror ("Network error") even though the file was uploaded.
+  if (origin) headers['Origin'] = origin;
   const resp = await fetch(`${DRIVE_UPLOAD}/files?${params.toString()}`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json; charset=UTF-8',
-      'X-Upload-Content-Type': metadata.mimeType,
-      ...(sizeBytes ? { 'X-Upload-Content-Length': String(sizeBytes) } : {}),
-    },
+    headers,
     body: JSON.stringify(metadata),
   });
   if (!resp.ok) {

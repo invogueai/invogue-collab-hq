@@ -306,6 +306,11 @@ export default function InvogueCollabHQ() {
   const [attachmentDesc, setAttachmentDesc] = useState({}); // {delId: description}
   const [revisionFeedback, setRevisionFeedback] = useState({}); // {delId: feedback text}
 
+  // Google Drive resource management
+  const [driveFiles, setDriveFiles] = useState({deliverables:{}, raw:[]}); // for the currently-open deal
+  const [driveUploading, setDriveUploading] = useState({}); // {uploadKey: {progress: 0-100, name: string}}
+  const [driveConnStatus, setDriveConnStatus] = useState(null); // {connected, email, connectedAt} or null while loading
+
   // Payment details collection & Invoice generation
   const [invoiceF, setInvoiceF] = useState({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:"",amount:"",panNumber:""});
 
@@ -454,6 +459,40 @@ export default function InvogueCollabHQ() {
     setDealsPage(0);
   },[tab,campFilter]);
 
+  // Load Google Drive files whenever the detail modal opens for a different deal.
+  // `loadDriveFiles` is referenced but not yet declared here — it's defined further down with useCallback.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(()=>{
+    if(sel?.id) { loadDriveFiles(sel.id); }
+    else setDriveFiles({deliverables:{}, raw:[]});
+  },[sel?.id]);
+
+  // Check Drive connection status when user logs in, and listen for OAuth callback postMessage.
+  useEffect(()=>{
+    if(!loggedIn) { setDriveConnStatus(null); return; }
+    let alive = true;
+    fetch('/api/drive/oauth/status').then(r=>r.json()).then(d=>{
+      if(alive && d.ok) setDriveConnStatus({connected:!!d.connected, email:d.email, connectedAt:d.connectedAt});
+    }).catch(()=>{});
+    const onMsg = e => {
+      if(e.data?.type==='drive_oauth_done') {
+        fetch('/api/drive/oauth/status').then(r=>r.json()).then(d=>{
+          if(d.ok) setDriveConnStatus({connected:!!d.connected, email:d.email, connectedAt:d.connectedAt});
+        });
+      }
+    };
+    window.addEventListener('message', onMsg);
+    return () => { alive = false; window.removeEventListener('message', onMsg); };
+  },[loggedIn]);
+
+  const connectGoogleDrive = () => {
+    // Open OAuth in a popup — the callback posts a message back and we refresh the status
+    const w = 540, h = 680;
+    const left = window.screenX + (window.outerWidth - w)/2;
+    const top = window.screenY + (window.outerHeight - h)/2;
+    window.open('/api/drive/oauth/start', 'drive_oauth', `width=${w},height=${h},left=${left},top=${top}`);
+  };
+
   // ── Login handler ──
   const handleLogin = async () => {
     setLoginErr("");
@@ -490,6 +529,102 @@ export default function InvogueCollabHQ() {
     setDeals(ds=>ds.map(d=>d.id===id?{...d,logs:[...d.logs,{t:ts,u:user,a:action,d:detail}]}:d));
     supabase.from('audit_log').insert({deal_id:id,user_name:user,action,detail,created_at:ts}).then(({error})=>{if(error) console.error("Audit log insert failed:",error);});
   },[]);
+
+  // ── Google Drive: resource management layer ──
+  // Loads all files uploaded for a given deal, grouped as { deliverables: {[delId]: [rows]}, raw: [rows] }
+  const loadDriveFiles = useCallback(async (dealId) => {
+    if(!dealId) return;
+    try {
+      const resp = await fetch(`/api/drive/list?dealId=${encodeURIComponent(dealId)}`);
+      const data = await resp.json();
+      if(!resp.ok || !data.ok) { console.error("loadDriveFiles:", data.error); return; }
+      setDriveFiles({deliverables: data.deliverables || {}, raw: data.raw || []});
+    } catch(e) { console.error("loadDriveFiles failed:", e); }
+  }, []);
+
+  // Resumable upload directly to Google Drive, bypassing Vercel's body size limit.
+  // Shows per-upload progress via XHR so the user sees something happening on big video files.
+  const uploadDriveFile = useCallback(async ({deal, deliverable, isRaw, file}) => {
+    if(!deal || !file) return null;
+    const uploadKey = `${deal.id}:${deliverable?.id || 'raw'}:${Date.now()}`;
+    const setProgress = pct => setDriveUploading(prev => ({...prev, [uploadKey]: {progress: pct, name: file.name}}));
+    const clearProgress = () => setDriveUploading(prev => { const copy = {...prev}; delete copy[uploadKey]; return copy; });
+    setProgress(0);
+    try {
+      const campaign = campaigns.find(c => c.id === deal.cid);
+      const productLabel = deal.products ? deal.products.map(p=>p.name).join(", ") : (deal.product || "");
+      const initResp = await fetch('/api/drive/create-upload-session', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          dealId: deal.id,
+          collabId: deal.collabId,
+          campaignName: campaign?.name || 'Unassigned Campaign',
+          influencerName: deal.inf,
+          productLabel,
+          deliverableId: deliverable?.id || null,
+          deliverableType: deliverable?.type || null,
+          isRaw: !!isRaw,
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          sizeBytes: file.size,
+        }),
+      });
+      const initData = await initResp.json();
+      if(!initResp.ok || !initData.ok) throw new Error(initData.error || 'Could not start upload');
+
+      // PUT the file body directly to Google Drive's resumable URL
+      const driveFileId = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', initData.uploadUrl, true);
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+        xhr.upload.onprogress = e => {
+          if(e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100));
+        };
+        xhr.onload = () => {
+          if(xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const body = JSON.parse(xhr.responseText);
+              resolve(body.id);
+            } catch(e) { reject(new Error('Upload succeeded but response was not JSON')); }
+          } else reject(new Error(`Upload failed: HTTP ${xhr.status} — ${xhr.responseText?.slice(0,200)}`));
+        };
+        xhr.onerror = () => reject(new Error('Network error during upload'));
+        xhr.send(file);
+      });
+
+      // Persist the row to Supabase
+      const finResp = await fetch('/api/drive/finalize-upload', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          dealId: deal.id,
+          deliverableId: deliverable?.id || null,
+          isRaw: !!isRaw,
+          version: initData.version,
+          driveFileId,
+          driveFolderId: initData.parentFolderId,
+          fileName: initData.finalFileName,
+          originalName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          sizeBytes: file.size,
+          uploadedBy: loggedIn?.name || 'Unknown',
+        }),
+      });
+      const finData = await finResp.json();
+      if(!finResp.ok || !finData.ok) throw new Error(finData.error || 'Could not save file record');
+
+      notify(isRaw ? `Raw clip uploaded (${file.name})` : `Uploaded ${initData.finalFileName}`);
+      clearProgress();
+      await loadDriveFiles(deal.id);
+      return finData.file;
+    } catch(e) {
+      console.error('uploadDriveFile error:', e);
+      notify('Upload failed: ' + e.message, 'err');
+      clearProgress();
+      return null;
+    }
+  }, [campaigns, loggedIn, loadDriveFiles]);
 
   const totalPaid = d => (d.pays||[]).reduce((s,p)=>s+p.amount,0);
   const remaining = d => d.amount - totalPaid(d);
@@ -1964,6 +2099,23 @@ return (
     })()}
 
     <div style={{padding:"20px 28px",maxWidth:"1320px",margin:"0 auto"}}>
+
+      {/* Google Drive connection banner — shows when Drive isn't connected yet.
+          Only shows for roles that actually need to upload or review files. */}
+      {driveConnStatus && !driveConnStatus.connected && ["admin","negotiator","approver"].includes(role) &&
+        <div style={{background:"#3a2a0d",border:"1px solid #78350f",borderLeft:`3px solid ${T.gold}`,borderRadius:"6px",padding:"12px 16px",marginBottom:"14px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px"}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:"13px",fontWeight:700,color:T.gold}}>📁 Google Drive not connected</div>
+            <div style={{fontSize:"12px",color:"#b6a48b",marginTop:"2px"}}>Connect your @invogue.shop account to upload deliverables and raw clips. You'll only need to do this once.</div>
+          </div>
+          {role==="admin"&&<Btn v="gold" sm onClick={connectGoogleDrive}>Connect Google Drive</Btn>}
+        </div>}
+
+      {/* Google Drive connected — subtle confirmation (only for admin) */}
+      {driveConnStatus && driveConnStatus.connected && role==="admin" &&
+        <div style={{fontSize:"11px",color:T.sub,marginBottom:"8px",display:"flex",alignItems:"center",gap:"6px"}}>
+          <span style={{color:T.ok}}>●</span> Drive connected as <b style={{color:T.text}}>{driveConnStatus.email}</b>
+        </div>}
 
       {/* ═══════════════════════════════════════════════════════
           ADMIN DASHBOARD — Super access, full control
@@ -3780,6 +3932,9 @@ return (
                 const canSubmit = (role==="negotiator"||role==="admin") && (dl.st==="pending"||dl.st==="revision_requested") && productDelivered && !["pending","renegotiate","rejected"].includes(sel.status);
                 const canReview = (role==="approver"||role==="admin") && dl.st==="submitted";
                 const canMarkLive = (role==="negotiator"||role==="admin") && dl.st==="approved";
+                const delFiles = driveFiles.deliverables?.[dl.id] || [];
+                const latestFile = delFiles[0]; // already sorted version desc
+                const activeUploads = Object.entries(driveUploading).filter(([k])=>k.startsWith(`${sel.id}:${dl.id}:`));
                 return <div key={i} style={{background:T.surface,border:`1px solid ${dl.st==="revision_requested"?T.err+"33":T.border}`,borderRadius:"6px",padding:"12px",marginBottom:"8px"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:canSubmit||canReview||canMarkLive?"10px":"0"}}>
                     <div style={{flex:1}}>
@@ -3816,19 +3971,45 @@ return (
                     })}
                   </div>}
 
+                  {/* Files & Versions — shows all uploaded versions for this deliverable */}
+                  {(delFiles.length>0||activeUploads.length>0)&&<div style={{background:T.surfaceAlt,borderRadius:"4px",padding:"10px 12px",marginBottom:"8px"}}>
+                    <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>Uploaded Files ({delFiles.length} version{delFiles.length===1?"":"s"})</div>
+                    {delFiles.map(ff=><div key={ff.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"12px",borderBottom:`1px dashed ${T.border}`}}>
+                      <span style={{background:T.info+"22",color:T.info,fontSize:"10px",fontWeight:800,padding:"2px 6px",borderRadius:"4px"}}>v{ff.version}</span>
+                      <span style={{flex:1,fontFamily:"ui-monospace,monospace",color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ff.file_name}</span>
+                      <span style={{color:T.faint,fontSize:"10px"}}>{ff.size_bytes?(ff.size_bytes/1048576).toFixed(1)+" MB":""}</span>
+                      {ff.web_view_link&&<a href={ff.web_view_link} target="_blank" rel="noopener noreferrer" style={{color:T.info,fontSize:"11px",fontWeight:700,textDecoration:"none"}}>Open ↗</a>}
+                    </div>)}
+                    {activeUploads.map(([k,u])=><div key={k} style={{padding:"4px 0",fontSize:"12px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"3px"}}><span style={{color:T.sub}}>⏫ {u.name}</span><span style={{color:T.info,fontWeight:700}}>{u.progress}%</span></div>
+                      <div style={{height:"4px",background:T.border,borderRadius:"2px",overflow:"hidden"}}><div style={{height:"100%",width:u.progress+"%",background:T.info,transition:"width .2s"}}/></div>
+                    </div>)}
+                  </div>}
+
                   {/* Negotiator: Submit content for review */}
                   {canSubmit&&<div style={{background:T.surfaceAlt,borderRadius:"4px",padding:"10px 12px"}}>
                     <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>{dl.st==="revision_requested"?"Resubmit Revised Content":"Submit Content for Review"}</div>
-                    <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
-                      <div style={{flex:1}}><Inp value={url} onChange={e=>setDeliverableLinkF({...deliverableLinkF,[dl.id]:e.target.value})} placeholder="Content URL or link *"/></div>
-                      <Btn v="primary" sm onClick={()=>submitContentForReview(sel,i,url)}>Submit for Review</Btn>
+                    <div style={{display:"flex",gap:"6px",alignItems:"center",marginBottom:"6px"}}>
+                      <div style={{flex:1}}><Inp value={url} onChange={e=>setDeliverableLinkF({...deliverableLinkF,[dl.id]:e.target.value})} placeholder="Content URL (Instagram, Drive link, etc.) *"/></div>
+                      <Btn v="primary" sm onClick={()=>submitContentForReview(sel,i,url||latestFile?.web_view_link||"")}>Submit for Review</Btn>
                     </div>
+                    <label style={{display:"inline-block",cursor:"pointer"}}>
+                      <input type="file" style={{display:"none"}} accept="image/*,video/*,.mp4,.mov,.jpg,.jpeg,.png,.gif,.webp,.mkv,.webm" onChange={async e=>{
+                        const file = e.target.files?.[0]; e.target.value='';
+                        if(!file) return;
+                        const uploaded = await uploadDriveFile({deal:sel, deliverable:dl, isRaw:false, file});
+                        if(uploaded?.web_view_link) setDeliverableLinkF({...deliverableLinkF,[dl.id]:uploaded.web_view_link});
+                      }}/>
+                      <span style={{fontSize:"11px",color:T.info,fontWeight:700,textDecoration:"underline",cursor:"pointer"}}>⬆ Upload {delFiles.length>0?`v${(delFiles[0]?.version||0)+1}`:"file"} to Drive</span>
+                    </label>
+                    <span style={{fontSize:"10px",color:T.faint,marginLeft:"10px"}}>Files go to Drive → Campaign → Influencer → {sel.collabId||"Collab"}. Keeps all versions.</span>
                   </div>}
 
                   {/* Manager: Review & approve or request revision */}
                   {canReview&&<div style={{background:T.purpleBg,borderRadius:"4px",padding:"10px 12px"}}>
                     <div style={{fontSize:"11px",fontWeight:700,color:T.purple,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>Review Content</div>
-                    {dl.link&&<div style={{fontSize:"12px",color:T.info,marginBottom:"8px"}}>🔗 <a href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info}}>{dl.link}</a></div>}
+                    {dl.link&&<div style={{fontSize:"12px",color:T.info,marginBottom:"6px"}}>🔗 <a href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info}}>{dl.link}</a></div>}
+                    {latestFile&&<div style={{fontSize:"12px",marginBottom:"8px",padding:"6px 8px",background:T.surface,borderRadius:"4px"}}>📁 Latest upload: <b>{latestFile.file_name}</b>{latestFile.web_view_link&&<a href={latestFile.web_view_link} target="_blank" rel="noopener noreferrer" style={{color:T.info,marginLeft:"8px",fontWeight:700}}>Download ↗</a>}</div>}
                     <div style={{display:"flex",gap:"6px",marginBottom:"8px"}}>
                       <Btn v="ok" sm onClick={()=>approveContent(sel,i)}>✅ Approve Content</Btn>
                       <Btn v="danger" sm onClick={()=>{const fb=revisionFeedback[dl.id];if(!fb){notify("Enter feedback before requesting revision","err");return;}requestRevision(sel,i,fb)}}>↩ Request Revision</Btn>
@@ -3851,6 +4032,30 @@ return (
                 </div>;
               })}
             </Section>
+
+            {/* RAW Clips — optional raw footage from influencer, organized in Drive RAW/ subfolder */}
+            {(role==="negotiator"||role==="admin"||role==="approver")&&sel.ship?.st==="delivered"&&<Section title={`Raw Clips (${driveFiles.raw.length})`} icon="🎞">
+              <div style={{fontSize:"12px",color:T.sub,marginBottom:"8px",lineHeight:1.5}}>Optional raw footage the influencer shared. Saved to the <code style={{background:T.surfaceAlt,padding:"1px 5px",borderRadius:"3px"}}>RAW/</code> subfolder in Drive — separate from the approved deliverables.</div>
+              {driveFiles.raw.length>0&&<div style={{background:T.surfaceAlt,borderRadius:"4px",padding:"8px 12px",marginBottom:"8px"}}>
+                {driveFiles.raw.map(ff=><div key={ff.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"5px 0",fontSize:"12px",borderBottom:`1px dashed ${T.border}`}}>
+                  <span style={{background:T.gold+"22",color:T.gold,fontSize:"10px",fontWeight:800,padding:"2px 6px",borderRadius:"4px"}}>RAW</span>
+                  <span style={{flex:1,fontFamily:"ui-monospace,monospace",color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ff.file_name}</span>
+                  <span style={{color:T.faint,fontSize:"10px"}}>{ff.size_bytes?(ff.size_bytes/1048576).toFixed(1)+" MB":""}</span>
+                  {ff.web_view_link&&<a href={ff.web_view_link} target="_blank" rel="noopener noreferrer" style={{color:T.info,fontSize:"11px",fontWeight:700}}>Open ↗</a>}
+                </div>)}
+              </div>}
+              {Object.entries(driveUploading).filter(([k])=>k.startsWith(`${sel.id}:raw:`)).map(([k,u])=><div key={k} style={{padding:"4px 0",fontSize:"12px",marginBottom:"4px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"3px"}}><span style={{color:T.sub}}>⏫ {u.name}</span><span style={{color:T.gold,fontWeight:700}}>{u.progress}%</span></div>
+                <div style={{height:"4px",background:T.border,borderRadius:"2px",overflow:"hidden"}}><div style={{height:"100%",width:u.progress+"%",background:T.gold,transition:"width .2s"}}/></div>
+              </div>)}
+              {(role==="negotiator"||role==="admin")&&<label style={{display:"inline-block",cursor:"pointer"}}>
+                <input type="file" multiple style={{display:"none"}} accept="video/*,image/*,.mp4,.mov,.mkv,.webm,.jpg,.jpeg,.png" onChange={async e=>{
+                  const files = Array.from(e.target.files||[]); e.target.value='';
+                  for(const file of files) { await uploadDriveFile({deal:sel, deliverable:null, isRaw:true, file}); }
+                }}/>
+                <span style={{padding:"6px 12px",background:T.gold,color:"#1a1a22",borderRadius:"5px",fontSize:"12px",fontWeight:700}}>⬆ Upload Raw Clip(s)</span>
+              </label>}
+            </Section>}
 
             {/* Shipment & Logistics History */}
             {(sel.ship||(sel.shipHistory||[]).length>0)&&<Section title="Shipment & Logistics" icon="📦">

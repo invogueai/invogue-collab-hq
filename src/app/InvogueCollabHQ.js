@@ -114,6 +114,7 @@ async function loadFromSupabase() {
     invoiceGenerated:d.invoice_generated||false, invoiceNumber:d.invoice_number||null, invoiceDate:d.invoice_date||null,
     inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
     shipHistory:d.ship_history||[],
+    renegotiationNote:d.renegotiation_note||"",
     dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
     ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
   }));
@@ -434,6 +435,7 @@ export default function InvogueCollabHQ() {
             products:d.products||(d.products_json?JSON.parse(d.products_json):[])||[],
             inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
             shipHistory:d.ship_history||[],
+            renegotiationNote:d.renegotiation_note||"",
             dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
             ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
           }));
@@ -953,12 +955,58 @@ export default function InvogueCollabHQ() {
   };
 
   const [renegF, setRenegF] = useState(null); // {amount,note,dels} for renegotiation
+  const [resubmitF, setResubmitF] = useState(null); // negotiator accepting/revising a renegotiation
 
   const renegDeal = d => {
     // Open renegotiation modal pre-filled with current deal data
     setRenegF({ dealId:d.id, amount:String(d.amount), note:"", dels:d.dels.map(dl=>({...dl,keep:true})) });
     setSel(d);
     setModal("renegotiate");
+  };
+
+  const openResubmitModal = d => {
+    // Negotiator opens the resubmit modal to acknowledge manager's renegotiation note and send back with (optionally) revised terms
+    setResubmitF({ dealId:d.id, amount:String(d.amount), response:"", dels:d.dels.map(dl=>({...dl,keep:true})) });
+    setSel(d);
+    setModal("resubmitReneg");
+  };
+
+  const submitResubmit = async () => {
+    if(!resubmitF) return;
+    const keptDels = resubmitF.dels.filter(d=>d.keep!==false);
+    if(keptDels.length===0) return notify("Keep at least one deliverable","err");
+    if(!resubmitF.response.trim()) return notify("Add a response note for the manager","err");
+    if(+resubmitF.amount <= 0) return notify("Amount must be positive","err");
+
+    const newDels = keptDels.map(({keep,isNew,...rest})=>rest);
+    const userName = loggedIn?.name||"You (Negotiator)";
+
+    const {error:updErr} = await supabase.from('deals').update({
+      status:'pending',
+      amount:+resubmitF.amount
+    }).eq('id',resubmitF.dealId);
+    if(updErr) { console.error("Resubmit save failed:",updErr); return notify("Failed to resubmit: "+updErr.message,"err"); }
+
+    // Insert any brand-new deliverables
+    const brandNewDels = keptDels.filter(d=>d.isNew);
+    if(brandNewDels.length > 0) {
+      const dbNew = brandNewDels.map(dl=>({id:dl.id,deal_id:resubmitF.dealId,type:dl.type,description:dl.desc,status:'pending',live_link:null}));
+      const {error:newDelErr} = await supabase.from('deliverables').insert(dbNew);
+      if(newDelErr) console.error("New deliverables insert failed:",newDelErr);
+    }
+
+    // Remove any deliverables the negotiator unchecked
+    const keptIds = newDels.map(d=>d.id);
+    const currentDeal = deals.find(d=>d.id===resubmitF.dealId);
+    const removedIds = (currentDeal?.dels||[]).map(d=>d.id).filter(id=>!keptIds.includes(id));
+    if(removedIds.length>0) await supabase.from('deliverables').delete().in('id',removedIds);
+
+    upDeal(resubmitF.dealId,{status:"pending",amount:+resubmitF.amount,dels:newDels});
+    addLog(resubmitF.dealId, userName, "Resubmitted after renegotiation", `Amount: ${f(resubmitF.amount)} | ${newDels.length} deliverables | Response: ${resubmitF.response}`);
+    setSel(null);
+    setModal(null);
+    setResubmitF(null);
+    notify("Resubmitted to manager for approval","ok");
   };
 
   const submitReneg = async () => {
@@ -2171,6 +2219,7 @@ return (
         const myPending = myDeals.filter(d=>d.status==="pending");
         const myRenegotiations = myDeals.filter(d=>d.status==="renegotiate");
         const myNeedAction = myDeals.filter(d=>
+          (d.status==="renegotiate") || // needs review & resubmit
           (d.status==="approved") || // needs email sent
           (d.status==="email_sent"&&!d.ship) || // waiting for logistics
           (["shipped","delivered_prod","email_sent","partial_live"].includes(d.status)&&d.dels.some(dl=>dl.st==="pending")) || // deliverables to mark
@@ -2201,6 +2250,7 @@ return (
               let actionColor = T.warn;
               const revCount = d.dels.filter(dl=>dl.st==="revision_requested").length;
               if(revCount>0) { actionLabel=`${revCount} revision${revCount>1?"s":""} requested by manager`; actionColor=T.err; }
+              else if(d.status==="renegotiate") { actionLabel="Review & Resubmit to Manager"; actionColor=T.warn; }
               else if(d.status==="approved") { actionLabel="Send Confirmation Email"; actionColor=T.info; }
               else if(["shipped","delivered_prod","email_sent","partial_live"].includes(d.status)&&d.dels.some(dl=>dl.st==="pending")) { actionLabel=`${d.dels.filter(dl=>dl.st==="pending").length} deliverables to mark live`; actionColor=T.purple; }
               else if(["live","partial_live"].includes(d.status)&&!d.inv) { actionLabel="Submit Invoice"; actionColor=T.gold; }
@@ -2243,10 +2293,17 @@ return (
           </Section>}
 
           {/* Renegotiation Requests */}
-          {myRenegotiations.length>0&&<Section title={`Renegotiation Requests (${myRenegotiations.length})`} icon="🔄">
-            {myRenegotiations.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.warnBg,border:`1px solid ${T.warnBg}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"5px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div><span style={{fontWeight:700,fontSize:"12px"}}>{d.inf}</span> <span style={{color:T.sub,fontSize:"13px"}}>· {f(d.amount)} · {d.dels.length} deliverables</span></div>
-              <Badge s={d.status} sm/>
+          {myRenegotiations.length>0&&<Section title={`Renegotiation Requests (${myRenegotiations.length})`} icon="🔄" action={<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Action Required</span>}>
+            {myRenegotiations.map(d=><div key={d.id} style={{background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:d.renegotiationNote?"6px":"0"}}>
+                <div><span style={{fontWeight:700,fontSize:"13px"}}>{d.inf}</span> <span style={{color:T.sub,fontSize:"12px"}}>· {f(d.amount)} · {d.dels.length} deliverables</span></div>
+                <Badge s={d.status} sm/>
+              </div>
+              {d.renegotiationNote&&<div style={{fontSize:"12px",color:T.warn,fontStyle:"italic",marginBottom:"6px",padding:"4px 8px",background:"rgba(255,255,255,.5)",borderRadius:"4px"}}>💬 "{d.renegotiationNote}"</div>}
+              <div style={{display:"flex",gap:"6px",justifyContent:"flex-end"}}>
+                <Btn v="danger" sm onClick={()=>{setSel(d);openDropModal(d)}}>🚫 Drop</Btn>
+                <Btn v="gold" sm onClick={()=>openResubmitModal(d)}>↩ Review & Resubmit</Btn>
+              </div>
             </div>)}
           </Section>}
 
@@ -3542,6 +3599,69 @@ return (
         </>}
       </Modal>
 
+      {/* ═══════════════ NEGOTIATOR RESUBMIT AFTER RENEGOTIATION ═══════════════ */}
+      <Modal open={modal==="resubmitReneg"&&!!resubmitF} onClose={()=>{setModal(null);setResubmitF(null)}} title={`Review & Resubmit — ${sel?.inf}`} w={560}>
+        {resubmitF&&sel&&<>
+          {sel.renegotiationNote&&<div style={{padding:"12px 14px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"6px",marginBottom:"14px"}}>
+            <div style={{fontSize:"10px",fontWeight:800,color:T.warn,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px"}}>📝 Manager's Note</div>
+            <div style={{fontSize:"13px",color:T.text,lineHeight:1.5}}>{sel.renegotiationNote}</div>
+          </div>}
+
+          <div style={{padding:"10px 12px",background:T.infoBg,borderRadius:"6px",marginBottom:"14px",fontSize:"12px",color:T.info,lineHeight:1.5}}>
+            💡 Adjust the terms (if needed) based on the manager's feedback and add a response. Resubmitting sends this deal back to the manager for re-approval.
+          </div>
+
+          <Field label="Revised Commercial Amount *">
+            <Inp value={resubmitF.amount} onChange={e=>setResubmitF({...resubmitF,amount:e.target.value})} type="number" prefix="₹"/>
+          </Field>
+          {+resubmitF.amount!==sel.amount&&<div style={{fontSize:"11px",color:T.info,marginBottom:"8px",marginTop:"-2px"}}>Changed from {f(sel.amount)} → {f(resubmitF.amount)} ({+resubmitF.amount>sel.amount?"↑ increase":"↓ decrease"})</div>}
+
+          <div style={{marginBottom:"14px"}}>
+            <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px"}}>Deliverables</div>
+            {resubmitF.dels.map((dl,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:"8px",padding:"7px 10px",background:dl.keep?T.surface:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"6px",marginBottom:"4px",opacity:dl.keep?1:.5}}>
+                <input type="checkbox" checked={dl.keep} onChange={()=>{
+                  const ds=[...resubmitF.dels]; ds[i]={...ds[i],keep:!ds[i].keep}; setResubmitF({...resubmitF,dels:ds});
+                }} style={{accentColor:T.gold,width:"16px",height:"16px"}}/>
+                <div style={{flex:1}}>
+                  <span style={{fontSize:"13px",fontWeight:700}}>{dl.type}</span>
+                  <span style={{fontSize:"12px",color:T.sub,marginLeft:"5px"}}>{dl.desc}</span>
+                </div>
+                {!dl.keep&&<span style={{fontSize:"10px",color:T.err,fontWeight:700}}>REMOVED</span>}
+              </div>
+            ))}
+            <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>{resubmitF.dels.filter(d=>d.keep).length} of {resubmitF.dels.length} deliverables kept</div>
+          </div>
+
+          <div style={{marginTop:"8px",borderTop:`1px dashed ${T.border}`,paddingTop:"8px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}}>
+              <span style={{fontSize:"11px",fontWeight:700,color:T.info}}>Add New Deliverables</span>
+              <Btn v="outline" sm onClick={()=>setResubmitF({...resubmitF,dels:[...resubmitF.dels,{id:uid(),type:"Reel",desc:"",st:"pending",link:"",keep:true,isNew:true}]})}>+ Add New</Btn>
+            </div>
+            {resubmitF.dels.filter(d=>d.isNew).map((dl,idx)=>{
+              const i = resubmitF.dels.indexOf(dl);
+              return <div key={i} style={{display:"grid",gridTemplateColumns:"110px 1fr 24px",gap:"6px",marginBottom:"4px",alignItems:"center"}}>
+                <Sel value={dl.type} onChange={e=>{const ds=[...resubmitF.dels];ds[i]={...ds[i],type:e.target.value};setResubmitF({...resubmitF,dels:ds})}} options={[{v:"Reel",l:"Reel"},{v:"Story",l:"Story"},{v:"Dedicated Video",l:"Video"},{v:"Shorts",l:"Shorts"},{v:"Static Post",l:"Static"},{v:"Carousel",l:"Carousel"},{v:"Community Post",l:"Post"}]}/>
+                <Inp value={dl.desc} onChange={e=>{const ds=[...resubmitF.dels];ds[i]={...ds[i],desc:e.target.value};setResubmitF({...resubmitF,dels:ds})}} placeholder="Description of new deliverable"/>
+                <button onClick={()=>setResubmitF({...resubmitF,dels:resubmitF.dels.filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:T.err,cursor:"pointer",fontSize:"13px",padding:0}}>✕</button>
+              </div>;
+            })}
+          </div>
+
+          <Field label="Response to Manager *" style={{marginTop:"12px"}}>
+            <Textarea value={resubmitF.response} onChange={e=>setResubmitF({...resubmitF,response:e.target.value})} placeholder="e.g., Spoke to influencer, she agreed to ₹12,000 with 2 reels. Ready for re-approval." rows={3}/>
+          </Field>
+
+          <div style={{display:"flex",gap:"7px",justifyContent:"space-between",alignItems:"center",marginTop:"14px",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>
+            <Btn v="danger" sm onClick={()=>{setModal(null);setResubmitF(null);openDropModal(sel)}}>🚫 Drop Collab Instead</Btn>
+            <div style={{display:"flex",gap:"7px"}}>
+              <Btn v="outline" onClick={()=>{setModal("detail");setResubmitF(null)}}>Cancel</Btn>
+              <Btn v="gold" onClick={submitResubmit}>↩ Resubmit to Manager</Btn>
+            </div>
+          </div>
+        </>}
+      </Modal>
+
       {/* ═══════════════ DEAL DETAIL ═══════════════ */}
       <Modal open={modal==="detail"&&!!sel} onClose={()=>{setModal(null);setSel(null)}} title={sel?.inf||""} w={680}>
         {sel&&(()=>{
@@ -3562,6 +3682,7 @@ return (
             </div>
             {sel.paymentTerms&&<div style={{padding:"8px 10px",background:T.infoBg,borderRadius:"5px",marginBottom:"12px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>💳 Payment Terms:</span> {sel.paymentTerms}</div>}
             {sel.address&&<div style={{padding:"8px 10px",background:T.infoBg,borderRadius:"5px",marginBottom:"12px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>📍 Address:</span> {sel.address}</div>}
+            {sel.status==="renegotiate"&&sel.renegotiationNote&&<div style={{padding:"10px 12px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"6px",marginBottom:"12px",fontSize:"13px"}}><div style={{fontSize:"10px",fontWeight:800,color:T.warn,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"3px"}}>📝 Manager's Renegotiation Note</div><div style={{color:T.text,lineHeight:1.5}}>{sel.renegotiationNote}</div></div>}
 
             {/* Amount box */}
             <div style={{background:T.goldSoft,border:`1px dashed ${T.goldMid}`,borderRadius:"7px",padding:"12px",marginBottom:"12px"}}>
@@ -3782,8 +3903,11 @@ return (
                 <Btn v="outline" onClick={()=>renegDeal(sel)}>↩ Renegotiate</Btn>
                 <Btn v="danger" sm onClick={()=>openRejectModal(sel)}>✕ Reject</Btn>
               </>}
+              {(role==="negotiator"||role==="admin")&&sel.status==="renegotiate"&&<>
+                <Btn v="gold" onClick={()=>openResubmitModal(sel)}>↩ Review & Resubmit</Btn>
+              </>}
               {(role==="negotiator"||role==="admin")&&sel.status==="approved"&&<Btn v="gold" onClick={()=>sendEmail(sel)}>✉ Send Confirmation Email</Btn>}
-              {(role==="negotiator"||role==="admin")&&["pending","approved","email_sent","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
+              {(role==="negotiator"||role==="admin")&&["pending","renegotiate","approved","email_sent","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
               {(role==="logistics"||role==="admin")&&["approved","email_sent"].includes(sel.status)&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC"});setModal("ship")}}>📦 Dispatch</Btn>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&<Btn v="primary" onClick={()=>setModal("collectPayment")}>{sel.paymentFormSent?"✅ Link Sent — Resend":"📩 Send Invoice Creator"}</Btn>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&!sel.inv&&<Btn v="gold" onClick={()=>{setInvoiceF({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:"",amount:"",panNumber:""});setModal("uploadInvoice")}}>📄 Upload Invoice & Send to Finance</Btn>}
@@ -3796,7 +3920,7 @@ return (
               </>}
               {["paid","live"].includes(sel.status)&&(role==="negotiator"||role==="admin")&&<Btn v="gold" sm onClick={()=>{setRatingF({stars:{timeliness:0,quality:0,communication:0,professionalism:0},feedback:"",influencerId:sel.id});setModal("rate")}}>⭐ Rate Influencer</Btn>}
               {role==="finance"&&<Btn v="purple" sm onClick={()=>{setGstRate("0");setTdsRate("0");setModal("taxCalculator")}}>🧮 Tax Info</Btn>}
-              {(sel.status==="pending"||sel.status==="renegotiate")&&role==="negotiator"&&<div style={{fontSize:"12px",color:T.sub,fontStyle:"italic",padding:"4px 0"}}>⏳ Awaiting manager approval</div>}
+              {sel.status==="pending"&&role==="negotiator"&&<div style={{fontSize:"12px",color:T.sub,fontStyle:"italic",padding:"4px 0"}}>⏳ Awaiting manager approval</div>}
               {role==="admin"&&<div style={{fontSize:"11px",color:T.sub,fontStyle:"italic",padding:"4px 0",borderTop:`1px dashed ${T.border}`,marginTop:"4px",paddingTop:"6px",width:"100%"}}>⚙ Admin: All actions available regardless of status</div>}
             </div>
           </>;

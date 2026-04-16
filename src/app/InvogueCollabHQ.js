@@ -51,14 +51,6 @@ const toDateOnly = v => (v||"").slice(0,10);
 const uid = () => crypto.randomUUID();
 const genCollabId = () => "INV-" + Date.now().toString(36).toUpperCase().slice(-4) + Math.random().toString(36).toUpperCase().slice(2,4);
 
-// ─── Simple PIN hashing (SHA-256) ───
-const hashPin = async (pin) => {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(pin + "invogue-salt-2026");
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
-};
-
 // ─── SUPABASE DATA LAYER ───
 async function loadFromSupabase() {
   const [usersRes, campaignsRes, influencersRes, dealsRes, deliverablesRes, paymentsRes, shipmentsRes, auditRes] = await Promise.all([
@@ -73,7 +65,7 @@ async function loadFromSupabase() {
   ]);
 
   const users = (usersRes.data||[]).map(u => ({
-    id:u.id, name:u.name, email:u.email, pin:u.pin||'1111',
+    id:u.id, name:u.name, email:u.email,
     role:u.role, status:u.status, avatar:u.avatar||u.name?.slice(0,2).toUpperCase(),
     created:u.created_at?.slice(0,10)||'',
   }));
@@ -131,17 +123,18 @@ async function loadFromSupabase() {
   return { users, campaigns, influencers, deals };
 }
 
-// Fallback user data for when Supabase is unavailable
-const SEED_USERS = [
-  { id:"u0", name:"Invogue Admin", email:"admin@invogue.in", role:"admin", status:"active", created:"2026-01-01", avatar:"IA", pin:"1234" },
-  { id:"u1", name:"Ankit Mehta", email:"ankit@invogue.in", role:"negotiator", status:"active", created:"2026-01-15", avatar:"AM", pin:"1111" },
-  { id:"u2", name:"Megha Joshi", email:"megha@invogue.in", role:"negotiator", status:"active", created:"2026-01-15", avatar:"MJ", pin:"1111" },
-  { id:"u3", name:"Sneha Pillai", email:"sneha@invogue.in", role:"negotiator", status:"active", created:"2026-02-01", avatar:"SP", pin:"1111" },
-  { id:"u4", name:"Ritu Kapoor", email:"ritu@invogue.in", role:"approver", status:"active", created:"2026-01-10", avatar:"RK", pin:"1111" },
-  { id:"u5", name:"Raj Kumar", email:"raj@invogue.in", role:"logistics", status:"active", created:"2026-01-20", avatar:"RJ", pin:"1111" },
-  { id:"u6", name:"Pooja Sharma", email:"pooja@invogue.in", role:"finance", status:"active", created:"2026-01-10", avatar:"PS", pin:"1111" },
-  { id:"u7", name:"Vikram Nair", email:"vikram@invogue.in", role:"negotiator", status:"inactive", created:"2026-01-15", avatar:"VN", pin:"1111" },
-];
+// Fallback user data (empty — all users come from Supabase; this is only used if the `users` table is unreachable)
+const SEED_USERS = [];
+
+// Allowed email domains for sign-in + add-user. Membership in the `users`
+// table is still required — this is a lightweight pre-filter for the add-user
+// form so typos on the domain don't create unusable rows.
+const ALLOWED_DOMAINS = ['invogue.shop', 'kreatikcommerce.com'];
+const ALLOWED_DOMAINS_RE = new RegExp(
+  '@(' + ALLOWED_DOMAINS.map(d => d.replace(/\./g, '\\.')).join('|') + ')$',
+  'i'
+);
+const ALLOWED_DOMAINS_LABEL = ALLOWED_DOMAINS.map(d => '@' + d).join(' or ');
 
 const ROLE_CFG = {
   admin:      { l:"Admin",      c:"#DC2626", bg:"#FEE2E2", i:"⚙️" },
@@ -264,10 +257,9 @@ export default function InvogueCollabHQ() {
   const [influencers, setInfluencers] = useState([]);
   const [infProfile, setInfProfile] = useState(null); // selected influencer for profile view
   const [loggedIn, setLoggedIn] = useState(null); // null = login screen, user object = app
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPin, setLoginPin] = useState("");
   const [loginErr, setLoginErr] = useState("");
-  const [demoMode, setDemoMode] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true); // true while resolving initial Supabase session
+  const [authBusy, setAuthBusy] = useState(false);        // true while Google redirect is in flight
   const role = loggedIn?.role || "negotiator";
   const [view, setView] = useState("dashboard");
   const [tab, setTab] = useState("all");
@@ -431,7 +423,7 @@ export default function InvogueCollabHQ() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, async () => {
         const {data} = await supabase.from('users').select('*');
         if(data) setUsers(data.map(u => ({
-          id:u.id, name:u.name, email:u.email, pin:u.pin||'1111',
+          id:u.id, name:u.name, email:u.email,
           role:u.role, status:u.status, avatar:u.avatar||u.name?.slice(0,2).toUpperCase(),
           created:u.created_at?.slice(0,10)||'',
         })));
@@ -493,31 +485,88 @@ export default function InvogueCollabHQ() {
     window.open('/api/drive/oauth/start', 'drive_oauth', `width=${w},height=${h},left=${left},top=${top}`);
   };
 
-  // ── Login handler ──
-  const handleLogin = async () => {
+  // ── Auth: sign in with Google ──
+  // Supabase Auth handles the full OAuth redirect dance. We allow two Workspace
+  // domains (invogue.shop + kreatikcommerce.com). Google's `hd` only supports a
+  // single domain, so we drop it and let ALLOWED_DOMAINS + the users-table
+  // membership check do the gating below.
+  const handleGoogleLogin = async () => {
     setLoginErr("");
-    if(!loginEmail.trim()) { setLoginErr("Email is required"); return; }
-    if(!loginPin.trim()) { setLoginErr("PIN is required"); return; }
-    const u = users.find(x=>x.email.toLowerCase()===loginEmail.toLowerCase().trim());
-    if(!u) { setLoginErr("No account found with this email"); return; }
-    if(u.status==="inactive") { setLoginErr("This account has been deactivated. Contact admin."); return; }
-    // Support both hashed and plain-text PINs for backward compatibility
-    if(u.pin) {
-      const hashed = await hashPin(loginPin);
-      if(u.pin !== loginPin && u.pin !== hashed) { setLoginErr("Incorrect PIN"); return; }
+    setAuthBusy(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+          queryParams: { prompt: 'select_account' },
+        },
+      });
+      if (error) {
+        setLoginErr(error.message);
+        setAuthBusy(false);
+      }
+      // success → browser navigates away; no further code runs
+    } catch (e) {
+      setLoginErr(e.message || 'Sign-in failed');
+      setAuthBusy(false);
     }
-    setLoggedIn(u);
-    setView("dashboard");
-    setLoginEmail("");
-    setLoginPin("");
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try { await supabase.auth.signOut(); } catch {}
     setLoggedIn(null);
     setView("dashboard");
-    setLoginEmail("");
-    setLoginPin("");
+    setLoginErr("");
   };
+
+  // ── Auth: resolve Supabase session on mount + listen for changes ──
+  // When a session exists, match the authenticated email against the `users`
+  // table and set `loggedIn` to that row. Unknown/inactive emails get an error
+  // and are signed out so they can't bypass via a stale session cookie.
+  useEffect(() => {
+    if (!loaded) return; // wait until users list has been fetched
+    let cancelled = false;
+
+    const resolveSession = async (session) => {
+      if (cancelled) return;
+      if (!session?.user?.email) {
+        setLoggedIn(null);
+        setAuthChecking(false);
+        return;
+      }
+      const email = session.user.email.toLowerCase();
+      const u = users.find(x => (x.email||'').toLowerCase() === email);
+      if (!u) {
+        setLoginErr(`${session.user.email} is not authorized. Contact your admin to request access.`);
+        try { await supabase.auth.signOut(); } catch {}
+        setLoggedIn(null);
+        setAuthChecking(false);
+        return;
+      }
+      if (u.status === 'inactive') {
+        setLoginErr('This account has been deactivated. Contact your admin.');
+        try { await supabase.auth.signOut(); } catch {}
+        setLoggedIn(null);
+        setAuthChecking(false);
+        return;
+      }
+      setLoggedIn(u);
+      setLoginErr("");
+      setAuthChecking(false);
+      setAuthBusy(false);
+    };
+
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      await resolveSession(data?.session);
+    })();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      resolveSession(session);
+    });
+
+    return () => { cancelled = true; sub?.subscription?.unsubscribe?.(); };
+  }, [loaded, users]);
 
   // ── Helpers ──
   const upDeal = useCallback((id,patch)=>{
@@ -1944,58 +1993,52 @@ input:focus,select:focus,textarea:focus{border-color:#770A1C!important;outline:n
         {/* Login Card */}
         <div style={{background:"#FFFFFF",borderRadius:"8px",padding:"32px",boxShadow:"0 4px 24px rgba(0,0,0,.06)",border:"1px solid rgba(26,26,26,.08)"}}>
           <div style={{fontFamily:"'Barlow',sans-serif",fontSize:"18px",fontWeight:700,color:"#1A1A1A",marginBottom:"8px",textTransform:"uppercase"}}>Welcome back</div>
-          <div style={{fontFamily:"'Archivo',sans-serif",fontSize:"12px",color:"#7D766A",marginBottom:"28px"}}>Sign in to your workspace</div>
+          <div style={{fontFamily:"'Archivo',sans-serif",fontSize:"12px",color:"#7D766A",marginBottom:"28px"}}>Sign in with your Invogue Google account</div>
 
-          {/* Email */}
-          <div style={{marginBottom:"18px"}}>
-            <label style={{fontFamily:"'Barlow',sans-serif",display:"block",fontSize:"10px",fontWeight:600,color:"#7D766A",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:"8px"}}>Email</label>
-            <input type="email" aria-label="Email address" value={loginEmail} onChange={e=>{setLoginEmail(e.target.value);setLoginErr("")}}
-              onKeyDown={e=>e.key==="Enter"&&handleLogin()}
-              placeholder="your@invogue.in"
-              style={{width:"100%",padding:"12px 14px",border:"1px solid rgba(26,26,26,.12)",borderRadius:"4px",fontSize:"13px",fontFamily:"'Archivo',sans-serif",color:"#1A1A1A",outline:"none",background:"#FFFFFF",transition:"border .2s",boxSizing:"border-box"}}/>
-          </div>
-
-          {/* PIN */}
-          <div style={{marginBottom:"22px"}}>
-            <label style={{fontFamily:"'Barlow',sans-serif",display:"block",fontSize:"10px",fontWeight:600,color:"#7D766A",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:"8px"}}>PIN</label>
-            <input type="password" aria-label="PIN" value={loginPin} onChange={e=>{setLoginPin(e.target.value);setLoginErr("")}}
-              onKeyDown={e=>e.key==="Enter"&&handleLogin()}
-              placeholder="••••" maxLength={6}
-              style={{width:"100%",padding:"12px 14px",border:"1px solid rgba(26,26,26,.12)",borderRadius:"4px",fontSize:"13px",fontFamily:"'Archivo',sans-serif",color:"#1A1A1A",outline:"none",background:"#FFFFFF",letterSpacing:"4px",transition:"border .2s",boxSizing:"border-box"}}/>
-          </div>
+          {/* Checking session spinner */}
+          {authChecking && (
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"10px",padding:"14px",marginBottom:"14px",background:"#F6F4F0",borderRadius:"4px",fontSize:"12px",color:"#7D766A",fontFamily:"'Archivo',sans-serif"}}>
+              <div style={{width:"14px",height:"14px",borderRadius:"50%",border:"2px solid rgba(119,10,28,.15)",borderTopColor:"#770A1C",animation:"spin .8s linear infinite"}}/>
+              <span>Checking session...</span>
+              <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+            </div>
+          )}
 
           {/* Error */}
-          {loginErr&&<div style={{padding:"10px 12px",background:"#FEE2E2",borderRadius:"4px",fontSize:"13px",color:"#991B1B",fontWeight:600,marginBottom:"18px",fontFamily:"'Archivo',sans-serif"}}>{loginErr}</div>}
+          {loginErr && !authChecking && (
+            <div style={{padding:"10px 12px",background:"#FEE2E2",borderRadius:"4px",fontSize:"13px",color:"#991B1B",fontWeight:600,marginBottom:"18px",fontFamily:"'Archivo',sans-serif",lineHeight:1.4}}>{loginErr}</div>
+          )}
 
-          {/* Login Button */}
-          <button onClick={handleLogin} style={{width:"100%",padding:"12px 16px",background:"#770A1C",color:"#F6DFC1",border:"none",borderRadius:"4px",fontFamily:"'Barlow',sans-serif",fontSize:"12px",fontWeight:700,cursor:"pointer",letterSpacing:"1px",textTransform:"uppercase",transition:"all .2s",boxSizing:"border-box"}} onMouseEnter={e=>{e.currentTarget.style.background="#5A0814"}} onMouseLeave={e=>{e.currentTarget.style.background="#770A1C"}}>Sign In</button>
-        </div>
-
-        {/* Demo access toggle */}
-        <div style={{marginTop:"28px",textAlign:"center"}}>
-          <button onClick={()=>setDemoMode(!demoMode)} style={{background:"none",border:"none",color:"#770A1C",fontSize:"11px",fontWeight:700,cursor:"pointer",fontFamily:"'Barlow',sans-serif",letterSpacing:"1px",textTransform:"uppercase",transition:"all .2s",padding:"0"}}>
-            {demoMode ? "Hide Demo Access" : "Show Demo Access"}
+          {/* Google Sign-In Button */}
+          <button
+            onClick={handleGoogleLogin}
+            disabled={authChecking || authBusy}
+            style={{
+              width:"100%",padding:"12px 16px",
+              background: (authChecking||authBusy) ? "#E5E1D8" : "#FFFFFF",
+              color:"#1A1A1A",
+              border:"1px solid rgba(26,26,26,.20)",borderRadius:"4px",
+              fontFamily:"'Archivo',sans-serif",fontSize:"14px",fontWeight:600,
+              cursor:(authChecking||authBusy)?"not-allowed":"pointer",
+              display:"flex",alignItems:"center",justifyContent:"center",gap:"10px",
+              transition:"all .2s",boxSizing:"border-box",
+            }}
+            onMouseEnter={e=>{ if(!authChecking && !authBusy){ e.currentTarget.style.background="#F6F4F0"; e.currentTarget.style.borderColor="rgba(119,10,28,.3)"; }}}
+            onMouseLeave={e=>{ if(!authChecking && !authBusy){ e.currentTarget.style.background="#FFFFFF"; e.currentTarget.style.borderColor="rgba(26,26,26,.20)"; }}}
+          >
+            <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+            </svg>
+            {authBusy ? "Redirecting to Google..." : "Sign in with Google"}
           </button>
-          {demoMode && <>
-            <div style={{fontSize:"11px",color:"#7D766A",fontWeight:700,textTransform:"uppercase",letterSpacing:"1px",marginTop:"14px",marginBottom:"12px",fontFamily:"'Barlow',sans-serif"}}>Quick Access (Demo)</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
-              {users.filter(u=>u.status==="active").map(u=>{
-                const r = rc(u.role);
-                return <button key={u.id} onClick={()=>{setLoggedIn(u);setView("dashboard")}}
-                  style={{background:"#FFFFFF",border:"1px solid rgba(26,26,26,.08)",borderRadius:"6px",padding:"12px 12px",cursor:"pointer",textAlign:"left",transition:"all .15s",fontFamily:"'Archivo',sans-serif",boxSizing:"border-box"}}
-                  onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)";e.currentTarget.style.borderColor="rgba(119,10,28,.15)"}}
-                  onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor="rgba(26,26,26,.08)"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-                    <div style={{width:"28px",height:"28px",borderRadius:"50%",background:"#B08D42",color:"#770A1C",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",fontWeight:800,flexShrink:0}}>{u.avatar}</div>
-                    <div style={{minWidth:0}}>
-                      <div style={{fontFamily:"'Barlow',sans-serif",fontSize:"13px",fontWeight:700,color:"#1A1A1A",lineHeight:"1.2"}}>{u.name}</div>
-                      <div style={{fontSize:"10px",color:"#7D766A",fontWeight:500}}>{r.i} {r.l}</div>
-                    </div>
-                  </div>
-                </button>;
-              })}
-            </div>
-          </>}
+
+          <div style={{marginTop:"14px",fontSize:"11px",color:"#7D766A",textAlign:"center",lineHeight:1.5,fontFamily:"'Archivo',sans-serif"}}>
+            Use your <b>@invogue.shop</b> account.
+            <br/>Don't have access? Ask your admin.
+          </div>
         </div>
       </div>
     </div>
@@ -2262,12 +2305,12 @@ return (
         const handleCreateUser = () => {
           if(!userF.name||!userF.email) { notify("Name and email required","err"); return; }
           if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userF.email)) { notify("Invalid email format","err"); return; }
-          if(users.some(u=>u.email===userF.email)) { notify("Email already exists","err"); return; }
+          if(!ALLOWED_DOMAINS_RE.test(userF.email.trim())) { notify("Email must be "+ALLOWED_DOMAINS_LABEL,"err"); return; }
+          if(users.some(u=>u.email.toLowerCase()===userF.email.toLowerCase().trim())) { notify("Email already exists","err"); return; }
           const initials = userF.name.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2);
           const newId = uid();
-          // TODO: Hash PIN before storing: const hashedPin = await hashPin('1111');
-          supabase.from('users').insert({id:newId,name:userF.name,email:userF.email,role:userF.role,status:'active',avatar:initials,pin:'1111'}).then(({error})=>{if(error){console.error("User insert failed:",error);notify("Failed to create user: "+error.message,"err");}});
-          setUsers(prev=>[...prev,{id:newId,name:userF.name,email:userF.email,role:userF.role,status:"active",created:new Date().toISOString().slice(0,10),avatar:initials,pin:"1111"}]);
+          supabase.from('users').insert({id:newId,name:userF.name,email:userF.email,role:userF.role,status:'active',avatar:initials}).then(({error})=>{if(error){console.error("User insert failed:",error);notify("Failed to create user: "+error.message,"err");}});
+          setUsers(prev=>[...prev,{id:newId,name:userF.name,email:userF.email,role:userF.role,status:"active",created:new Date().toISOString().slice(0,10),avatar:initials}]);
           setUserF({name:"",email:"",role:"negotiator"});
           setModal(null);
           notify(`${userF.name} added as ${ROLE_CFG[userF.role]?.l||userF.role}!`);
@@ -3707,7 +3750,7 @@ return (
       {/* NEW USER */}
       <Modal open={modal==="newUser"} onClose={()=>setModal(null)} title="Add Team Member" w={440}>
         <Field label="Full Name *"><Inp value={userF.name} onChange={e=>setUserF({...userF,name:e.target.value})} placeholder="Priya Mehta"/></Field>
-        <Field label="Email *"><Inp value={userF.email} onChange={e=>setUserF({...userF,email:e.target.value})} placeholder="priya@invogue.in" type="email"/></Field>
+        <Field label="Email *"><Inp value={userF.email} onChange={e=>setUserF({...userF,email:e.target.value})} placeholder="priya@invogue.shop" type="email"/></Field>
         <Field label="Role *">
           <Sel value={userF.role} onChange={e=>setUserF({...userF,role:e.target.value})} options={[
             {v:"negotiator",l:"👤 Negotiator — Creates deals, marks deliverables, submits invoices"},
@@ -3728,11 +3771,13 @@ return (
           <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
           <Btn v="gold" onClick={()=>{
             if(!userF.name||!userF.email) { notify("Name and email required","err"); return; }
-            if(users.some(u=>u.email===userF.email)) { notify("Email already exists","err"); return; }
+            if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userF.email)) { notify("Invalid email format","err"); return; }
+            if(!ALLOWED_DOMAINS_RE.test(userF.email.trim())) { notify("Email must be "+ALLOWED_DOMAINS_LABEL,"err"); return; }
+            if(users.some(u=>u.email.toLowerCase()===userF.email.toLowerCase().trim())) { notify("Email already exists","err"); return; }
             const initials = userF.name.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2);
             const newId = uid();
-            supabase.from('users').insert({id:newId,name:userF.name,email:userF.email,role:userF.role,status:'active',avatar:initials,pin:'1111'}).then(({error})=>{if(error){console.error("User insert failed:",error);notify("Failed to create user: "+error.message,"err");}});
-            setUsers(prev=>[...prev,{id:newId,name:userF.name,email:userF.email,role:userF.role,status:"active",created:new Date().toISOString().slice(0,10),avatar:initials,pin:"1111"}]);
+            supabase.from('users').insert({id:newId,name:userF.name,email:userF.email,role:userF.role,status:'active',avatar:initials}).then(({error})=>{if(error){console.error("User insert failed:",error);notify("Failed to create user: "+error.message,"err");}});
+            setUsers(prev=>[...prev,{id:newId,name:userF.name,email:userF.email,role:userF.role,status:"active",created:new Date().toISOString().slice(0,10),avatar:initials}]);
             setUserF({name:"",email:"",role:"negotiator"});
             setModal(null);
             notify(`${userF.name} added!`);

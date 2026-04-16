@@ -87,7 +87,12 @@ async function loadFromSupabase() {
   const delsByDeal={}, paysByDeal={}, shipByDeal={}, logsByDeal={};
   (deliverablesRes.data||[]).forEach(dl => {
     if(!delsByDeal[dl.deal_id]) delsByDeal[dl.deal_id]=[];
-    delsByDeal[dl.deal_id].push({id:dl.id,type:dl.type,desc:dl.description,st:dl.status,link:dl.live_link||''});
+    delsByDeal[dl.deal_id].push({
+      id:dl.id, type:dl.type, desc:dl.description, st:dl.status,
+      link:dl.live_link||'',
+      feedback:dl.feedback||'',
+      history:Array.isArray(dl.history)?dl.history:[],
+    });
   });
   (paymentsRes.data||[]).forEach(p => {
     if(!paysByDeal[p.deal_id]) paysByDeal[p.deal_id]=[];
@@ -381,7 +386,12 @@ export default function InvogueCollabHQ() {
           const delsByDeal={}, paysByDeal={}, shipByDeal={}, logsByDeal={};
           (delRes.data||[]).forEach(dl => {
             if(!delsByDeal[dl.deal_id]) delsByDeal[dl.deal_id]=[];
-            delsByDeal[dl.deal_id].push({id:dl.id,type:dl.type,desc:dl.description,st:dl.status,link:dl.live_link||''});
+            delsByDeal[dl.deal_id].push({
+              id:dl.id, type:dl.type, desc:dl.description, st:dl.status,
+              link:dl.live_link||'',
+              feedback:dl.feedback||'',
+              history:Array.isArray(dl.history)?dl.history:[],
+            });
           });
           (payRes.data||[]).forEach(p => {
             if(!paysByDeal[p.deal_id]) paysByDeal[p.deal_id]=[];
@@ -1454,10 +1464,12 @@ export default function InvogueCollabHQ() {
   const submitContentForReview = (deal, delIdx, contentUrl) => {
     if(!deal.ship || deal.ship.st !== "delivered") return notify("Product must be delivered before content can be submitted","err");
     if(!contentUrl) return notify("Content URL/link is required","err");
-    const delId = deal.dels[delIdx].id;
+    const dl0 = deal.dels[delIdx];
+    const delId = dl0.id;
     const ts = new Date().toISOString();
-    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"submitted",link:contentUrl,history:[...(dl.history||[]),{action:"submitted",by:loggedIn?.name||"You",at:ts,link:contentUrl}]}:dl);
-    supabase.from('deliverables').update({status:'submitted',live_link:contentUrl,submitted_at:ts}).eq('id',delId).then(({error})=>{if(error) console.error("Submit content failed:",error);});
+    const newHistory = [...(dl0.history||[]),{action:"submitted",by:loggedIn?.name||"You",at:ts,link:contentUrl}];
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"submitted",link:contentUrl,history:newHistory}:dl);
+    supabase.from('deliverables').update({status:'submitted',live_link:contentUrl,submitted_at:ts,history:newHistory}).eq('id',delId).then(({error})=>{if(error) console.error("Submit content failed:",error);});
     upDeal(deal.id,{dels:newDels});
     addLog(deal.id,loggedIn?.name||"You","Content submitted for review",`${deal.dels[delIdx].type}: ${contentUrl}`);
     setSel(prev=>prev?{...prev,dels:newDels}:null);
@@ -1466,10 +1478,12 @@ export default function InvogueCollabHQ() {
   };
 
   const approveContent = (deal, delIdx) => {
-    const delId = deal.dels[delIdx].id;
+    const dl0 = deal.dels[delIdx];
+    const delId = dl0.id;
     const ts = new Date().toISOString();
-    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"approved",history:[...(dl.history||[]),{action:"approved",by:loggedIn?.name||"You",at:ts}]}:dl);
-    supabase.from('deliverables').update({status:'approved',approved_at:ts}).eq('id',delId).then(({error})=>{if(error) console.error("Approve content failed:",error);});
+    const newHistory = [...(dl0.history||[]),{action:"approved",by:loggedIn?.name||"You",at:ts}];
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"approved",history:newHistory}:dl);
+    supabase.from('deliverables').update({status:'approved',approved_at:ts,history:newHistory}).eq('id',delId).then(({error})=>{if(error) console.error("Approve content failed:",error);});
     upDeal(deal.id,{dels:newDels});
     addLog(deal.id,loggedIn?.name||"You","Content approved",`${deal.dels[delIdx].type}: ${deal.dels[delIdx].desc}`);
     setSel(prev=>prev?{...prev,dels:newDels}:null);
@@ -1478,10 +1492,14 @@ export default function InvogueCollabHQ() {
 
   const requestRevision = (deal, delIdx, feedback) => {
     if(!feedback) return notify("Please provide feedback for the revision","err");
-    const delId = deal.dels[delIdx].id;
+    const dl0 = deal.dels[delIdx];
+    const delId = dl0.id;
     const ts = new Date().toISOString();
-    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"revision_requested",feedback,link:"",history:[...(dl.history||[]),{action:"revision_requested",by:loggedIn?.name||"You",at:ts,feedback}]}:dl);
-    supabase.from('deliverables').update({status:'revision_requested',feedback:feedback,revision_requested_at:ts}).eq('id',delId).then(({error})=>{if(error) console.error("Revision request failed:",error);});
+    const newHistory = [...(dl0.history||[]),{action:"revision_requested",by:loggedIn?.name||"You",at:ts,feedback}];
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"revision_requested",feedback,link:"",history:newHistory}:dl);
+    supabase.from('deliverables').update({status:'revision_requested',feedback:feedback,revision_requested_at:ts,history:newHistory}).eq('id',delId).then(({error})=>{
+      if(error) { console.error("Revision request failed:",error); notify("Failed to save revision: "+error.message,"err"); }
+    });
     upDeal(deal.id,{dels:newDels});
     addLog(deal.id,loggedIn?.name||"You","Revision requested",`${deal.dels[delIdx].type}: ${feedback}`);
     setSel(prev=>prev?{...prev,dels:newDels}:null);

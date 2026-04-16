@@ -1581,7 +1581,7 @@ export default function InvogueCollabHQ() {
   };
 
   const recordPayment = () => {
-    if(role!=="finance") return notify("Only Finance role can record payments","err");
+    if(role!=="finance"&&role!=="admin") return notify("Only Finance or Admin can record payments","err");
     if(!payF.amount) return notify("Enter amount","err");
     if(+payF.amount <= 0) return notify("Amount must be positive","err");
     const amt = +payF.amount;
@@ -2142,7 +2142,7 @@ return (
       const unreads = recentNotifs.filter(n => new Date(n.time) > new Date(lastSeenTime)).length;
 
       const navItems = {
-        admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"analytics",l:"Analytics",i:"📊"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"audit",l:"Audit Log",i:"📜"}],
+        admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"analytics",l:"Analytics",i:"📊"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"payments",l:"Payments",i:"💰",n:deals.filter(d=>["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0).length},{k:"audit",l:"Audit Log",i:"📜"}],
         negotiator: [{k:"dashboard",l:"My Dashboard",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"dropped",l:"Dropped Collabs",i:"🚫",n:stats.dropped},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
         approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.awaitingReview||stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
         finance: [{k:"dashboard",l:"Payment Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"}],
@@ -2733,7 +2733,7 @@ return (
       {/* ═══════════════════════════════════════════════════════
           FINANCE DASHBOARD — Payment Center
          ═══════════════════════════════════════════════════════ */}
-      {view==="dashboard"&&role==="finance"&&(()=>{
+      {((view==="dashboard"&&role==="finance")||(view==="payments"&&role==="admin"))&&(()=>{
         const pendingPayments = deals.filter(d=>["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0);
         const disputed = deals.filter(d=>d.status==="disputed");
         const advanceDue = deals.filter(d=>["approved","email_sent","shipped","delivered_prod"].includes(d.status)&&totalPaid(d)===0);
@@ -4226,7 +4226,7 @@ return (
               {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&!sel.inv&&<Btn v="gold" onClick={()=>{setInvoiceF({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:"",amount:"",panNumber:""});setModal("uploadInvoice")}}>📄 Upload Invoice & Send to Finance</Btn>}
               {sel.inv&&sel.status==="invoice_ok"&&(role==="negotiator"||role==="admin")&&<div style={{fontSize:"12px",color:T.ok,fontWeight:700,padding:"6px 10px",background:T.okBg,borderRadius:"4px"}}>✓ Invoice sent to Finance — awaiting payment</div>}
               {sel.inv&&sel.status==="disputed"&&(role==="negotiator"||role==="admin")&&<div style={{fontSize:"12px",color:T.err,fontWeight:700,padding:"6px 10px",background:T.errBg,borderRadius:"4px"}}>⚠ Dispute — awaiting manager resolution</div>}
-              {role==="finance"&&!["pending","renegotiate","rejected","dropped"].includes(sel.status)&&rem>0&&<Btn v="ok" onClick={()=>{setPayF({type:paid===0?"advance":"partial",amount:"",note:""});setModal("payment")}}>💰 Record Payment</Btn>}
+              {(role==="finance"||role==="admin")&&!["pending","renegotiate","rejected","dropped"].includes(sel.status)&&rem>0&&<Btn v="ok" onClick={()=>{setPayF({type:paid===0?"advance":"partial",amount:"",note:""});setModal("payment")}}>💰 Record Payment</Btn>}
               {(role==="finance"||role==="admin")&&sel.status==="disputed"&&<>
                 <Btn v="ok" sm onClick={()=>{setPayF({type:"final",amount:String(sel.amount-paid),note:"Paying approved amount per dispute resolution"});setModal("payment")}}>Pay Approved Amount</Btn>
                 <Btn v="danger" sm onClick={()=>notify("Escalated to founder","warn")}>Escalate</Btn>

@@ -260,6 +260,15 @@ export async function ensureDealFolderTree({ campaignName, influencerName, colla
   return { rootId, campaignId, influencerId, collabFolderId, rawFolderId };
 }
 
+export async function ensureInvoiceFolderTree({ monthLabel }) {
+  const { sharedDriveId } = getOAuthConfig();
+  const rootName = sanitizeName(ROOT_NAME);
+  const rootId = await findOrCreateFolder(rootName, sharedDriveId);
+  const invoicesId = await findOrCreateFolder('Invoices', rootId);
+  const monthFolderId = await findOrCreateFolder(sanitizeName(monthLabel || new Date().toLocaleString('en-IN', {month:'long', year:'numeric'})), invoicesId);
+  return { invoicesId, monthFolderId };
+}
+
 export async function createResumableUploadSession({
   parentFolderId,
   fileName,

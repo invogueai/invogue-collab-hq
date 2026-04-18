@@ -23,12 +23,14 @@ const STATUS_CFG = {
   renegotiate:    { l:"Renegotiate",      c:T.warn,   bg:T.warnBg,   i:"🔄" },
   approved:       { l:"Approved",         c:T.ok,     bg:T.okBg,     i:"✅" },
   rejected:       { l:"Rejected",         c:T.err,    bg:T.errBg,    i:"❌" },
+  drop_requested: { l:"Drop Requested",   c:T.err,    bg:T.errBg,    i:"🚫" },
   dropped:        { l:"Dropped",          c:T.err,    bg:T.errBg,    i:"🚫" },
   email_sent:     { l:"Email Sent",       c:T.info,   bg:T.infoBg,   i:"📧" },
   shipped:        { l:"Shipped",          c:T.purple, bg:T.purpleBg, i:"🚚" },
   delivered_prod: { l:"Product Delivered", c:T.teal,  bg:T.tealBg,   i:"📦" },
   partial_live:   { l:"Partially Live",   c:T.warn,   bg:T.warnBg,   i:"⏳" },
   live:           { l:"All Content Live",  c:T.ok,    bg:T.okBg,     i:"🟢" },
+  invoice_pending_approval: { l:"Invoice Pending Approval", c:T.warn, bg:T.warnBg, i:"⏳" },
   invoice_ok:     { l:"Invoice Matched",  c:T.info,   bg:T.infoBg,   i:"✔️" },
   disputed:       { l:"Disputed",         c:T.err,    bg:T.errBg,    i:"⚠️" },
   partial_paid:   { l:"Partially Paid",   c:T.gold,   bg:T.goldSoft, i:"💳" },
@@ -50,6 +52,11 @@ const todayLocal = () => {
 const toDateOnly = v => (v||"").slice(0,10);
 const uid = () => crypto.randomUUID();
 const genCollabId = () => "INV-" + Date.now().toString(36).toUpperCase().slice(-4) + Math.random().toString(36).toUpperCase().slice(2,4);
+
+// ─── INPUT VALIDATION HELPERS ───
+const validPhone = v => { const d = (v||'').replace(/[\s\-+]/g,'').replace(/^91/,''); return /^\d{10}$/.test(d); };
+const cleanPhone = v => { const d = (v||'').replace(/[\s\-+]/g,'').replace(/^91/,''); return /^\d{10}$/.test(d) ? d : v; };
+const validUrl = v => { if(!v) return false; const s = v.trim(); return /^https?:\/\/.+/.test(s) || /^[a-zA-Z0-9][\w\-]*\.[a-zA-Z]{2,}/.test(s); };
 
 // ─── SUPABASE DATA LAYER ───
 async function loadFromSupabase() {
@@ -276,7 +283,7 @@ export default function InvogueCollabHQ() {
   // Form states
   const [nDeal, setNDeal] = useState(null);
   const [nCamp, setNCamp] = useState(null);
-  const [shipF, setShipF] = useState({track:"",carrier:"DTDC"});
+  const [shipF, setShipF] = useState({track:"",carrier:"DTDC",orderId:""});
   const [payF, setPayF] = useState({type:"advance",amount:"",note:""});
   const [invF, setInvF] = useState("");
   const [linkF, setLinkF] = useState("");
@@ -291,7 +298,7 @@ export default function InvogueCollabHQ() {
   // Logistics: Pickup & Re-shipment
   const [pickupF, setPickupF] = useState({reason:"Product Change",note:""});
   const [reshipF, setReshipF] = useState({products:[],note:"",newAddress:""});
-  const [reshipShipF, setReshipShipF] = useState({track:"",carrier:"DTDC"});
+  const [reshipShipF, setReshipShipF] = useState({track:"",carrier:"DTDC",orderId:""});
   const [panF, setPanF] = useState({number:"",name:""}); // PAN details
   const [payReqNote, setPayReqNote] = useState(""); // payment request note
   const [contentF, setContentF] = useState({url:"",note:""}); // for marking content live
@@ -303,6 +310,17 @@ export default function InvogueCollabHQ() {
   const [attachmentDesc, setAttachmentDesc] = useState({}); // {delId: description}
   const [revisionFeedback, setRevisionFeedback] = useState({}); // {delId: feedback text}
 
+  // Product Catalog Management
+  const [productCatalog, setProductCatalog] = useState([
+    {id:'p1',name:'Shaper Shorts',sizes:['XS','S','M','L','XL','XXL','3XL'],colors:['Black','Nude','Brown','Grey']},
+    {id:'p2',name:'Waist Trainer',sizes:['XS','S','M','L','XL','XXL','3XL'],colors:['Black','Nude','Skin']},
+    {id:'p3',name:'Bodysuit',sizes:['XS','S','M','L','XL','XXL','3XL'],colors:['Black','Nude','Brown']},
+    {id:'p4',name:'Thigh Shaper',sizes:['XS','S','M','L','XL','XXL','3XL'],colors:['Black','Nude']},
+    {id:'p5',name:'Arm Shaper',sizes:['S/M','L/XL','XXL/3XL'],colors:['Black','Nude','Skin']},
+  ]);
+  const [showProductMgmt, setShowProductMgmt] = useState(false);
+  const [newProduct, setNewProduct] = useState({name:'',sizes:'',colors:''});
+
   // Google Drive resource management
   const [driveFiles, setDriveFiles] = useState({deliverables:{}, raw:[]}); // for the currently-open deal
   const [driveUploading, setDriveUploading] = useState({}); // {uploadKey: {progress: 0-100, name: string}}
@@ -310,6 +328,8 @@ export default function InvogueCollabHQ() {
 
   // Payment details collection & Invoice generation
   const [invoiceF, setInvoiceF] = useState({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:"",amount:"",panNumber:""});
+  const [invoiceFile, setInvoiceFile] = useState(null);
+  const [invoiceUploading, setInvoiceUploading] = useState(false);
 
   // Feature 1: Analytics & Reports
   const [analyticsData, setAnalyticsData] = useState(null);
@@ -922,6 +942,17 @@ export default function InvogueCollabHQ() {
     // Check deliverables have descriptions
     if(nDeal.dels.some(d=>!d.desc)) errors.dels = "All deliverables must have descriptions";
 
+    // Validate email, phone, and URL formats
+    if(nDeal.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nDeal.email)) errors.email = "Invalid email format";
+    if(nDeal.phone && !validPhone(nDeal.phone)) errors.phone = "Phone must be 10 digits";
+    if(nDeal.profile && !validUrl(nDeal.profile)) errors.profile = "Invalid profile URL";
+
+    // Validate address fields
+    if(!nDeal.address?.street) errors.address = "Street address is required";
+    if(!nDeal.address?.city) errors.city = "City is required";
+    if(!nDeal.address?.pincode) errors.pincode = "Pincode is required";
+    if(nDeal.address?.pincode && !/^\d{6}$/.test(nDeal.address.pincode)) errors.pincode = "Pincode must be 6 digits";
+
     if(Object.keys(errors).length > 0) {
       setFormErrors(errors);
       return notify("Please fix validation errors","err");
@@ -950,7 +981,7 @@ export default function InvogueCollabHQ() {
       deadline:nDeal.deadline,
       profile_link:nDeal.profile,
       phone:nDeal.phone,
-      address:nDeal.address,
+      address: typeof nDeal.address === 'object' ? [nDeal.address.street, nDeal.address.city, nDeal.address.state, nDeal.address.pincode].filter(Boolean).join(', ') : (nDeal.address || ''),
       created_by:userName,
       created_at:ts,
       payment_terms:nDeal.paymentTerms||"Net 15 days",
@@ -980,7 +1011,7 @@ export default function InvogueCollabHQ() {
         city:"",
         phone:nDeal.phone||"",
         email:nDeal.email||"",
-        address:nDeal.address||"",
+        address: typeof nDeal.address === 'object' ? [nDeal.address.street, nDeal.address.city, nDeal.address.state, nDeal.address.pincode].filter(Boolean).join(', ') : (nDeal.address || ''),
         poc:userName,
         avg_rate:nDeal.amount,
         rating:"A",
@@ -1310,9 +1341,9 @@ export default function InvogueCollabHQ() {
     // Store local DATE only (no time component) so day-of comparisons are trivial and
     // unambiguous — avoids timezone drift between dispatch and delivery checks.
     const ts = todayLocal();
-    supabase.from('shipments').insert({deal_id:sel.id,carrier:shipF.carrier,tracking_id:shipF.track,status:'in_transit',dispatched_by:userName,dispatched_at:ts}).then(({error})=>{if(error) console.error("Shipment insert failed:",error);});
+    supabase.from('shipments').insert({deal_id:sel.id,carrier:shipF.carrier,tracking_id:shipF.track,order_id:shipF.orderId||null,status:'in_transit',dispatched_by:userName,dispatched_at:ts}).then(({error})=>{if(error) console.error("Shipment insert failed:",error);});
     supabase.from('deals').update({status:'shipped'}).eq('id',sel.id).then(({error})=>{if(error) console.error("Dispatch save failed:",error);});
-    upDeal(sel.id,{status:"shipped",ship:{track:shipF.track,carrier:shipF.carrier,st:"in_transit",dispAt:ts,dispBy:userName,delAt:null}});
+    upDeal(sel.id,{status:"shipped",ship:{track:shipF.track,carrier:shipF.carrier,orderId:shipF.orderId||"",st:"in_transit",dispAt:ts,dispBy:userName,delAt:null}});
     addLog(sel.id,userName,"Shipment dispatched",`${shipF.carrier}: ${shipF.track}`);
     setSel(null);
     setModal(null);
@@ -1398,13 +1429,13 @@ export default function InvogueCollabHQ() {
     notify("Re-shipment request sent to logistics!");
   };
 
-  const dispatchReship = (deal, histIdx, trackingId, carrier) => {
+  const dispatchReship = (deal, histIdx, trackingId, carrier, orderId) => {
     if(!trackingId) return notify("Enter tracking ID","err");
     const userName = loggedIn?.name||"You (Logistics)";
     // Store re-dispatch as local DATE only (matches dispatch() behavior) so re-delivery
     // date comparisons are clean string compares.
     const ts = todayLocal();
-    const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,status:"re_dispatched",reTrack:trackingId,reCarrier:carrier,reDispatchedBy:userName,reDispatchedAt:ts}:h);
+    const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,status:"re_dispatched",reTrack:trackingId,reCarrier:carrier,reOrderId:orderId||"",reDispatchedBy:userName,reDispatchedAt:ts}:h);
     supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error) console.error("Reship dispatch save failed:",error);});
     upDeal(deal.id,{shipHistory});
     addLog(deal.id,userName,"Re-shipment dispatched",`${carrier}: ${trackingId}`);
@@ -1438,6 +1469,7 @@ export default function InvogueCollabHQ() {
     const currentDel = deal.dels[delIdx];
     const liveUrl = contentUrl || currentDel?.link;
     if(!liveUrl) return notify("Content URL is required","err");
+    if(!validUrl(liveUrl)) return notify("Invalid URL — must be a valid link","err");
 
     const link = liveUrl;
     const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"live",link}:dl);
@@ -1464,6 +1496,7 @@ export default function InvogueCollabHQ() {
   const submitContentForReview = (deal, delIdx, contentUrl) => {
     if(!deal.ship || deal.ship.st !== "delivered") return notify("Product must be delivered before content can be submitted","err");
     if(!contentUrl) return notify("Content URL/link is required","err");
+    if(!validUrl(contentUrl)) return notify("Invalid URL — must be a valid link","err");
     const dl0 = deal.dels[delIdx];
     const delId = dl0.id;
     const ts = new Date().toISOString();
@@ -1526,8 +1559,9 @@ export default function InvogueCollabHQ() {
   // Single-step: negotiator uploads invoice + amount + PAN → auto-queued to finance.
   // If amount matches locked amount → status=invoice_ok (ready for finance to pay).
   // If amount mismatches → status=disputed (needs approver/admin resolution).
-  const submitInvoiceComplete = (deal) => {
-    if(!invoiceF.notes) return notify("Paste the invoice link or reference","err");
+  const submitInvoiceComplete = async (deal) => {
+    if(!invoiceFile && !invoiceF.notes) return notify("Please upload an invoice file","err");
+    if(invoiceF.notes && !invoiceFile && !validUrl(invoiceF.notes)) return notify("Invalid invoice URL — must be a valid link","err");
     if(!invoiceF.amount) return notify("Enter the invoice amount","err");
     if(+invoiceF.amount <= 0) return notify("Invoice amount must be positive","err");
     if(!invoiceF.panNumber) return notify("PAN number is mandatory","err");
@@ -1535,8 +1569,47 @@ export default function InvogueCollabHQ() {
     const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
     if(!panRegex.test(invoiceF.panNumber.toUpperCase())) return notify("Invalid PAN format (e.g. ABCDE1234F)","err");
 
+    // Upload invoice file to Drive if present
+    let invoiceLink = invoiceF.notes || '';
+    if(invoiceFile) {
+      setInvoiceUploading(true);
+      try {
+        const monthLabel = new Date().toLocaleString('en-IN', {month:'long', year:'numeric'});
+        const initResp = await fetch('/api/drive/create-upload-session', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            dealId:deal.id,
+            invoiceMode:true,
+            monthLabel,
+            fileName:`INV_${deal.inf.replace(/\s+/g,'_')}_${deal.collabId||deal.id.slice(0,6)}_${invoiceFile.name}`,
+            mimeType:invoiceFile.type||'application/octet-stream',
+            sizeBytes:invoiceFile.size,
+          }),
+        });
+        const initData = await initResp.json();
+        if(!initResp.ok||!initData.ok) throw new Error(initData.error||'Could not start upload');
+        const driveFileId = await new Promise((resolve,reject)=>{
+          const xhr = new XMLHttpRequest();
+          xhr.open('PUT',initData.uploadUrl,true);
+          xhr.setRequestHeader('Content-Type',invoiceFile.type||'application/octet-stream');
+          xhr.onload = ()=>{
+            if(xhr.status>=200&&xhr.status<300){try{resolve(JSON.parse(xhr.responseText).id)}catch(e){reject(new Error('Upload ok but bad response'))}}
+            else reject(new Error('Upload failed: HTTP '+xhr.status));
+          };
+          xhr.onerror = ()=>reject(new Error('Network error'));
+          xhr.send(invoiceFile);
+        });
+        invoiceLink = `https://drive.google.com/file/d/${driveFileId}/view`;
+      } catch(e) {
+        setInvoiceUploading(false);
+        return notify('Invoice upload failed: '+e.message,'err');
+      }
+      setInvoiceUploading(false);
+    }
+
     const match = +invoiceF.amount === deal.amount;
-    const newStatus = match?"invoice_ok":"disputed";
+    const newStatus = match?"invoice_pending_approval":"disputed";
     const ts = new Date().toISOString();
     const invNum = invoiceF.beneficiary || `INV-${deal.collabId||deal.id.slice(0,6)}`;
     const invDate = new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
@@ -1545,7 +1618,7 @@ export default function InvogueCollabHQ() {
 
     // Always save the invoice link in invoice_note so Finance can see it.
     // For mismatches, prefix with a dispute marker so it's still human-readable.
-    const noteToSave = match ? invoiceF.notes : `⚠ MISMATCH | LINK: ${invoiceF.notes}`;
+    const noteToSave = match ? invoiceLink : `⚠ MISMATCH | LINK: ${invoiceLink}`;
 
     supabase.from('deals').update({
       status:newStatus,
@@ -1562,7 +1635,7 @@ export default function InvogueCollabHQ() {
 
     upDeal(deal.id,{
       status:newStatus,
-      inv:{amount:+invoiceF.amount,match,at:ts,note:noteToSave,link:invoiceF.notes},
+      inv:{amount:+invoiceF.amount,match,at:ts,note:noteToSave,link:invoiceLink},
       invoiceGenerated:true,
       invoiceNumber:invNum,
       invoiceDate:invDate,
@@ -1575,9 +1648,31 @@ export default function InvogueCollabHQ() {
     setSel(null);
     setModal(null);
     setInvoiceF({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:"",amount:"",panNumber:""});
+    setInvoiceFile(null);
+    setInvoiceUploading(false);
 
-    if(match) notify("Invoice submitted — sent to Finance for payment!");
+    if(match) notify("Invoice submitted — sent to Manager for approval");
     else notify("MISMATCH — flagged as dispute for manager review","err");
+  };
+
+  const approveInvoice = (d) => {
+    const userName = loggedIn?.name||"Manager";
+    supabase.from('deals').update({status:'invoice_ok'}).eq('id',d.id).then(({error})=>{if(error) console.error("Invoice approval failed:",error);});
+    upDeal(d.id,{status:"invoice_ok"});
+    addLog(d.id,userName,"Invoice approved — sent to Finance",d.invoiceNumber||"");
+    setSel(null);
+    setModal(null);
+    notify("Invoice approved and sent to Finance!");
+  };
+
+  const rejectInvoice = (d) => {
+    const userName = loggedIn?.name||"Manager";
+    supabase.from('deals').update({status:'live'}).eq('id',d.id).then(({error})=>{if(error) console.error("Invoice rejection failed:",error);});
+    upDeal(d.id,{status:"live"});
+    addLog(d.id,userName,"Invoice rejected — returned to negotiator","Needs re-submission");
+    setSel(null);
+    setModal(null);
+    notify("Invoice rejected — negotiator will need to resubmit");
   };
 
   const recordPayment = () => {
@@ -1836,15 +1931,46 @@ invogue.shop · contact@invogue.shop
     if(!reason || !reason.trim()) return notify("Drop reason is mandatory","err");
     const totalPaidAmount = totalPaid(d);
     if(totalPaidAmount > 0) return notify("Cannot drop a collab with payments already made","err");
-    const userName = loggedIn?.name||"You (Negotiator)";
+    const userName = loggedIn?.name||"You";
     const ts = new Date().toISOString();
-    supabase.from('deals').update({status:'dropped'}).eq('id',d.id).then(({error})=>{if(error) console.error("Drop collab failed:",error);});
-    upDeal(d.id,{status:"dropped"});
-    addLog(d.id,userName,"Collab dropped",`Reason: ${reason}`);
+    if(role==="admin") {
+      // Admin can drop directly
+      supabase.from('deals').update({status:'dropped'}).eq('id',d.id).then(({error})=>{if(error) console.error("Drop collab failed:",error);});
+      upDeal(d.id,{status:"dropped",dropReason:reason});
+      addLog(d.id,userName,"Collab dropped (admin)",`Reason: ${reason}`);
+      notify("Collab dropped","warn");
+    } else {
+      // Negotiator: request drop → needs manager approval
+      supabase.from('deals').update({status:'drop_requested',renegotiation_note:reason}).eq('id',d.id).then(({error})=>{if(error) console.error("Drop request failed:",error);});
+      upDeal(d.id,{status:"drop_requested",dropReason:reason});
+      addLog(d.id,userName,"Drop requested — awaiting manager approval",`Reason: ${reason}`);
+      notify("Drop request sent to manager for approval");
+    }
     setSel(null);
     setModal(null);
     setDropReasonF("");
-    notify("Collab dropped","warn");
+  };
+
+  const approveDropRequest = (d) => {
+    const userName = loggedIn?.name||"Manager";
+    const ts = new Date().toISOString();
+    supabase.from('deals').update({status:'dropped'}).eq('id',d.id).then(({error})=>{if(error) console.error("Drop approval failed:",error);});
+    upDeal(d.id,{status:"dropped"});
+    addLog(d.id,userName,"Drop approved by manager",d.dropReason?`Original reason: ${d.dropReason}`:"");
+    setSel(null);
+    setModal(null);
+    notify("Collab drop approved","warn");
+  };
+
+  const rejectDropRequest = (d) => {
+    const userName = loggedIn?.name||"Manager";
+    const prevStatus = d.statusBeforeDrop || "approved";
+    supabase.from('deals').update({status:'approved',renegotiation_note:null}).eq('id',d.id).then(({error})=>{if(error) console.error("Drop rejection failed:",error);});
+    upDeal(d.id,{status:"approved",dropReason:null});
+    addLog(d.id,userName,"Drop request rejected — collab restored","");
+    setSel(null);
+    setModal(null);
+    notify("Drop request rejected — collab restored");
   };
 
   const openDropModal = d => {
@@ -1895,6 +2021,7 @@ invogue.shop · contact@invogue.shop
   };
 
   const bulkApprove = () => {
+    if(role!=="approver"&&role!=="admin") return notify("Only Manager or Admin can approve deals","err");
     const toApprove = [...bulkSelected].map(id => deals.find(d => d.id === id)).filter(d => d && d.status === "pending");
     if(toApprove.length === 0) return notify("No pending deals selected","err");
 
@@ -1919,6 +2046,7 @@ invogue.shop · contact@invogue.shop
   };
 
   const bulkReject = () => {
+    if(role!=="approver"&&role!=="admin") return notify("Only Manager or Admin can reject deals","err");
     const toReject = [...bulkSelected].map(id => deals.find(d => d.id === id)).filter(d => d && d.status === "pending");
     if(toReject.length === 0) return notify("No pending deals selected","err");
 
@@ -2111,7 +2239,7 @@ return (
           </button>
           {notificationPanel&&<div style={{position:"absolute",top:"100%",right:0,background:"#FFFFFF",borderRadius:"4px",marginTop:"8px",width:"320px",maxHeight:"400px",overflowY:"auto",zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,.06)",border:"1px solid rgba(26,26,26,.08)"}}>
             <div style={{padding:"10px 12px",borderBottom:`1px solid rgba(26,26,26,.08)`,fontWeight:700,fontSize:"12px",color:"#1A1A1A"}}>Notifications</div>
-            {recentNotifs.length===0?<div style={{padding:"12px",fontSize:"13px",color:"#7D766A",textAlign:"center"}}>No notifications</div>:recentNotifs.map(n=><div key={n.id} style={{padding:"10px 12px",borderBottom:`1px solid rgba(26,26,26,.08)`,fontSize:"12px",color:"#1A1A1A"}}>
+            {recentNotifs.length===0?<div style={{padding:"12px",fontSize:"13px",color:"#7D766A",textAlign:"center"}}>No notifications</div>:recentNotifs.map(n=><div key={n.id} onClick={()=>{const deal=deals.find(x=>x.id===n.dealId);if(deal){setSel(deal);setModal("detail")}}} style={{padding:"10px 12px",borderBottom:`1px solid rgba(26,26,26,.08)`,fontSize:"12px",color:"#1A1A1A",cursor:"pointer"}}>
               <div style={{display:"flex",gap:"6px"}}>
                 <span style={{fontSize:"14px"}}>{n.icon}</span>
                 <div style={{flex:1}}>
@@ -2143,7 +2271,7 @@ return (
 
       const navItems = {
         admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"analytics",l:"Analytics",i:"📊"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"payments",l:"Payments",i:"💰",n:deals.filter(d=>["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0).length},{k:"audit",l:"Audit Log",i:"📜"}],
-        negotiator: [{k:"dashboard",l:"My Dashboard",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"dropped",l:"Dropped Collabs",i:"🚫",n:stats.dropped},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
+        negotiator: [{k:"dashboard",l:"My Dashboard",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"dropped",l:"Dropped Collabs",i:"🚫",n:stats.dropped},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
         approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.awaitingReview||stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
         finance: [{k:"dashboard",l:"Payment Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"}],
         logistics: [{k:"dashboard",l:"Shipment Center",i:"🔵"},{k:"shipments",l:"All Shipments",i:"🚚",n:stats.pendingShip+inTransit.length+stats.pickupRequests+stats.reshipPending}],
@@ -2254,10 +2382,10 @@ return (
             {/* SHIPMENTS */}
             <Section title={`Shipments`} icon="📦" action={<Btn v="ghost" sm onClick={()=>setView("shipments")}>View all →</Btn>}>
               {pendingShip.length===0&&inTransit.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>All shipped & delivered</div>}
-              {pendingShip.map(d=><div key={d.id} style={{background:T.warnBg,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"6px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between"}}>
+              {pendingShip.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.warnBg,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"6px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
                 <span><b>{d.inf}</b> · {d.product}</span><span style={{color:T.warn,fontWeight:700}}>Awaiting dispatch</span>
               </div>)}
-              {inTransit.map(d=><div key={d.id} style={{background:T.purpleBg,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"6px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between"}}>
+              {inTransit.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.purpleBg,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"6px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
                 <span><b>{d.inf}</b> · {d.ship.carrier}: {d.ship.track}</span><span style={{color:T.purple,fontWeight:700}}>In transit</span>
               </div>)}
             </Section>
@@ -2508,7 +2636,7 @@ return (
         return <>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
             <div><span style={{fontSize:"20px",fontWeight:800}}>👤 My Dashboard</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Your collaborations at a glance</span></div>
-            <Btn v="gold" sm onClick={()=>{setNDeal({inf:"",platform:"Instagram",followers:"",product:"",amount:"",usage:"6 months",deadline:"",profile:"",phone:"",address:"",cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>+ New Deal</Btn>
+            <Btn v="gold" sm onClick={()=>{setNDeal({inf:"",platform:"Instagram",followers:"",product:"",amount:"",usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>+ New Deal</Btn>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"8px",marginBottom:"16px"}}>
             <StatBox l="Needs My Action" v={myNeedAction.length} c={myNeedAction.length>0?T.warn:T.ok} sub="Do these now"/>
@@ -2585,10 +2713,10 @@ return (
           {/* Shipment Tracking */}
           <Section title="📦 My Shipment Tracker" icon="">
             {myDeals.filter(d=>d.ship&&d.ship.st==="in_transit").length===0&&myDeals.filter(d=>["approved","email_sent"].includes(d.status)&&!d.ship).length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>No active shipments</div>}
-            {myDeals.filter(d=>["approved","email_sent"].includes(d.status)&&!d.ship).map(d=><div key={d.id} style={{background:T.warnBg,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between"}}>
+            {myDeals.filter(d=>["approved","email_sent"].includes(d.status)&&!d.ship).map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.warnBg,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
               <span><b>{d.inf}</b> · {d.product}</span><span style={{color:T.warn,fontWeight:700}}>Awaiting dispatch</span>
             </div>)}
-            {myDeals.filter(d=>d.ship?.st==="in_transit").map(d=><div key={d.id} style={{background:T.purpleBg,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between"}}>
+            {myDeals.filter(d=>d.ship?.st==="in_transit").map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.purpleBg,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
               <span><b>{d.inf}</b> · {d.ship.carrier}: <span style={{color:T.info,fontWeight:700}}>{d.ship.track}</span></span><span style={{color:T.purple,fontWeight:700}}>In transit</span>
             </div>)}
           </Section>
@@ -2655,6 +2783,41 @@ return (
             </div>)}
           </Section>}
 
+          {/* INVOICES AWAITING APPROVAL */}
+          {(()=>{const pendingInvoices=deals.filter(d=>d.status==="invoice_pending_approval");return pendingInvoices.length>0&&<Section title={`Invoices Pending Approval (${pendingInvoices.length})`} icon="🧾" action={<span style={{fontSize:"11px",color:T.gold,fontWeight:700}}>Review Required</span>}>
+            {pendingInvoices.map(d=><div key={d.id} style={{background:T.goldSoft,border:`1px solid ${T.gold}33`,borderLeft:`3px solid ${T.gold}`,borderRadius:"7px",padding:"11px 13px",marginBottom:"6px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.platform}</span></div>
+                  <div style={{fontSize:"11px",color:T.sub,marginTop:"1px"}}>{d.product} · Invoice: {f(d.inv?.amount||d.amount)} · by {d.by}</div>
+                  <div style={{fontSize:"12px",color:T.ok,marginTop:"4px",fontWeight:600}}>✓ Amount matches locked: {f(d.amount)}</div>
+                  {d.invoiceNumber&&<div style={{fontSize:"11px",color:T.sub}}>Invoice #: {d.invoiceNumber}</div>}
+                </div>
+                <div style={{display:"flex",gap:"6px"}}>
+                  <Btn v="ok" sm onClick={()=>approveInvoice(d)}>✓ Approve & Send to Finance</Btn>
+                  <Btn v="danger" sm onClick={()=>rejectInvoice(d)}>✕ Reject</Btn>
+                </div>
+              </div>
+            </div>)}
+          </Section>})()}
+
+          {/* DROP REQUESTS — Manager must approve/reject */}
+          {(()=>{const dropRequests=deals.filter(d=>d.status==="drop_requested");return dropRequests.length>0&&<Section title={`Drop Requests (${dropRequests.length})`} icon="🚫" action={<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Needs Decision</span>}>
+            {dropRequests.map(d=><div key={d.id} style={{background:T.errBg,border:`1px solid ${T.err}33`,borderLeft:`3px solid ${T.err}`,borderRadius:"7px",padding:"11px 13px",marginBottom:"6px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.platform}</span></div>
+                  <div style={{fontSize:"11px",color:T.sub,marginTop:"1px"}}>{d.product} · {f(d.amount)} · by {d.by}</div>
+                  {(d.dropReason||d.renegotiation_note)&&<div style={{fontSize:"12px",color:T.err,marginTop:"4px",padding:"4px 8px",background:"rgba(180,35,24,.08)",borderRadius:"4px"}}>Reason: {d.dropReason||d.renegotiation_note}</div>}
+                </div>
+                <div style={{display:"flex",gap:"6px"}}>
+                  <Btn v="ok" sm onClick={()=>approveDropRequest(d)}>✓ Approve Drop</Btn>
+                  <Btn v="outline" sm onClick={()=>rejectDropRequest(d)}>✕ Reject</Btn>
+                </div>
+              </div>
+            </div>)}
+          </Section>})()}
+
           {/* CONTENT AWAITING REVIEW */}
           {awaitingReview.length>0&&<Section title={`Content Awaiting Review (${awaitingReview.length})`} icon="📤" action={<span style={{fontSize:"11px",color:T.info,fontWeight:700}}>Review Required</span>}>
             {awaitingReview.map((d,i)=>{const deal=deals.find(x=>x.id===d.dealId);return <div key={i} onClick={()=>{if(deal){setSel(deal);setModal("detail")}}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.info}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -2692,7 +2855,7 @@ return (
 
           {/* PENDING SHIPMENTS */}
           {pendingShip.length>0&&<Section title={`Pending Shipments (${pendingShip.length})`} icon="📦">
-            {pendingShip.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between"}}>
+            {pendingShip.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
               <span><b>{d.inf}</b> · {d.product}</span><span style={{color:T.warn,fontWeight:700}}>Awaiting logistics</span>
             </div>)}
           </Section>}
@@ -2839,9 +3002,9 @@ return (
 
           {/* ADVANCES DUE */}
           {advanceDue.length>0&&<Section title={`Advance Payments Pending (${advanceDue.length})`} icon="⏰">
-            {advanceDue.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            {advanceDue.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
               <div><b>{d.inf}</b> <span style={{color:T.sub}}>· {f(d.amount)} · {d.status==="approved"?"Just approved":d.status==="shipped"?"Product shipped":"In progress"}</span></div>
-              <Btn v="outline" sm onClick={()=>{setSel(d);setPayF({type:"advance",amount:"",note:""});setModal("payment")}}>Record Advance</Btn>
+              <Btn v="outline" sm onClick={(e)=>{e.stopPropagation();setSel(d);setPayF({type:"advance",amount:"",note:""});setModal("payment")}}>Record Advance</Btn>
             </div>)}
           </Section>}
 
@@ -2877,13 +3040,13 @@ return (
           {/* DISPATCH QUEUE */}
           <Section title={`Awaiting Dispatch (${pendingShip.length})`} icon="⚡" action={pendingShip.length>0?<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Action Required</span>:null}>
             {pendingShip.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"10px 0"}}>All products dispatched!</div>}
-            {pendingShip.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.err}`,borderRadius:"7px",padding:"12px 14px",marginBottom:"7px"}}>
+            {pendingShip.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.err}`,borderRadius:"7px",padding:"12px 14px",marginBottom:"7px",cursor:"pointer"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
                 <div>
                   <div style={{fontWeight:700,fontSize:"13px"}}>{d.inf}</div>
                   <div style={{fontSize:"13px",color:T.sub,marginTop:"2px"}}>📦 <b>{d.products?d.products.map(p=>p.name).join(", "):d.product}</b></div>
                 </div>
-                <Btn v="purple" onClick={()=>{setSel(d);setShipF({track:"",carrier:"DTDC"});setModal("ship")}}>📦 Dispatch Now</Btn>
+                <Btn v="purple" onClick={(e)=>{e.stopPropagation();setSel(d);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch Now</Btn>
               </div>
               <div style={{padding:"8px 10px",background:T.purpleBg,borderRadius:"5px",fontSize:"12px",color:T.purple}}>
                 <div>📍 <b>Ship to:</b> {d.address||"Address not provided"}</div>
@@ -2905,7 +3068,7 @@ return (
                     {h.note&&<div style={{fontSize:"12px",color:T.sub,marginTop:"1px"}}>{h.note}</div>}
                     <div style={{fontSize:"13px",color:T.sub,marginTop:"2px"}}>📦 {h.products?h.products.map(p=>p.name).join(", "):h.product}</div>
                   </div>
-                  <Btn v="gold" onClick={()=>{setSel(deal);setShipF({track:"",carrier:"DTDC"});setModal("arrangePickup-"+h.histIdx)}}>🔄 Arrange Pickup</Btn>
+                  <Btn v="gold" onClick={()=>{setSel(deal);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("arrangePickup-"+h.histIdx)}}>🔄 Arrange Pickup</Btn>
                 </div>
                 <div style={{padding:"8px 10px",background:T.warnBg,borderRadius:"5px",fontSize:"12px",color:T.warn}}>
                   <div>📍 <b>Pickup from:</b> {h.address||"Address not provided"}</div>
@@ -2942,7 +3105,7 @@ return (
                     <div style={{fontSize:"13px",color:T.sub,marginTop:"2px"}}>📦 <b>{(h.products||[]).map(p=>p.name).join(", ")}</b></div>
                     {h.note&&<div style={{fontSize:"12px",color:T.sub,marginTop:"1px"}}>{h.note}</div>}
                   </div>
-                  <Btn v="purple" onClick={()=>{setSel(deal);setReshipShipF({track:"",carrier:"DTDC"});setModal("reshipDispatch-"+h.histIdx)}}>📦 Dispatch</Btn>
+                  <Btn v="purple" onClick={()=>{setSel(deal);setReshipShipF({track:"",carrier:"DTDC",orderId:""});setModal("reshipDispatch-"+h.histIdx)}}>📦 Dispatch</Btn>
                 </div>
                 <div style={{padding:"8px 10px",background:T.purpleBg,borderRadius:"5px",fontSize:"12px",color:T.purple}}>
                   <div>📍 <b>Ship to:</b> {h.address||"Address not provided"}</div>
@@ -2975,22 +3138,49 @@ return (
           {/* IN TRANSIT (original shipments) */}
           <Section title={`In Transit (${inTransit.length})`} icon="🚚">
             {inTransit.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>Nothing in transit</div>}
-            {inTransit.map(d=><div key={d.id} style={{background:T.purpleBg,border:`1px solid ${T.purple}22`,borderRadius:"7px",padding:"11px 13px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            {inTransit.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.purpleBg,border:`1px solid ${T.purple}22`,borderRadius:"7px",padding:"11px 13px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
               <div>
                 <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div>
                 <div style={{fontSize:"13px",marginTop:"2px"}}>{d.ship.carrier}: <span style={{color:T.info,fontWeight:700}}>{d.ship.track}</span></div>
                 <div style={{fontSize:"11px",color:T.sub}}>Dispatched: {d.ship.dispAt}</div>
               </div>
-              <Btn v="ok" onClick={()=>{setSel(d);setDeliveryF({date:todayLocal(),note:""});setModal("markDelivered")}}>✓ Mark Delivered</Btn>
+              <Btn v="ok" onClick={(e)=>{e.stopPropagation();setSel(d);setDeliveryF({date:todayLocal(),note:""});setModal("markDelivered")}}>✓ Mark Delivered</Btn>
             </div>)}
           </Section>
 
           {/* DELIVERED */}
           <Section title={`Delivered (${delivered.length})`} icon="✅">
-            {delivered.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",opacity:.65}}>
+            {delivered.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",opacity:.65,cursor:"pointer"}}>
               <span><b>{d.inf}</b> · {d.products?d.products.map(p=>p.name).join(", "):d.product} · {d.ship.carrier}: {d.ship.track}</span>
               <span style={{color:T.ok}}>✓ {d.ship.delAt}</span>
             </div>)}
+          </Section>
+
+          {/* PRODUCT CATALOG MANAGEMENT */}
+          <Section title="Product Catalog" icon="📦" action={<Btn v="gold" sm onClick={()=>setShowProductMgmt(!showProductMgmt)}>{showProductMgmt?"Close":"⚙ Manage Products"}</Btn>}>
+            {showProductMgmt&&<div style={{background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"14px",marginBottom:"12px"}}>
+              <div style={{fontSize:"12px",fontWeight:700,marginBottom:"8px"}}>Add New Product</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",gap:"6px",alignItems:"end"}}>
+                <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Name</label><Inp value={newProduct.name} onChange={e=>setNewProduct({...newProduct,name:e.target.value})} placeholder="Product name"/></div>
+                <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Sizes (comma-sep)</label><Inp value={newProduct.sizes} onChange={e=>setNewProduct({...newProduct,sizes:e.target.value})} placeholder="XS,S,M,L,XL"/></div>
+                <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Colors (comma-sep)</label><Inp value={newProduct.colors} onChange={e=>setNewProduct({...newProduct,colors:e.target.value})} placeholder="Black,Nude"/></div>
+                <Btn v="ok" sm onClick={()=>{
+                  if(!newProduct.name) return notify("Product name required","err");
+                  const p = {id:uid(),name:newProduct.name.trim(),sizes:newProduct.sizes.split(',').map(s=>s.trim()).filter(Boolean),colors:newProduct.colors.split(',').map(s=>s.trim()).filter(Boolean)};
+                  setProductCatalog(prev=>[...prev,p]);
+                  setNewProduct({name:'',sizes:'',colors:''});
+                  notify("Product added!");
+                }}>+ Add</Btn>
+              </div>
+            </div>}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"6px"}}>
+              {productCatalog.map(p=><div key={p.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"10px"}}>
+                <div style={{fontWeight:700,fontSize:"13px"}}>{p.name}</div>
+                <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>Sizes: {p.sizes.join(', ')}</div>
+                <div style={{fontSize:"11px",color:T.sub}}>Colors: {p.colors.join(', ')}</div>
+                {showProductMgmt&&<Btn v="danger" sm onClick={()=>setProductCatalog(prev=>prev.filter(x=>x.id!==p.id))} style={{marginTop:"6px"}}>Remove</Btn>}
+              </div>)}
+            </div>
           </Section>
 
         </>;
@@ -3160,6 +3350,9 @@ return (
                 <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
                 <Btn v="gold" onClick={()=>{
                   if(!nInf.name||!nInf.phone) { notify("Name and phone required","err"); return; }
+                  if(!validPhone(nInf.phone)) { notify("Phone must be exactly 10 digits","err"); return; }
+                  if(nInf.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nInf.email)) { notify("Invalid email format","err"); return; }
+                  if(nInf.profile && !validUrl(nInf.profile)) { notify("Invalid profile URL","err"); return; }
                   const infId = uid();
                   const parsedTags = nInf.tags?nInf.tags.split(",").map(t=>t.trim().toLowerCase()).filter(Boolean):[];
                   supabase.from('influencers').insert({id:infId,name:nInf.name,platform:nInf.platform,handle:nInf.handle,profile:nInf.profile,followers:nInf.followers,category:nInf.category,city:nInf.city,phone:nInf.phone,email:nInf.email,address:nInf.address,poc:nInf.poc,avg_rate:+nInf.avgRate||0,rating:nInf.rating,notes:nInf.notes,tags:parsedTags}).then(({error})=>{if(error){console.error("Add influencer failed:",error);notify("Failed to save: "+error.message,"err");}});
@@ -3370,10 +3563,10 @@ return (
               ))}
             </div>
             <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
-              {(role==="negotiator"||role==="admin")&&<Btn v="gold" sm onClick={()=>{setNDeal({inf:"",email:"",platform:"Instagram",followers:"",products:[],usage:"6 months",deadline:"",profile:"",phone:"",address:"",paymentTerms:"Net 15 days",cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>+ New Deal</Btn>}
+              {(role==="negotiator"||role==="admin")&&<Btn v="gold" sm onClick={()=>{setNDeal({inf:"",email:"",platform:"Instagram",followers:"",products:[],usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},paymentTerms:"Net 15 days",cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>+ New Deal</Btn>}
               {bulkSelected.size>0&&<>
-                <Btn v="ok" sm onClick={bulkApprove}>✓ Approve ({bulkSelected.size})</Btn>
-                <Btn v="danger" sm onClick={bulkReject}>✕ Reject ({bulkSelected.size})</Btn>
+                {(role==="approver"||role==="admin")&&<Btn v="ok" sm onClick={bulkApprove}>✓ Approve ({bulkSelected.size})</Btn>}
+                {(role==="approver"||role==="admin")&&<Btn v="danger" sm onClick={bulkReject}>✕ Reject ({bulkSelected.size})</Btn>}
                 <Btn v="gold" sm onClick={bulkExportCSV}>📥 Export ({bulkSelected.size})</Btn>
               </>}
             </div>
@@ -3550,7 +3743,7 @@ return (
           {pendingShip.length>0&&<Section title={`Awaiting Dispatch (${pendingShip.length})`} icon="📋">
             {pendingShip.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Approved: {d.appAt} · Deadline: {d.deadline}</div></div>
-              {role==="logistics"?<Btn v="purple" sm onClick={()=>{setSel(d);setShipF({track:"",carrier:"DTDC"});setModal("ship")}}>📦 Dispatch</Btn>:<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Awaiting logistics</span>}
+              {role==="logistics"?<Btn v="purple" sm onClick={()=>{setSel(d);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>:<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Awaiting logistics</span>}
             </div>)}
           </Section>}
 
@@ -3560,7 +3753,7 @@ return (
               const deal = deals.find(d=>d.id===h.dealId);
               return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.warn,fontWeight:600}}>· Return ({h.reason})</span></div><div style={{fontSize:"11px",color:T.sub}}>📍 {h.address||"—"} · Requested: {new Date(h.requestedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div></div>
-                {role==="logistics"&&<Btn v="gold" sm onClick={()=>{setSel(deal);setShipF({track:"",carrier:"DTDC"});setModal("arrangePickup-"+h.histIdx)}}>🔄 Arrange</Btn>}
+                {role==="logistics"&&<Btn v="gold" sm onClick={()=>{setSel(deal);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("arrangePickup-"+h.histIdx)}}>🔄 Arrange</Btn>}
               </div>;
             })}
           </Section>}
@@ -3582,7 +3775,7 @@ return (
               const deal = deals.find(d=>d.id===h.dealId);
               return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.purple}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.purple,fontWeight:600}}>· New Shipment</span></div><div style={{fontSize:"11px",color:T.sub}}>📦 {(h.products||[]).map(p=>p.name).join(", ")} · 📍 {h.address||"—"}</div></div>
-                {role==="logistics"&&<Btn v="purple" sm onClick={()=>{setSel(deal);setReshipShipF({track:"",carrier:"DTDC"});setModal("reshipDispatch-"+h.histIdx)}}>📦 Dispatch</Btn>}
+                {role==="logistics"&&<Btn v="purple" sm onClick={()=>{setSel(deal);setReshipShipF({track:"",carrier:"DTDC",orderId:""});setModal("reshipDispatch-"+h.histIdx)}}>📦 Dispatch</Btn>}
               </div>;
             })}
           </Section>}
@@ -3629,7 +3822,10 @@ return (
             <Field label="Usage Rights"><Sel value={nDeal.usage} onChange={e=>setNDeal({...nDeal,usage:e.target.value})} options={[{v:"3 months",l:"3 months"},{v:"6 months",l:"6 months"},{v:"12 months",l:"12 months"},{v:"Perpetual",l:"Perpetual"}]}/></Field>
             <Field label="Deadline *"><Inp value={nDeal.deadline} onChange={e=>setNDeal({...nDeal,deadline:e.target.value})} type="date"/></Field>
             <Field label="Phone *"><Inp value={nDeal.phone} onChange={e=>setNDeal({...nDeal,phone:e.target.value})} placeholder="+91 98765 43210"/></Field>
-            <Field label="Shipping Address *" span={2}><Inp value={nDeal.address} onChange={e=>setNDeal({...nDeal,address:e.target.value})} placeholder="Full address for product dispatch"/></Field>
+            <Field label="Street Address *"><Inp value={nDeal.address?.street||""} onChange={e=>setNDeal({...nDeal,address:{...nDeal.address,street:e.target.value}})} placeholder="House/Flat, Building, Street"/></Field>
+            <Field label="City *"><Inp value={nDeal.address?.city||""} onChange={e=>setNDeal({...nDeal,address:{...nDeal.address,city:e.target.value}})} placeholder="City"/></Field>
+            <Field label="State *"><Inp value={nDeal.address?.state||""} onChange={e=>setNDeal({...nDeal,address:{...nDeal.address,state:e.target.value}})} placeholder="State"/></Field>
+            <Field label="Pincode *"><Inp value={nDeal.address?.pincode||""} onChange={e=>setNDeal({...nDeal,address:{...nDeal.address,pincode:e.target.value}})} placeholder="6-digit pincode"/></Field>
           </div>
 
           {/* Products */}
@@ -3638,12 +3834,12 @@ return (
               <span style={{fontSize:"11px",fontWeight:800,color:T.brand,textTransform:"uppercase",letterSpacing:".5px"}}>📦 Products ({nDeal.products?.length||0})</span>
               <Btn v="outline" sm onClick={()=>setNDeal({...nDeal,products:[...(nDeal.products||[]),{id:uid(),name:"",color:"",size:"",qty:"1"}]})}>+ Add Product</Btn>
             </div>
-            {(nDeal.products||[]).map((p,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 60px 24px",gap:"5px",marginBottom:"4px",alignItems:"center"}}>
-              <Inp value={p.name} onChange={e=>{const ps=[...(nDeal.products||[])];ps[i]={...ps[i],name:e.target.value};setNDeal({...nDeal,products:ps})}} placeholder="Product name" error={formErrors.products&&!p.name}/>
-              <Inp value={p.color} onChange={e=>{const ps=[...(nDeal.products||[])];ps[i]={...ps[i],color:e.target.value};setNDeal({...nDeal,products:ps})}} placeholder="Color"/>
-              <Inp value={p.size} onChange={e=>{const ps=[...(nDeal.products||[])];ps[i]={...ps[i],size:e.target.value};setNDeal({...nDeal,products:ps})}} placeholder="Size"/>
-              <Inp value={p.qty} onChange={e=>{const ps=[...(nDeal.products||[])];ps[i]={...ps[i],qty:e.target.value};setNDeal({...nDeal,products:ps})}} placeholder="Qty" type="number"/>
-              {(nDeal.products||[]).length>1&&<button onClick={()=>setNDeal({...nDeal,products:(nDeal.products||[]).filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:T.err,cursor:"pointer",fontSize:"13px",padding:0}}>✕</button>}
+            {(nDeal.products||[]).map((p,idx)=><div key={idx} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 60px 24px",gap:"5px",marginBottom:"4px",alignItems:"center"}}>
+              <Sel value={p.name} onChange={e=>{const updated=[...(nDeal.products||[])];updated[idx].name=e.target.value;const cat=productCatalog.find(c=>c.name===e.target.value);if(cat){updated[idx].color=cat.colors[0]||'';updated[idx].size=cat.sizes[0]||''}setNDeal({...nDeal,products:updated})}} options={[{v:'',l:'Select product...'},...productCatalog.map(c=>({v:c.name,l:c.name}))]} error={formErrors.products&&!p.name}/>
+              <Sel value={p.color||''} onChange={e=>{const updated=[...(nDeal.products||[])];updated[idx].color=e.target.value;setNDeal({...nDeal,products:updated})}} options={[{v:'',l:'Color'},...(productCatalog.find(c=>c.name===p.name)?.colors||[]).map(c=>({v:c,l:c}))]}/>
+              <Sel value={p.size||''} onChange={e=>{const updated=[...(nDeal.products||[])];updated[idx].size=e.target.value;setNDeal({...nDeal,products:updated})}} options={[{v:'',l:'Size'},...(productCatalog.find(c=>c.name===p.name)?.sizes||[]).map(s=>({v:s,l:s}))]}/>
+              <Inp value={p.qty} onChange={e=>{const ps=[...(nDeal.products||[])];ps[idx]={...ps[idx],qty:e.target.value};setNDeal({...nDeal,products:ps})}} placeholder="Qty" type="number"/>
+              {(nDeal.products||[]).length>1&&<button onClick={()=>setNDeal({...nDeal,products:(nDeal.products||[]).filter((_,j)=>j!==idx)})} style={{background:"none",border:"none",color:T.err,cursor:"pointer",fontSize:"13px",padding:0}}>✕</button>}
             </div>)}
             {formErrors.products&&<div style={{fontSize:"10px",color:T.err,marginTop:"4px"}}>At least one product name is required</div>}
           </div>
@@ -3705,6 +3901,7 @@ return (
             </div>
           </div>
           <Field label="Carrier"><Sel value={shipF.carrier} onChange={e=>setShipF({...shipF,carrier:e.target.value})} options={[{v:"DTDC",l:"DTDC"},{v:"Delhivery",l:"Delhivery"},{v:"Shiprocket",l:"Shiprocket"},{v:"BlueDart",l:"BlueDart"},{v:"India Post",l:"India Post"}]}/></Field>
+          <Field label="Order ID"><Inp value={shipF.orderId} onChange={e=>setShipF({...shipF,orderId:e.target.value})} placeholder="e.g. ORD-12345"/></Field>
           <Field label="Tracking ID *"><Inp value={shipF.track} onChange={e=>setShipF({...shipF,track:e.target.value})} placeholder="DTDC-12345678"/></Field>
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}><Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn><Btn v="purple" onClick={dispatch}>📦 Dispatch</Btn></div>
         </>}
@@ -3968,12 +4165,13 @@ return (
             </Section>}
 
             {/* Payment Workflow Tracker */}
-            {["live","partial_live","invoice_ok","payment_requested","payment_approved","partial_paid","paid"].includes(sel.status)&&(role==="negotiator"||role==="admin"||role==="approver"||role==="finance")&&<Section title="Payment Workflow" icon="💸">
+            {["live","partial_live","invoice_pending_approval","invoice_ok","payment_requested","payment_approved","partial_paid","paid"].includes(sel.status)&&(role==="negotiator"||role==="admin"||role==="approver"||role==="finance")&&<Section title="Payment Workflow" icon="💸">
               <div style={{display:"flex",gap:"4px",alignItems:"center",marginBottom:"4px"}}>
                 {[
                   {label:"Link Sent",done:!!sel.paymentFormSent,icon:"📩"},
                   {label:"Invoice Received",done:!!sel.invoiceGenerated,icon:"📄"},
                   {label:"Amount Verified",done:!!sel.inv,icon:"🧾"},
+                  {label:"Manager Approved",done:["invoice_ok","payment_requested","payment_approved","partial_paid","paid"].includes(sel.status),icon:"👔"},
                   {label:"Sent to Finance",done:["payment_requested","payment_approved","partial_paid","paid"].includes(sel.status),icon:"💸"},
                   {label:"Paid",done:sel.status==="paid",icon:"✅"},
                 ].map((step,si)=><div key={si} style={{display:"contents"}}>
@@ -3981,7 +4179,7 @@ return (
                     <div style={{width:"28px",height:"28px",borderRadius:"50%",background:step.done?T.ok:T.border,color:step.done?"#fff":T.sub,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",fontWeight:700}}>{step.done?"✓":si+1}</div>
                     <div style={{fontSize:"9px",fontWeight:700,color:step.done?T.ok:T.sub,textAlign:"center",marginTop:"3px",textTransform:"uppercase",letterSpacing:".3px"}}>{step.label}</div>
                   </div>
-                  {si<4&&<div style={{flex:0,width:"20px",height:"2px",background:step.done?T.ok:T.border,marginBottom:"16px"}}/>}
+                  {si<5&&<div style={{flex:0,width:"20px",height:"2px",background:step.done?T.ok:T.border,marginBottom:"16px"}}/>}
                 </div>)}
               </div>
               {sel.invoiceNumber&&<div style={{fontSize:"11px",color:T.sub,marginTop:"6px"}}>Invoice: <b style={{color:T.text}}>{sel.invoiceNumber}</b> · {sel.invoiceDate}</div>}
@@ -4221,11 +4419,15 @@ return (
               {(role==="negotiator"||role==="admin")&&sel.status==="approved"&&<Btn v="gold" onClick={()=>sendEmail(sel)}>✉ Send Confirmation Email</Btn>}
               {(role==="negotiator"||role==="admin")&&["email_sent","shipped","delivered_prod","partial_live","live","invoice_ok","disputed"].includes(sel.status)&&<Btn v="ghost" sm onClick={()=>confirmAndResendEmail(sel)}>🔁 Resend Confirmation Email</Btn>}
               {(role==="negotiator"||role==="admin")&&["pending","renegotiate","approved","email_sent","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
-              {(role==="logistics"||role==="admin")&&["approved","email_sent"].includes(sel.status)&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC"});setModal("ship")}}>📦 Dispatch</Btn>}
+              {(role==="logistics"||role==="admin")&&["approved","email_sent"].includes(sel.status)&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&<Btn v="primary" onClick={()=>setModal("collectPayment")}>{sel.paymentFormSent?"✅ Link Sent — Resend":"📩 Send Invoice Creator"}</Btn>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&!sel.inv&&<Btn v="gold" onClick={()=>{setInvoiceF({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:"",amount:"",panNumber:""});setModal("uploadInvoice")}}>📄 Upload Invoice & Send to Finance</Btn>}
+              {sel.inv&&sel.status==="invoice_pending_approval"&&(role==="negotiator"||role==="admin")&&<div style={{fontSize:"12px",color:T.warn,fontWeight:700,padding:"6px 10px",background:T.warnBg,borderRadius:"4px"}}>⏳ Invoice pending manager approval</div>}
+              {sel.status==="invoice_pending_approval"&&(role==="approver"||role==="admin")&&<div style={{display:"flex",gap:"6px"}}><Btn v="ok" sm onClick={()=>approveInvoice(sel)}>✓ Approve Invoice</Btn><Btn v="danger" sm onClick={()=>rejectInvoice(sel)}>✕ Reject</Btn></div>}
               {sel.inv&&sel.status==="invoice_ok"&&(role==="negotiator"||role==="admin")&&<div style={{fontSize:"12px",color:T.ok,fontWeight:700,padding:"6px 10px",background:T.okBg,borderRadius:"4px"}}>✓ Invoice sent to Finance — awaiting payment</div>}
               {sel.inv&&sel.status==="disputed"&&(role==="negotiator"||role==="admin")&&<div style={{fontSize:"12px",color:T.err,fontWeight:700,padding:"6px 10px",background:T.errBg,borderRadius:"4px"}}>⚠ Dispute — awaiting manager resolution</div>}
+              {sel.status==="drop_requested"&&(role==="approver"||role==="admin")&&<div style={{display:"flex",gap:"6px"}}><Btn v="ok" sm onClick={()=>approveDropRequest(sel)}>✓ Approve Drop</Btn><Btn v="outline" sm onClick={()=>rejectDropRequest(sel)}>✕ Reject Drop</Btn></div>}
+              {sel.status==="drop_requested"&&role==="negotiator"&&<div style={{fontSize:"12px",color:T.warn,fontWeight:700,padding:"6px 10px",background:T.warnBg,borderRadius:"4px"}}>⏳ Drop request pending manager approval</div>}
               {(role==="finance"||role==="admin")&&!["pending","renegotiate","rejected","dropped"].includes(sel.status)&&rem>0&&<Btn v="ok" onClick={()=>{setPayF({type:paid===0?"advance":"partial",amount:"",note:""});setModal("payment")}}>💰 Record Payment</Btn>}
               {(role==="finance"||role==="admin")&&sel.status==="disputed"&&<>
                 <Btn v="ok" sm onClick={()=>{setPayF({type:"final",amount:String(sel.amount-paid),note:"Paying approved amount per dispute resolution"});setModal("payment")}}>Pay Approved Amount</Btn>
@@ -4380,10 +4582,11 @@ return (
             <div>📱 <b>Phone:</b> {sel.phone||"—"}</div>
           </div>
           <Field label="Carrier"><Sel value={reshipShipF.carrier} onChange={e=>setReshipShipF({...reshipShipF,carrier:e.target.value})} options={[{v:"DTDC",l:"DTDC"},{v:"Delhivery",l:"Delhivery"},{v:"Shiprocket",l:"Shiprocket"},{v:"BlueDart",l:"BlueDart"},{v:"India Post",l:"India Post"}]}/></Field>
+          <Field label="Order ID"><Inp value={reshipShipF.orderId} onChange={e=>setReshipShipF({...reshipShipF,orderId:e.target.value})} placeholder="e.g. ORD-12345"/></Field>
           <Field label="Tracking ID *"><Inp value={reshipShipF.track} onChange={e=>setReshipShipF({...reshipShipF,track:e.target.value})} placeholder="Tracking number"/></Field>
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}>
             <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
-            <Btn v="purple" onClick={()=>dispatchReship(sel,histIdx,reshipShipF.track,reshipShipF.carrier)}>📦 Dispatch</Btn>
+            <Btn v="purple" onClick={()=>dispatchReship(sel,histIdx,reshipShipF.track,reshipShipF.carrier,reshipShipF.orderId)}>📦 Dispatch</Btn>
           </div>
         </Modal>;
       })()}
@@ -4447,9 +4650,11 @@ return (
           </div>
 
           <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>📄 Invoice Document</div>
-          <Field label="Invoice Link / Reference *">
-            <Inp value={invoiceF.notes} onChange={e=>setInvoiceF({...invoiceF,notes:e.target.value})} placeholder="Paste the invoice URL (Google Drive, email link, etc.)"/>
-          </Field>
+          <div style={{border:`2px dashed ${invoiceFile?T.ok:T.border}`,borderRadius:"8px",padding:"16px",textAlign:"center",marginBottom:"10px",background:invoiceFile?T.okBg:"transparent",cursor:"pointer",transition:"all .2s"}} onClick={()=>document.getElementById('invoiceFileInput')?.click()}>
+            <input id="invoiceFileInput" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style={{display:"none"}} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file){setInvoiceFile(file);if(!invoiceF.notes)setInvoiceF(prev=>({...prev,notes:file.name}))}}}/>
+            {invoiceFile?<div><div style={{fontSize:"14px",fontWeight:700,color:T.ok}}>📄 {invoiceFile.name}</div><div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>{(invoiceFile.size/1024).toFixed(1)} KB · Click to change</div></div>:<div><div style={{fontSize:"24px",marginBottom:"4px"}}>📤</div><div style={{fontSize:"13px",fontWeight:600,color:T.sub}}>Click to upload invoice</div><div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>PDF, JPG, PNG, DOC accepted</div></div>}
+          </div>
+          {invoiceUploading&&<div style={{padding:"8px",background:T.infoBg,borderRadius:"6px",marginBottom:"8px",fontSize:"12px",color:T.info,fontWeight:600}}>⏳ Uploading invoice to Google Drive...</div>}
           <Field label="Invoice Number (from the PDF)">
             <Inp value={invoiceF.beneficiary} onChange={e=>setInvoiceF({...invoiceF,beneficiary:e.target.value})} placeholder="e.g. INV-A3F2XK-ABCD (auto-filled if blank)"/>
           </Field>
@@ -4471,7 +4676,7 @@ return (
 
           <div style={{display:"flex",gap:"8px",justifyContent:"flex-end",marginTop:"14px",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>
             <Btn v="outline" onClick={()=>setModal("detail")}>Cancel</Btn>
-            <Btn v="ok" onClick={()=>submitInvoiceComplete(sel)} disabled={!invoiceF.notes||!invoiceF.amount||!invoiceF.panNumber||!invoiceF.panName}>💸 Submit & Send to Finance</Btn>
+            <Btn v="ok" onClick={()=>submitInvoiceComplete(sel)} disabled={(!invoiceFile&&!invoiceF.notes)||!invoiceF.amount||!invoiceF.panNumber||!invoiceF.panName||invoiceUploading}>{invoiceUploading?"⏳ Uploading...":"💸 Submit & Send to Manager"}</Btn>
           </div>
         </>}
       </Modal>

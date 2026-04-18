@@ -21,6 +21,7 @@
 import { createClient } from '@supabase/supabase-js';
 import {
   ensureDealFolderTree,
+  ensureInvoiceFolderTree,
   createResumableUploadSession,
   buildFileName,
   nextVersionFor,
@@ -47,6 +48,7 @@ export async function POST(req) {
     const {
       dealId, collabId, campaignName, influencerName, productLabel,
       deliverableId, deliverableType, isRaw, fileName, mimeType, sizeBytes,
+      invoiceMode, monthLabel,
     } = body;
 
     if (!dealId || !fileName) {
@@ -56,10 +58,16 @@ export async function POST(req) {
     const sb = adminSupabase();
 
     // Ensure folder tree exists (cached after first create)
-    const { collabFolderId, rawFolderId } = await ensureDealFolderTree({
-      campaignName, influencerName, collabId, productLabel,
-    });
-    const parentFolderId = isRaw ? rawFolderId : collabFolderId;
+    let parentFolderId;
+    if (invoiceMode) {
+      const { monthFolderId } = await ensureInvoiceFolderTree({ monthLabel });
+      parentFolderId = monthFolderId;
+    } else {
+      const { collabFolderId, rawFolderId } = await ensureDealFolderTree({
+        campaignName, influencerName, collabId, productLabel,
+      });
+      parentFolderId = isRaw ? rawFolderId : collabFolderId;
+    }
 
     // Compute next version
     let version = 1;

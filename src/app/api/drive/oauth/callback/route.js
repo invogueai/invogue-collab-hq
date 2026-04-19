@@ -1,6 +1,8 @@
 // GET /api/drive/oauth/callback?code=...&state=...
 // Google redirects back here after the user approves.
 // We verify the state cookie, exchange the code for tokens, and save the refresh_token.
+// NOTE: This route is an OAuth callback from Google and does NOT require auth header verification
+// because the user won't have a bearer token when redirected back from Google's consent screen.
 
 import {
   exchangeCodeForTokens,

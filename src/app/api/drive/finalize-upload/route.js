@@ -11,6 +11,7 @@
 // }
 
 import { createClient } from '@supabase/supabase-js';
+import { authenticate, requireRole } from '../../../../lib/auth';
 import { getFileMetadata } from '../../../../lib/drive';
 
 export const runtime = 'nodejs';
@@ -24,6 +25,11 @@ function adminSupabase() {
 
 export async function POST(req) {
   try {
+    const auth = await authenticate(req);
+    if (auth.error) return Response.json({ ok: false, error: auth.error }, { status: 401 });
+    const roleBlock = requireRole(auth.role, ['admin','negotiator','approver']);
+    if (roleBlock) return roleBlock;
+
     const body = await req.json();
     const {
       dealId, deliverableId, isRaw, version,

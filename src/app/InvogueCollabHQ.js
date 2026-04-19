@@ -35,6 +35,7 @@ const T = {
 const STATUS_CFG = {
   pending:        { l:"Pending Approval", c:T.warn,   bg:T.warnBg,   i:"⏳" },
   renegotiate:    { l:"Renegotiate",      c:T.warn,   bg:T.warnBg,   i:"🔄" },
+  manager_approved: { l:"Manager Approved (Awaiting Admin)", c:T.info, bg:T.infoBg, i:"✅" },
   approved:       { l:"Approved",         c:T.ok,     bg:T.okBg,     i:"✅" },
   rejected:       { l:"Rejected",         c:T.err,    bg:T.errBg,    i:"❌" },
   drop_requested: { l:"Drop Requested",   c:T.err,    bg:T.errBg,    i:"🚫" },
@@ -817,7 +818,7 @@ export default function InvogueCollabHQ() {
     const monthlySpend = {};
     const campaignPerf = {};
     const influencerStats = {};
-    const statusDist = {pending:0, approved:0, live:0, paid:0, rejected:0, dropped:0};
+    const statusDist = {pending:0, manager_approved:0, approved:0, live:0, paid:0, rejected:0, dropped:0};
 
     deals.forEach(d => {
       const month = d.at?.slice(0,7) || "2026-01";
@@ -1119,15 +1120,27 @@ export default function InvogueCollabHQ() {
     // Budget check — enforce hard cap
     const camp = getCamp(d.cid);
     const committed = campCommitted(d.cid);
-    const remaining = camp ? camp.budget - committed : 0;
     if(camp && (committed + d.amount) > camp.budget) {
       return notify(`Budget exceeded — campaign budget is ${f(camp.budget)}, already committed ${f(committed)}, this deal would add ${f(d.amount)} (total ${f(committed + d.amount)})`,"err");
     }
 
+    // Dual approval: deals > ₹50K need both manager AND admin approval
+    const needsDualApproval = d.amount > 50000;
+    if(needsDualApproval && role === "approver" && d.status !== "manager_approved") {
+      // Manager is first approver — move to intermediate state
+      supabase.from('deals').update({status:'manager_approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error){console.error("Manager approve save failed:",error);notify("Failed to save approval","err");}});
+      upDeal(d.id,{status:"manager_approved",appBy:userName,appAt:ts});
+      addLog(d.id,userName,"Manager approved — awaiting admin approval (₹50K+ dual approval)",f(d.amount));
+      setSel(null);
+      setModal(null);
+      notify("Manager approved! Awaiting admin approval for "+f(d.amount));
+      return;
+    }
+
+    // Admin final approval (or single approval for ≤₹50K)
     supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error){console.error("Approve save failed:",error);notify("Failed to save approval","err");}});
     upDeal(d.id,{status:"approved",appBy:userName,appAt:ts});
-    addLog(d.id,userName,"Approved & amount locked",f(d.amount));
-
+    addLog(d.id,userName,needsDualApproval?"Admin approved (dual approval complete) & amount locked":"Approved & amount locked",f(d.amount));
     setSel(null);
     setModal(null);
     notify("Approved! "+f(d.amount)+" locked");
@@ -2052,7 +2065,7 @@ invogue.shop · contact@invogue.shop
 
   const bulkApprove = () => {
     if(role!=="approver"&&role!=="admin") return notify("Only Manager or Admin can approve deals","err");
-    const toApprove = [...bulkSelected].map(id => deals.find(d => d.id === id)).filter(d => d && d.status === "pending");
+    const toApprove = [...bulkSelected].map(id => deals.find(d => d.id === id)).filter(d => d && (d.status === "pending" || d.status === "manager_approved"));
     if(toApprove.length === 0) return notify("No pending deals selected","err");
 
     const count = toApprove.length;
@@ -2063,9 +2076,18 @@ invogue.shop · contact@invogue.shop
         const userName = loggedIn?.name || "Manager";
         const ts = new Date().toISOString();
         toApprove.forEach(d => {
-          supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error) console.error("Bulk approve save failed for "+d.id+":",error);});
-          upDeal(d.id, {status:"approved",appBy:userName,appAt:ts});
-          addLog(d.id, userName, "Bulk approved", f(d.amount));
+          const needsDual = d.amount > 50000;
+          const isDualPending = d.status === "manager_approved";
+          if(needsDual && role === "approver" && !isDualPending) {
+            // Manager first approval
+            supabase.from('deals').update({status:'manager_approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error) console.error("Bulk manager-approve failed for "+d.id+":",error);});
+            upDeal(d.id, {status:"manager_approved",appBy:userName,appAt:ts});
+            addLog(d.id, userName, "Manager approved (bulk) — awaiting admin", f(d.amount));
+          } else {
+            supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error) console.error("Bulk approve save failed for "+d.id+":",error);});
+            upDeal(d.id, {status:"approved",appBy:userName,appAt:ts});
+            addLog(d.id, userName, "Bulk approved", f(d.amount));
+          }
         });
         setBulkSelected(new Set());
         setBulkSelectAll(false);
@@ -2340,7 +2362,7 @@ return (
           ADMIN DASHBOARD — Super access, full control
          ═══════════════════════════════════════════════════════ */}
       {view==="dashboard"&&role==="admin"&&(()=>{
-        const pendingApproval = deals.filter(d=>d.status==="pending");
+        const pendingApproval = deals.filter(d=>d.status==="pending"||d.status==="manager_approved");
         const disputed = deals.filter(d=>d.status==="disputed");
         const needPayment = deals.filter(d=>!["rejected","pending","renegotiate","paid"].includes(d.status)&&remaining(d)>0);
         const overdueDels = pendingDels.filter(d=>new Date(d.deadline)<new Date());
@@ -2377,13 +2399,14 @@ return (
 
           {/* APPROVAL QUEUE — Admin can approve */}
           {pendingApproval.length>0&&<Section title={`Approval Queue (${pendingApproval.length})`} icon="⚡" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Action Required</span>}>
-            {pendingApproval.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            {pendingApproval.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${d.status==="manager_approved"?T.info:T.warn}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
                 <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"13px"}}>· {d.platform} · {d.followers}</span></div>
                 <div style={{fontSize:"11px",color:T.sub}}>{d.product} · {d.dels.length} deliverables · by {d.by} · {getCamp(d.cid)?.name||""}</div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
                 <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{f(d.amount)}</span>
+                {d.status==="manager_approved"&&<span style={{fontSize:"10px",padding:"2px 6px",borderRadius:"4px",background:T.infoBg,color:T.info,fontWeight:700}}>Manager ✓ — Admin Needed</span>}
                 <Btn v="ok" sm onClick={()=>setConfirmAction({title:"Approve Deal",msg:"Approve and lock "+f(d.amount)+" for "+d.inf+"?",onConfirm:()=>{approveDeal(d);setConfirmAction(null)}})}>✓</Btn>
                 <Btn v="outline" sm onClick={()=>setConfirmAction({title:"Request Renegotiation",msg:"Renegotiate "+d.inf+" deal?",onConfirm:()=>{renegDeal(d);setConfirmAction(null)}})}>↩</Btn>
                 <Btn v="danger" sm onClick={()=>openRejectModal(d)}>✕</Btn>
@@ -2778,7 +2801,7 @@ return (
           MANAGER / APPROVER DASHBOARD — Bird's Eye View
          ═══════════════════════════════════════════════════════ */}
       {view==="dashboard"&&role==="approver"&&(()=>{
-        const pendingApproval = deals.filter(d=>d.status==="pending");
+        const pendingApproval = deals.filter(d=>d.status==="pending"||d.status==="manager_approved");
         const disputed = deals.filter(d=>d.status==="disputed");
         const needPayment = deals.filter(d=>!["rejected","pending","renegotiate","paid"].includes(d.status)&&remaining(d)>0);
         const overdueDels = pendingDels.filter(d=>new Date(d.deadline)<new Date());
@@ -2796,13 +2819,13 @@ return (
 
           {/* APPROVAL QUEUE */}
           {pendingApproval.length>0&&<Section title={`Approval Queue (${pendingApproval.length})`} icon="⚡" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Action Required</span>}>
-            {pendingApproval.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",transition:"all .12s"}}
+            {pendingApproval.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${d.status==="manager_approved"?T.info:T.warn}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",transition:"all .12s"}}
               onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}
               onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
               <div>
                 <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"13px"}}>· {d.platform} · {d.followers}</span></div>
                 <div style={{fontSize:"11px",color:T.sub}}>{d.product} · {d.dels.length} deliverables · by {d.by} · {getCamp(d.cid)?.name||""}</div>
-                <div style={{display:"flex",gap:"3px",marginTop:"4px"}}>{d.dels.map((dl,i)=><span key={i} style={{padding:"1px 5px",borderRadius:"4px",fontSize:"10px",fontWeight:600,background:T.warnBg,color:T.warn}}>{dl.type}</span>)}</div>
+                <div style={{display:"flex",gap:"3px",marginTop:"4px"}}>{d.dels.map((dl,i)=><span key={i} style={{padding:"1px 5px",borderRadius:"4px",fontSize:"10px",fontWeight:600,background:d.status==="manager_approved"?T.infoBg:T.warnBg,color:d.status==="manager_approved"?T.info:T.warn}}>{dl.type}</span>)}</div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:"6px"}} onClick={e=>e.stopPropagation()}>
                 <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{f(d.amount)}</span>
@@ -3858,6 +3881,27 @@ return (
             <Field label="Pincode *"><Inp value={nDeal.address?.pincode||""} onChange={e=>setNDeal({...nDeal,address:{...nDeal.address,pincode:e.target.value}})} placeholder="6-digit pincode"/></Field>
           </div>
 
+          {/* Historical rates for returning influencer */}
+          {nDeal.inf && nDeal.inf.length > 2 && (()=>{
+            const pastDeals = deals.filter(d => d.inf?.toLowerCase() === nDeal.inf?.toLowerCase() && d.status !== 'rejected' && d.status !== 'dropped');
+            if(pastDeals.length === 0) return null;
+            const avgRate = Math.round(pastDeals.reduce((s,d)=>s+d.amount,0)/pastDeals.length);
+            return <div style={{padding:"10px 12px",background:T.infoBg,border:`1px solid ${T.info}33`,borderRadius:"7px",marginBottom:"8px",fontSize:"12px"}}>
+              <div style={{fontWeight:800,fontSize:"11px",color:T.info,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px"}}>📊 Previous Collaborations with {nDeal.inf} ({pastDeals.length})</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"4px 12px",marginBottom:"4px"}}>
+                {pastDeals.slice(0,6).map((pd,idx)=><div key={idx} style={{display:"flex",justifyContent:"space-between",padding:"3px 6px",background:"rgba(255,255,255,.05)",borderRadius:"4px"}}>
+                  <span style={{color:T.sub}}>{pd.at?.slice(0,7)||"—"}</span>
+                  <span style={{fontWeight:700,color:T.gold}}>{f(pd.amount)}</span>
+                </div>)}
+              </div>
+              <div style={{marginTop:"6px",paddingTop:"6px",borderTop:`1px solid ${T.info}22`,display:"flex",gap:"16px"}}>
+                <span><b style={{color:T.info}}>Avg Rate:</b> <b style={{color:T.gold}}>{f(avgRate)}</b></span>
+                <span><b style={{color:T.info}}>Last:</b> <b style={{color:T.gold}}>{f(pastDeals[0]?.amount)}</b> ({pastDeals[0]?.at?.slice(0,7)||"—"})</span>
+                <span><b style={{color:T.info}}>Range:</b> <b style={{color:T.gold}}>{f(Math.min(...pastDeals.map(d=>d.amount)))} – {f(Math.max(...pastDeals.map(d=>d.amount)))}</b></span>
+              </div>
+            </div>;
+          })()}
+
           {/* Products */}
           <div style={{marginTop:"8px",padding:"12px",background:T.surfaceAlt,borderRadius:"7px",marginBottom:"8px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
@@ -4438,7 +4482,7 @@ return (
 
             {/* Actions */}
             <div style={{display:"flex",gap:"5px",flexWrap:"wrap",paddingTop:"10px",borderTop:`1px solid ${T.border}`}}>
-              {(role==="approver"||role==="admin")&&(sel.status==="pending"||sel.status==="renegotiate")&&<>
+              {(role==="approver"||role==="admin")&&(sel.status==="pending"||sel.status==="renegotiate"||(sel.status==="manager_approved"&&role==="admin"))&&<>
                 <Btn v="ok" onClick={()=>approveDeal(sel)}>✓ Approve & Lock</Btn>
                 <Btn v="outline" onClick={()=>renegDeal(sel)}>↩ Renegotiate</Btn>
                 <Btn v="danger" sm onClick={()=>openRejectModal(sel)}>✕ Reject</Btn>
@@ -4448,12 +4492,13 @@ return (
               </>}
               {(role==="negotiator"||role==="admin")&&sel.status==="approved"&&<Btn v="gold" onClick={()=>sendEmail(sel)}>✉ Send Confirmation Email</Btn>}
               {(role==="negotiator"||role==="admin")&&["email_sent","shipped","delivered_prod","partial_live","live","invoice_ok","disputed"].includes(sel.status)&&<Btn v="ghost" sm onClick={()=>confirmAndResendEmail(sel)}>🔁 Resend Confirmation Email</Btn>}
-              {(role==="negotiator"||role==="admin")&&["pending","renegotiate","approved","email_sent","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
+              {(role==="negotiator"||role==="admin")&&["pending","renegotiate","approved","manager_approved","email_sent","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
               {(role==="logistics"||role==="admin")&&["approved","email_sent"].includes(sel.status)&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&<Btn v="primary" onClick={()=>setModal("collectPayment")}>{sel.paymentFormSent?"✅ Link Sent — Resend":"📩 Send Invoice Creator"}</Btn>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&!sel.inv&&<Btn v="gold" onClick={()=>{setInvoiceF({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:"",amount:"",panNumber:""});setModal("uploadInvoice")}}>📄 Upload Invoice & Send to Finance</Btn>}
               {sel.inv&&sel.status==="invoice_pending_approval"&&(role==="negotiator"||role==="admin")&&<div style={{fontSize:"12px",color:T.warn,fontWeight:700,padding:"6px 10px",background:T.warnBg,borderRadius:"4px"}}>⏳ Invoice pending manager approval</div>}
               {sel.status==="invoice_pending_approval"&&(role==="approver"||role==="admin")&&<div style={{display:"flex",gap:"6px"}}><Btn v="ok" sm onClick={()=>approveInvoice(sel)}>✓ Approve Invoice</Btn><Btn v="danger" sm onClick={()=>rejectInvoice(sel)}>✕ Reject</Btn></div>}
+              {sel.status==="manager_approved"&&<div style={{fontSize:"12px",color:T.info,fontWeight:700,padding:"6px 10px",background:T.infoBg,borderRadius:"4px"}}>✅ Manager approved — awaiting admin final approval (₹50K+ deal)</div>}
               {sel.inv&&sel.status==="invoice_ok"&&(role==="negotiator"||role==="admin")&&<div style={{fontSize:"12px",color:T.ok,fontWeight:700,padding:"6px 10px",background:T.okBg,borderRadius:"4px"}}>✓ Invoice sent to Finance — awaiting payment</div>}
               {sel.inv&&sel.status==="disputed"&&(role==="negotiator"||role==="admin")&&<div style={{fontSize:"12px",color:T.err,fontWeight:700,padding:"6px 10px",background:T.errBg,borderRadius:"4px"}}>⚠ Dispute — awaiting manager resolution</div>}
               {sel.status==="drop_requested"&&(role==="approver"||role==="admin")&&<div style={{display:"flex",gap:"6px"}}><Btn v="ok" sm onClick={()=>approveDropRequest(sel)}>✓ Approve Drop</Btn><Btn v="outline" sm onClick={()=>rejectDropRequest(sel)}>✕ Reject Drop</Btn></div>}

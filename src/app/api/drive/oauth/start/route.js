@@ -2,12 +2,18 @@
 // Redirects the user to Google's consent screen.
 // After approval, Google sends them back to /api/drive/oauth/callback with a code.
 
+import { authenticate, requireRole } from '../../../../../lib/auth';
 import { getAuthorizationUrl, makeStateToken } from '../../../../../lib/drive';
 
 export const runtime = 'nodejs';
 
 export async function GET(req) {
   try {
+    const auth = await authenticate(req);
+    if (auth.error) return Response.json({ ok: false, error: auth.error }, { status: 401 });
+    const roleBlock = requireRole(auth.role, ['admin']);
+    if (roleBlock) return roleBlock;
+
     const state = makeStateToken();
     const url = getAuthorizationUrl({ state, hd: 'invogue.shop' });
 

@@ -6,6 +6,20 @@ import { supabase } from '../lib/supabase';
    INVOGUE COLLAB HQ — Production Build with Persistent Storage
    ═══════════════════════════════════════════════════════════════ */
 
+// ─── API FETCH HELPER WITH AUTH ───
+// Wraps fetch() to automatically include the Supabase JWT token in Authorization header
+const apiFetch = async (url, options = {}) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...options.headers,
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+  });
+};
+
 // ─── DESIGN SYSTEM ───
 const T = {
   bg: "#F6F4F0", surface: "#FFFFFF", surfaceAlt: "#FAF9F7", brand: "#770A1C", gold: "#B08D42",
@@ -493,12 +507,12 @@ export default function InvogueCollabHQ() {
   useEffect(()=>{
     if(!loggedIn) { setDriveConnStatus(null); return; }
     let alive = true;
-    fetch('/api/drive/oauth/status').then(r=>r.json()).then(d=>{
+    apiFetch('/api/drive/oauth/status').then(r=>r.json()).then(d=>{
       if(alive && d.ok) setDriveConnStatus({connected:!!d.connected, email:d.email, connectedAt:d.connectedAt});
     }).catch(()=>{});
     const onMsg = e => {
       if(e.data?.type==='drive_oauth_done') {
-        fetch('/api/drive/oauth/status').then(r=>r.json()).then(d=>{
+        apiFetch('/api/drive/oauth/status').then(r=>r.json()).then(d=>{
           if(d.ok) setDriveConnStatus({connected:!!d.connected, email:d.email, connectedAt:d.connectedAt});
         });
       }
@@ -614,7 +628,7 @@ export default function InvogueCollabHQ() {
   const loadDriveFiles = useCallback(async (dealId) => {
     if(!dealId) return;
     try {
-      const resp = await fetch(`/api/drive/list?dealId=${encodeURIComponent(dealId)}`);
+      const resp = await apiFetch(`/api/drive/list?dealId=${encodeURIComponent(dealId)}`);
       const data = await resp.json();
       if(!resp.ok || !data.ok) { console.error("loadDriveFiles:", data.error); return; }
       setDriveFiles({deliverables: data.deliverables || {}, raw: data.raw || []});
@@ -632,7 +646,7 @@ export default function InvogueCollabHQ() {
     try {
       const campaign = campaigns.find(c => c.id === deal.cid);
       const productLabel = deal.products ? deal.products.map(p=>p.name).join(", ") : (deal.product || "");
-      const initResp = await fetch('/api/drive/create-upload-session', {
+      const initResp = await apiFetch('/api/drive/create-upload-session', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({
@@ -673,7 +687,7 @@ export default function InvogueCollabHQ() {
       });
 
       // Persist the row to Supabase
-      const finResp = await fetch('/api/drive/finalize-upload', {
+      const finResp = await apiFetch('/api/drive/finalize-upload', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({
@@ -1095,28 +1109,32 @@ export default function InvogueCollabHQ() {
   };
 
   const approveDeal = d => {
+    if(role!=="approver"&&role!=="admin") return notify("Only Manager or Admin can approve deals","err");
+    if(d.by === loggedIn?.name) {
+      return notify("You cannot approve your own deal — a different manager must approve","err");
+    }
     const userName = loggedIn?.name||"You (Manager)";
     const ts = new Date().toISOString();
+
+    // Budget check — enforce hard cap
+    const camp = getCamp(d.cid);
+    const committed = campCommitted(d.cid);
+    const remaining = camp ? camp.budget - committed : 0;
+    if(camp && (committed + d.amount) > camp.budget) {
+      return notify(`Budget exceeded — campaign budget is ${f(camp.budget)}, already committed ${f(committed)}, this deal would add ${f(d.amount)} (total ${f(committed + d.amount)})`,"err");
+    }
+
     supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error){console.error("Approve save failed:",error);notify("Failed to save approval","err");}});
     upDeal(d.id,{status:"approved",appBy:userName,appAt:ts});
     addLog(d.id,userName,"Approved & amount locked",f(d.amount));
 
-    // Budget check
-    const camp = getCamp(d.cid);
-    const committed = campCommitted(d.cid);
-    const remaining = camp ? camp.budget - committed : 0;
-    const budgetPct = camp ? Math.round((committed / camp.budget) * 100) : 0;
-    let budgetMsg = "";
-    if(camp) {
-      budgetMsg = remaining < 0 ? ` ⚠ OVERBUDGET by ${f(Math.abs(remaining))}!` : remaining < (camp.budget * 0.2) ? ` ⚠ LOW budget (${budgetPct}% used)` : "";
-    }
-
     setSel(null);
     setModal(null);
-    notify("Approved! "+f(d.amount)+" locked"+budgetMsg);
+    notify("Approved! "+f(d.amount)+" locked");
   };
 
   const rejectDeal = (d, reason) => {
+    if(role!=="approver"&&role!=="admin") return notify("Only Manager or Admin can reject deals","err");
     if(!reason || !reason.trim()) return notify("Rejection reason is mandatory","err");
     const userName = loggedIn?.name||"You (Manager)";
     const ts = new Date().toISOString();
@@ -1183,6 +1201,11 @@ export default function InvogueCollabHQ() {
     if(keptDels.length===0) return notify("Keep at least one deliverable","err");
     if(!resubmitF.response.trim()) return notify("Add a response note for the manager","err");
     if(+resubmitF.amount <= 0) return notify("Amount must be positive","err");
+    // Prevent amount inflation — resubmitted amount cannot exceed original
+    const originalDeal = deals.find(d=>d.id===resubmitF.dealId);
+    if(originalDeal && +resubmitF.amount > originalDeal.amount) {
+      return notify(`Resubmitted amount (${f(resubmitF.amount)}) cannot exceed the original deal amount (${f(originalDeal.amount)})`,"err");
+    }
 
     const newDels = keptDels.map(({keep,isNew,...rest})=>rest);
     const userName = loggedIn?.name||"You (Negotiator)";
@@ -1303,7 +1326,7 @@ export default function InvogueCollabHQ() {
 
     notify(isResend ? "Resending email..." : "Sending email...","info");
     try {
-      const resp = await fetch('/api/send-email', {
+      const resp = await apiFetch('/api/send-email', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ to:d.email, subject, html })
@@ -1575,7 +1598,7 @@ export default function InvogueCollabHQ() {
       setInvoiceUploading(true);
       try {
         const monthLabel = new Date().toLocaleString('en-IN', {month:'long', year:'numeric'});
-        const initResp = await fetch('/api/drive/create-upload-session', {
+        const initResp = await apiFetch('/api/drive/create-upload-session', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify({
@@ -1656,6 +1679,7 @@ export default function InvogueCollabHQ() {
   };
 
   const approveInvoice = (d) => {
+    if(role!=="approver"&&role!=="admin") return notify("Only Manager or Admin can approve invoices","err");
     const userName = loggedIn?.name||"Manager";
     supabase.from('deals').update({status:'invoice_ok'}).eq('id',d.id).then(({error})=>{if(error) console.error("Invoice approval failed:",error);});
     upDeal(d.id,{status:"invoice_ok"});
@@ -1666,6 +1690,7 @@ export default function InvogueCollabHQ() {
   };
 
   const rejectInvoice = (d) => {
+    if(role!=="approver"&&role!=="admin") return notify("Only Manager or Admin can reject invoices","err");
     const userName = loggedIn?.name||"Manager";
     supabase.from('deals').update({status:'live'}).eq('id',d.id).then(({error})=>{if(error) console.error("Invoice rejection failed:",error);});
     upDeal(d.id,{status:"live"});
@@ -1680,7 +1705,10 @@ export default function InvogueCollabHQ() {
     if(!payF.amount) return notify("Enter amount","err");
     if(+payF.amount <= 0) return notify("Amount must be positive","err");
     const amt = +payF.amount;
-    if(amt > remaining(sel) && amt !== sel.amount) return notify("Exceeds remaining balance!","err");
+    if(["pending","renegotiate","rejected","dropped","drop_requested","disputed"].includes(sel.status)) {
+      return notify("Cannot record payment — deal status is "+sel.status,"err");
+    }
+    if(amt > remaining(sel)) return notify(`Exceeds remaining balance of ${f(remaining(sel))}!`,"err");
     const payId = uid();
     const ts = new Date().toISOString();
     const userName = loggedIn?.name||"You (Finance)";
@@ -1952,6 +1980,7 @@ invogue.shop · contact@invogue.shop
   };
 
   const approveDropRequest = (d) => {
+    if(role!=="approver"&&role!=="admin") return notify("Only Manager or Admin can approve drop requests","err");
     const userName = loggedIn?.name||"Manager";
     const ts = new Date().toISOString();
     supabase.from('deals').update({status:'dropped'}).eq('id',d.id).then(({error})=>{if(error) console.error("Drop approval failed:",error);});
@@ -1963,6 +1992,7 @@ invogue.shop · contact@invogue.shop
   };
 
   const rejectDropRequest = (d) => {
+    if(role!=="approver"&&role!=="admin") return notify("Only Manager or Admin can reject drop requests","err");
     const userName = loggedIn?.name||"Manager";
     const prevStatus = d.statusBeforeDrop || "approved";
     supabase.from('deals').update({status:'approved',renegotiation_note:null}).eq('id',d.id).then(({error})=>{if(error) console.error("Drop rejection failed:",error);});

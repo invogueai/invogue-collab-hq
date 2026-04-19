@@ -2,6 +2,7 @@
 // Returns all uploaded files for a deal, grouped into { deliverables: {[id]: files[]}, raw: files[] }
 
 import { createClient } from '@supabase/supabase-js';
+import { authenticate } from '../../../../lib/auth';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +14,9 @@ function adminSupabase() {
 
 export async function GET(req) {
   try {
+    const auth = await authenticate(req);
+    if (auth.error) return Response.json({ ok: false, error: auth.error }, { status: 401 });
+
     const { searchParams } = new URL(req.url);
     const dealId = searchParams.get('dealId');
     if (!dealId) {

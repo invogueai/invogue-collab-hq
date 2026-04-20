@@ -1,15 +1,7 @@
 // Invogue Collab HQ — Email sender (Resend API)
 // POST /api/send-email  { to, subject, html, replyTo? }
 
-import { authenticate, requireRole } from '../../lib/auth';
-import { createClient } from '@supabase/supabase-js';
-
-function adminSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error('Missing SUPABASE env vars');
-  return createClient(url, key, { auth: { persistSession: false } });
-}
+import { authenticate, requireRole } from '../../../lib/auth';
 
 export async function POST(req) {
   try {

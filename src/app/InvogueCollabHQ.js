@@ -327,14 +327,29 @@ export default function InvogueCollabHQ() {
 
   // Product Catalog Management
   const [productCatalog, setProductCatalog] = useState([
-    {id:'p1',name:'Shaper Shorts',sizes:['XS','S','M','L','XL','XXL','3XL'],colors:['Black','Nude','Brown','Grey']},
-    {id:'p2',name:'Waist Trainer',sizes:['XS','S','M','L','XL','XXL','3XL'],colors:['Black','Nude','Skin']},
-    {id:'p3',name:'Bodysuit',sizes:['XS','S','M','L','XL','XXL','3XL'],colors:['Black','Nude','Brown']},
-    {id:'p4',name:'Thigh Shaper',sizes:['XS','S','M','L','XL','XXL','3XL'],colors:['Black','Nude']},
-    {id:'p5',name:'Arm Shaper',sizes:['S/M','L/XL','XXL/3XL'],colors:['Black','Nude','Skin']},
+    {id:'p1',name:'Essentials Snatched Bodysuit Bodyshaper',sizes:['S','M','L','XL','2XL','3XL'],colors:['Beige','Black']},
+    {id:'p2',name:'Strapless Bodysuit Bodyshaper',sizes:['S','M','L','XL'],colors:['Beige','Black']},
+    {id:'p3',name:'Essentials Mid Thigh Bodysuit Bodyshaper',sizes:['S','M','L','XL'],colors:['Beige','Black']},
+    {id:'p4',name:'Essentials Cap Sleeves Playsuit Bodyshaper',sizes:['S','M','L','XL'],colors:['Beige','Black']},
+    {id:'p5',name:'Intense Snatched Bodyshaper',sizes:['XS-S','M-L','XL-2XL','3XL-4XL','5XL-6XL','7XL-8XL'],colors:['Beige','Black','Brown','Red','Y2K Pink']},
+    {id:'p6',name:'Intense Mid Thigh Bodyshaper',sizes:['XS-S','M-L','XL-2XL','3XL-4XL','5XL-6XL','7XL-8XL'],colors:['Beige','Black','Brown']},
+    {id:'p7',name:'Full Sleeves Bare Bodysuit',sizes:['XS','S','M','L','XL','2XL','3XL'],colors:['Beige','Black','Brown']},
+    {id:'p8',name:'Cap Sleeves Bare Bodysuit',sizes:['XS','S','M','L','XL','2XL','3XL'],colors:['Beige','Black','Brown']},
+    {id:'p9',name:'Sleeveless Bare Bodysuit',sizes:['XS','S','M','L','XL','2XL','3XL'],colors:['Beige','Black','Brown']},
+    {id:'p10',name:'Intense Strapless Bodyshaper',sizes:['S','M','L','XL'],colors:['Beige','Black']},
+    {id:'p11',name:'Non Padded Wireless Shaping Bra',sizes:['XS','S','M','L','XL'],colors:['Beige','Black']},
+    {id:'p12',name:'Everyday Seamless Lightly Padded Bra',sizes:['S','M','L','XL'],colors:['Pink','Rust']},
+    {id:'p13',name:'No-Wire Push Up Bra',sizes:['S','M','L','XL'],colors:['Black','Blush','White']},
+    {id:'p14',name:'Essentials Plus Bodysuit Bodyshaper',sizes:['S-M','L-XL','2XL-3XL','4XL-5XL'],colors:['Beige','Black','Cream']},
+    {id:'p15',name:'Intense High Waisted Shaper Shorts',sizes:['XS','S','M','L','XL'],colors:['Beige','Black']},
+    {id:'p16',name:'High Compression Tummy Tucker',sizes:['S','M','L','XL','2XL','3XL'],colors:['Brief Cut - High Rise','Mid Thigh - Mid Rise']},
+    {id:'p17',name:'Zipper Shapewear Swimsuit',sizes:['S','M','L','XL','2XL','3XL'],colors:[]},
+    {id:'p18',name:'Plunge Neck Shapewear Swimsuit',sizes:['XS','S','M','L','XL','2XL','3XL'],colors:[]},
   ]);
   const [showProductMgmt, setShowProductMgmt] = useState(false);
   const [newProduct, setNewProduct] = useState({name:'',sizes:'',colors:''});
+  const [editingProduct, setEditingProduct] = useState(null); // product id being edited
+  const [editVariant, setEditVariant] = useState({size:'',color:''}); // new variant inputs for editing
 
   // Google Drive resource management
   const [driveFiles, setDriveFiles] = useState({deliverables:{}, raw:[]}); // for the currently-open deal
@@ -3210,15 +3225,16 @@ return (
           </Section>
 
           {/* PRODUCT CATALOG MANAGEMENT */}
-          <Section title="Product Catalog" icon="📦" action={<Btn v="gold" sm onClick={()=>setShowProductMgmt(!showProductMgmt)}>{showProductMgmt?"Close":"⚙ Manage Products"}</Btn>}>
+          <Section title="Product Catalog" icon="📦" action={(role==='logistics'||role==='admin')&&<Btn v="gold" sm onClick={()=>{setShowProductMgmt(!showProductMgmt);setEditingProduct(null)}}>{showProductMgmt?"Close":"⚙ Manage Products"}</Btn>}>
             {showProductMgmt&&<div style={{background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"14px",marginBottom:"12px"}}>
               <div style={{fontSize:"12px",fontWeight:700,marginBottom:"8px"}}>Add New Product</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",gap:"6px",alignItems:"end"}}>
                 <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Name</label><Inp value={newProduct.name} onChange={e=>setNewProduct({...newProduct,name:e.target.value})} placeholder="Product name"/></div>
                 <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Sizes (comma-sep)</label><Inp value={newProduct.sizes} onChange={e=>setNewProduct({...newProduct,sizes:e.target.value})} placeholder="XS,S,M,L,XL"/></div>
-                <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Colors (comma-sep)</label><Inp value={newProduct.colors} onChange={e=>setNewProduct({...newProduct,colors:e.target.value})} placeholder="Black,Nude"/></div>
+                <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Colors (comma-sep)</label><Inp value={newProduct.colors} onChange={e=>setNewProduct({...newProduct,colors:e.target.value})} placeholder="Black,Beige"/></div>
                 <Btn v="ok" sm onClick={()=>{
                   if(!newProduct.name) return notify("Product name required","err");
+                  if(productCatalog.some(x=>x.name.toLowerCase()===newProduct.name.trim().toLowerCase())) return notify("Product already exists","err");
                   const p = {id:uid(),name:newProduct.name.trim(),sizes:newProduct.sizes.split(',').map(s=>s.trim()).filter(Boolean),colors:newProduct.colors.split(',').map(s=>s.trim()).filter(Boolean)};
                   setProductCatalog(prev=>[...prev,p]);
                   setNewProduct({name:'',sizes:'',colors:''});
@@ -3226,12 +3242,59 @@ return (
                 }}>+ Add</Btn>
               </div>
             </div>}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"6px"}}>
-              {productCatalog.map(p=><div key={p.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"10px"}}>
-                <div style={{fontWeight:700,fontSize:"13px"}}>{p.name}</div>
-                <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>Sizes: {p.sizes.join(', ')}</div>
-                <div style={{fontSize:"11px",color:T.sub}}>Colors: {p.colors.join(', ')}</div>
-                {showProductMgmt&&<Btn v="danger" sm onClick={()=>setProductCatalog(prev=>prev.filter(x=>x.id!==p.id))} style={{marginTop:"6px"}}>Remove</Btn>}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:"8px"}}>
+              {productCatalog.map(p=><div key={p.id} style={{background:T.surface,border:`1px solid ${editingProduct===p.id?T.gold:T.border}`,borderRadius:"6px",padding:"10px",transition:"border-color 0.2s"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{fontWeight:700,fontSize:"13px"}}>{p.name}</div>
+                  {showProductMgmt&&<div style={{display:"flex",gap:"4px"}}>
+                    <Btn v="gold" sm onClick={()=>{setEditingProduct(editingProduct===p.id?null:p.id);setEditVariant({size:'',color:''})}}>{editingProduct===p.id?"Done":"Edit"}</Btn>
+                    <Btn v="danger" sm onClick={()=>{if(confirm("Remove "+p.name+"?"))setProductCatalog(prev=>prev.filter(x=>x.id!==p.id))}}>✕</Btn>
+                  </div>}
+                </div>
+                <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>
+                  <span style={{fontWeight:600}}>Sizes:</span> {p.sizes.length?p.sizes.map((s,i)=><span key={s} style={{display:"inline-block",background:T.surfaceAlt,borderRadius:"3px",padding:"1px 5px",margin:"1px 2px",fontSize:"10px"}}>{s}{editingProduct===p.id&&<span onClick={()=>{if(p.sizes.length<=1) return notify("Need at least 1 size","err");setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,sizes:x.sizes.filter((_,j)=>j!==i)}:x))}} style={{cursor:"pointer",color:T.err,marginLeft:"3px",fontWeight:700}}>×</span>}</span>):<span style={{color:T.sub,fontStyle:"italic"}}>None</span>}
+                </div>
+                <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>
+                  <span style={{fontWeight:600}}>Colors:</span> {p.colors.length?p.colors.map((c,i)=><span key={c} style={{display:"inline-block",background:T.surfaceAlt,borderRadius:"3px",padding:"1px 5px",margin:"1px 2px",fontSize:"10px"}}>{c}{editingProduct===p.id&&<span onClick={()=>{setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,colors:x.colors.filter((_,j)=>j!==i)}:x))}} style={{cursor:"pointer",color:T.err,marginLeft:"3px",fontWeight:700}}>×</span>}</span>):<span style={{color:T.sub,fontStyle:"italic"}}>None</span>}
+                </div>
+                <div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{p.sizes.length*(p.colors.length||1)} variant{p.sizes.length*(p.colors.length||1)!==1?'s':''}</div>
+                {editingProduct===p.id&&<div style={{marginTop:"8px",padding:"8px",background:T.surfaceAlt,borderRadius:"5px",border:`1px dashed ${T.gold}`}}>
+                  <div style={{fontSize:"11px",fontWeight:700,marginBottom:"6px",color:T.gold}}>Add Variants</div>
+                  <div style={{display:"flex",gap:"6px",alignItems:"end",flexWrap:"wrap"}}>
+                    <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>New Size</label><Inp value={editVariant.size} onChange={e=>setEditVariant({...editVariant,size:e.target.value})} placeholder="e.g. 4XL" style={{width:"100px"}}/></div>
+                    <Btn v="ok" sm onClick={()=>{
+                      const s=editVariant.size.trim();if(!s) return notify("Enter a size","err");
+                      if(p.sizes.some(x=>x.toLowerCase()===s.toLowerCase())) return notify("Size already exists","err");
+                      setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,sizes:[...x.sizes,s]}:x));
+                      setEditVariant({...editVariant,size:''});notify("Size "+s+" added!");
+                    }}>+ Size</Btn>
+                    <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>New Color</label><Inp value={editVariant.color} onChange={e=>setEditVariant({...editVariant,color:e.target.value})} placeholder="e.g. White" style={{width:"100px"}}/></div>
+                    <Btn v="ok" sm onClick={()=>{
+                      const c=editVariant.color.trim();if(!c) return notify("Enter a color","err");
+                      if(p.colors.some(x=>x.toLowerCase()===c.toLowerCase())) return notify("Color already exists","err");
+                      setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,colors:[...x.colors,c]}:x));
+                      setEditVariant({...editVariant,color:''});notify("Color "+c+" added!");
+                    }}>+ Color</Btn>
+                  </div>
+                  <div style={{display:"flex",gap:"6px",alignItems:"end",flexWrap:"wrap",marginTop:"6px"}}>
+                    <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Bulk Sizes (comma-sep)</label><Inp value={editVariant.bulkSizes||''} onChange={e=>setEditVariant({...editVariant,bulkSizes:e.target.value})} placeholder="XS,S,M,L,XL" style={{width:"200px"}}/></div>
+                    <Btn v="ok" sm onClick={()=>{
+                      const raw=editVariant.bulkSizes||'';const arr=raw.split(',').map(s=>s.trim()).filter(Boolean);if(!arr.length) return notify("Enter sizes","err");
+                      const existing=new Set(p.sizes.map(s=>s.toLowerCase()));const fresh=arr.filter(s=>!existing.has(s.toLowerCase()));
+                      if(!fresh.length) return notify("All sizes already exist","err");
+                      setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,sizes:[...x.sizes,...fresh]}:x));
+                      setEditVariant({...editVariant,bulkSizes:''});notify(fresh.length+" size(s) added!");
+                    }}>+ Bulk Add</Btn>
+                    <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Bulk Colors (comma-sep)</label><Inp value={editVariant.bulkColors||''} onChange={e=>setEditVariant({...editVariant,bulkColors:e.target.value})} placeholder="Black,Beige,Brown" style={{width:"200px"}}/></div>
+                    <Btn v="ok" sm onClick={()=>{
+                      const raw=editVariant.bulkColors||'';const arr=raw.split(',').map(s=>s.trim()).filter(Boolean);if(!arr.length) return notify("Enter colors","err");
+                      const existing=new Set(p.colors.map(c=>c.toLowerCase()));const fresh=arr.filter(c=>!existing.has(c.toLowerCase()));
+                      if(!fresh.length) return notify("All colors already exist","err");
+                      setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,colors:[...x.colors,...fresh]}:x));
+                      setEditVariant({...editVariant,bulkColors:''});notify(fresh.length+" color(s) added!");
+                    }}>+ Bulk Add</Btn>
+                  </div>
+                </div>}
               </div>)}
             </div>
           </Section>

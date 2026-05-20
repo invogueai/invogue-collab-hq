@@ -1413,6 +1413,79 @@ export default function InvogueCollabHQ() {
     notify("Dispatched!");
   };
 
+  const buildDeliveryEmailHTML = (d, deliveryDate) => {
+    const LOGO_URL = process.env.NEXT_PUBLIC_EMAIL_LOGO_URL || "https://raw.githubusercontent.com/invogueai/invogue-collab-hq/main/public/invogue-logo.png";
+    const productList = d.products && d.products.length > 0
+      ? d.products.map(p=>`${p.name}${p.size?` (${p.size})`:""}${p.qty>1?` × ${p.qty}`:""}`).join(", ")
+      : (d.product||"—");
+    const infRecord = influencers.find(x=>x.name===d.inf);
+    const pocName = infRecord?.poc || "your collab manager";
+    const delsList = d.dels.length>0
+      ? d.dels.map(dl=>`<li style="margin:4px 0;font-size:13px;">${dl.type}${dl.desc?` — ${dl.desc}`:""}</li>`).join("")
+      : "<li style='margin:4px 0;font-size:13px;'>As discussed with your POC</li>";
+    return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Delivery Confirmation</title></head>
+<body style="margin:0;padding:0;background:#F6F4F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1A1A1A;">
+<div style="max-width:620px;margin:0 auto;background:#fff;">
+  <div style="background:#770A1C;padding:32px 32px;text-align:center;">
+    <img src="${LOGO_URL}" alt="Invogue" style="max-height:48px;max-width:220px;display:inline-block;margin-bottom:10px;" />
+    <div style="color:#fff;font-size:18px;font-weight:600;margin-top:4px;">Delivery Confirmation</div>
+  </div>
+  <div style="padding:32px;">
+    <p style="font-size:15px;line-height:1.6;margin:0 0 16px;">Hi <b>${d.inf}</b>,</p>
+    <p style="font-size:14px;line-height:1.65;color:#444;margin:0 0 18px;">Great news! Your product for the collaboration with <b>Invogue</b> has been successfully delivered.</p>
+
+    <div style="margin:22px 0 10px;font-size:13px;font-weight:700;color:#770A1C;text-transform:uppercase;letter-spacing:1px;">Delivery Details</div>
+    <table style="width:100%;border-collapse:collapse;margin:8px 0 18px;">
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;width:150px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Collab ID</td><td style="padding:9px 0;font-size:14px;font-weight:700;color:#770A1C;border-bottom:1px solid #f1ece3;">${d.collabId||"—"}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Product</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${productList}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Delivered On</td><td style="padding:9px 0;font-size:14px;font-weight:700;border-bottom:1px solid #f1ece3;">${deliveryDate}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Carrier</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${d.ship?.carrier||"—"} · ${d.ship?.track||"—"}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;vertical-align:top;">Content Deadline</td><td style="padding:9px 0;font-size:14px;font-weight:700;color:#770A1C;">${d.deadline||"—"}</td></tr>
+    </table>
+
+    <div style="margin:22px 0 10px;font-size:13px;font-weight:700;color:#770A1C;text-transform:uppercase;letter-spacing:1px;">What's Next?</div>
+    <p style="font-size:14px;line-height:1.65;color:#444;margin:0 0 12px;">Now that you've received the product, here's what we need from you:</p>
+    <ol style="margin:0 0 18px;padding-left:20px;font-size:13px;color:#444;line-height:1.8;">
+      <li>Try out the product and get comfortable with it</li>
+      <li>Create the agreed-upon content:</li>
+    </ol>
+    <ul style="margin:0 0 18px;padding-left:30px;list-style:disc;">${delsList}</ul>
+    <p style="font-size:14px;line-height:1.65;color:#444;margin:0 0 12px;">Please ensure the content is posted by <b>${d.deadline||"the agreed deadline"}</b>.</p>
+
+    <div style="margin-top:28px;padding:14px 16px;background:#F6F4F0;border-left:3px solid #B08D42;border-radius:4px;font-size:12px;color:#6B5B3A;line-height:1.6;">
+      <b style="color:#770A1C;">Need help?</b> If you have any questions about the product or content requirements, reach out to your POC, <b>${pocName}</b>, directly.
+    </div>
+
+    <p style="font-size:14px;line-height:1.6;margin:24px 0 4px;color:#444;">Excited to see your content!</p>
+    <p style="font-size:14px;line-height:1.6;margin:0;"><b>Team Invogue</b></p>
+  </div>
+  <div style="background:#770A1C;padding:22px 32px;text-align:center;">
+    <div style="color:#F6DFC1;font-size:13px;font-weight:600;letter-spacing:1.5px;margin-bottom:6px;">Invogue · Own your Inner Bold</div>
+    <div style="color:#F6DFC1;opacity:.75;font-size:11px;"><a href="https://invogue.shop" style="color:#F6DFC1;text-decoration:none;">invogue.shop</a></div>
+  </div>
+</div>
+</body></html>`;
+  };
+
+  const sendDeliveryEmail = async (d, deliveryDate) => {
+    if(!d.email) { console.log("No email for delivery confirmation — skipping"); return; }
+    const subject = `Delivery Confirmation — Invogue × ${d.inf} (${d.collabId||"Deal"})`;
+    const html = buildDeliveryEmailHTML(d, deliveryDate);
+    try {
+      const resp = await apiFetch('/api/send-email', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ to:d.email, subject, html })
+      });
+      const data = await resp.json();
+      if(!resp.ok || !data.ok) { console.error("Delivery email failed:", data); return; }
+      addLog(d.id, loggedIn?.name||"System", "Delivery confirmation email sent", `Sent to ${d.email}`);
+    } catch(e) {
+      console.error("Delivery email network error:",e);
+    }
+  };
+
   const markDelivered = (d, deliveryDate, deliveryNote) => {
     // deliveryDate arrives as YYYY-MM-DD (local) from the modal. No time component needed.
     const delDate = toDateOnly(deliveryDate) || todayLocal();
@@ -1425,6 +1498,7 @@ export default function InvogueCollabHQ() {
     supabase.from('deals').update({status:'delivered_prod'}).eq('id',d.id).then(({error})=>{if(error) console.error("Delivered prod save failed:",error);});
     upDeal(d.id,{status:"delivered_prod",ship:{...d.ship,st:"delivered",delAt:delDate}});
     addLog(d.id,userName,"Product delivered",deliveryNote||"");
+    sendDeliveryEmail(d, delDate);
     notify("Marked delivered!");
   };
 

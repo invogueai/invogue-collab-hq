@@ -295,6 +295,7 @@ export default function InvogueCollabHQ() {
   const [sel, setSel] = useState(null);
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState(null);
+  const [selCamp, setSelCamp] = useState(null); // selected campaign for detail modal
 
   // Form states
   const [nDeal, setNDeal] = useState(null);
@@ -743,6 +744,7 @@ export default function InvogueCollabHQ() {
   const campPaid = cid => deals.filter(d=>d.cid===cid).reduce((s,d)=>s+totalPaid(d),0);
   const campDeals = cid => deals.filter(d=>d.cid===cid);
   const campLocked = cid => deals.filter(d=>d.cid===cid&&!["rejected","pending","renegotiate","dropped"].includes(d.status)).length;
+  const openCampDetail = c => { setSelCamp(c); setModal("campDetail"); };
 
   const pendingDels = useMemo(()=>{
     const arr=[];
@@ -2580,7 +2582,7 @@ return (
           {/* CAMPAIGN BUDGETS */}
           <Section title="🎯 Campaign Budgets" icon="" action={<Btn v="gold" sm onClick={()=>{setNCamp({name:"",budget:"",target:"",deadline:""});setModal("newCamp")}}>+ New Campaign</Btn>}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"8px"}}>
-              {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"11px"}}>
+              {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"11px",cursor:"pointer",transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}><span style={{fontWeight:700,fontSize:"12px"}}>{c.name}</span><span style={{fontSize:"11px",fontWeight:700,color:pct>90?T.err:T.ok}}>{pct}%</span></div>
                 <div style={{height:"4px",borderRadius:"3px",background:T.border,overflow:"hidden",marginBottom:"5px"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.warn:T.ok,borderRadius:"3px"}}/></div>
                 <div style={{fontSize:"11px",color:T.sub}}>{f(comm)} / {f(c.budget)} · {campLocked(c.id)}/{c.target} influencers</div>
@@ -3038,7 +3040,7 @@ return (
           {/* CAMPAIGNS SUMMARY */}
           <Section title="🎯 Campaign Overview" icon="" action={<Btn v="ghost" sm onClick={()=>setView("campaigns")}>Manage →</Btn>}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"8px"}}>
-              {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"11px"}}>
+              {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"11px",cursor:"pointer",transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}><span style={{fontWeight:700,fontSize:"12px"}}>{c.name}</span><span style={{fontSize:"11px",fontWeight:700,color:pct>90?T.err:T.ok}}>{pct}%</span></div>
                 <div style={{height:"4px",borderRadius:"3px",background:T.border,overflow:"hidden",marginBottom:"5px"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.warn:T.ok,borderRadius:"3px"}}/></div>
                 <div style={{fontSize:"11px",color:T.sub}}>{f(comm)} / {f(c.budget)} · {campLocked(c.id)}/{c.target} influencers</div>
@@ -3878,7 +3880,7 @@ return (
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(330px,1fr))",gap:"10px"}}>
             {campaigns.map(c=>{
               const comm=campCommitted(c.id),pd=campPaid(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0,lk=campLocked(c.id);
-              return <div key={c.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",padding:"16px"}}>
+              return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",padding:"16px",cursor:"pointer",transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:"10px"}}>
                   <div><div style={{fontWeight:800,fontSize:"14px"}}>{c.name}</div><div style={{fontSize:"11px",color:T.sub,marginTop:"1px"}}>Deadline: {c.deadline}</div></div>
                   <span style={{padding:"2px 7px",borderRadius:"8px",fontSize:"11px",fontWeight:700,color:c.status==="active"?T.ok:T.warn,background:c.status==="active"?T.okBg:T.warnBg}}>{c.status}</span>
@@ -4123,6 +4125,74 @@ return (
           <Field label="Campaign Brief"><Textarea value={nCamp.brief} onChange={e=>setNCamp({...nCamp,brief:e.target.value})} placeholder="Describe the campaign objectives, target audience, key messages..." rows={4}/></Field>
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"12px"}}><Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn><Btn v="gold" onClick={createCampaign}>Create</Btn></div>
         </>}
+      </Modal>
+
+      {/* CAMPAIGN DETAIL */}
+      <Modal open={modal==="campDetail"&&selCamp} onClose={()=>{setModal(null);setSelCamp(null)}} title={`🎯 ${selCamp?.name||"Campaign"}`} w={680}>
+        {selCamp&&(()=>{
+          const cd = campDeals(selCamp.id);
+          const comm = campCommitted(selCamp.id);
+          const pd = campPaid(selCamp.id);
+          const pct = selCamp.budget>0?Math.round(comm/selCamp.budget*100):0;
+          const lk = campLocked(selCamp.id);
+          // Status breakdown
+          const byStatus = {};
+          cd.forEach(d=>{const s=STATUS_CFG[d.status]?.l||d.status;byStatus[s]=(byStatus[s]||0)+1;});
+          // Group by meaningful categories
+          const pending = cd.filter(d=>["pending","renegotiate","manager_approved"].includes(d.status));
+          const locked = cd.filter(d=>["approved","email_sent","acknowledged"].includes(d.status));
+          const shipped = cd.filter(d=>["shipped","delivered_prod"].includes(d.status));
+          const live = cd.filter(d=>["partial_live","live"].includes(d.status));
+          const payment = cd.filter(d=>["invoice_ok","invoice_pending_approval","payment_requested","payment_approved","partial_paid","paid","disputed"].includes(d.status));
+          const dropped = cd.filter(d=>["dropped","drop_requested","rejected"].includes(d.status));
+
+          return <>
+            {/* Budget overview */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"8px",marginBottom:"14px"}}>
+              <div style={{background:T.surfaceAlt,borderRadius:"7px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>BUDGET</div><div style={{fontSize:"16px",fontWeight:800}}>{f(selCamp.budget)}</div></div>
+              <div style={{background:T.surfaceAlt,borderRadius:"7px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>COMMITTED</div><div style={{fontSize:"16px",fontWeight:800,color:T.gold}}>{f(comm)}</div></div>
+              <div style={{background:T.surfaceAlt,borderRadius:"7px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>PAID OUT</div><div style={{fontSize:"16px",fontWeight:800,color:T.ok}}>{f(pd)}</div></div>
+              <div style={{background:T.surfaceAlt,borderRadius:"7px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>REMAINING</div><div style={{fontSize:"16px",fontWeight:800,color:pct>90?T.err:T.brand}}>{f(Math.max(0,selCamp.budget-comm))}</div></div>
+            </div>
+            <div style={{marginBottom:"14px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:"11px",color:T.sub,marginBottom:"3px"}}><span>{lk}/{selCamp.target} influencers locked</span><span style={{color:pct>90?T.err:T.sub}}>{pct}% budget used</span></div>
+              <div style={{height:"6px",borderRadius:"4px",background:T.border,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.warn:T.ok,borderRadius:"4px",transition:"width .3s"}}/></div>
+            </div>
+            {selCamp.brief&&<div style={{padding:"10px 12px",background:T.surfaceAlt,borderRadius:"6px",marginBottom:"14px",fontSize:"12px",color:T.sub,lineHeight:1.6}}><b style={{color:T.text}}>Brief:</b> {selCamp.brief}</div>}
+            {selCamp.deadline&&<div style={{fontSize:"12px",color:T.sub,marginBottom:"14px"}}>Deadline: <b>{selCamp.deadline}</b></div>}
+
+            {/* Status breakdown pills */}
+            <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"14px"}}>
+              {pending.length>0&&<span style={{padding:"3px 10px",borderRadius:"12px",fontSize:"11px",fontWeight:700,background:T.warnBg,color:T.warn}}>⏳ {pending.length} Pending</span>}
+              {locked.length>0&&<span style={{padding:"3px 10px",borderRadius:"12px",fontSize:"11px",fontWeight:700,background:T.infoBg,color:T.info}}>🔒 {locked.length} Locked</span>}
+              {shipped.length>0&&<span style={{padding:"3px 10px",borderRadius:"12px",fontSize:"11px",fontWeight:700,background:T.purpleBg,color:T.purple}}>📦 {shipped.length} Shipped/Delivered</span>}
+              {live.length>0&&<span style={{padding:"3px 10px",borderRadius:"12px",fontSize:"11px",fontWeight:700,background:T.okBg,color:T.ok}}>🔴 {live.length} Live</span>}
+              {payment.length>0&&<span style={{padding:"3px 10px",borderRadius:"12px",fontSize:"11px",fontWeight:700,background:T.goldSoft,color:T.brand}}>💰 {payment.length} Payment</span>}
+              {dropped.length>0&&<span style={{padding:"3px 10px",borderRadius:"12px",fontSize:"11px",fontWeight:700,background:T.errBg,color:T.err}}>🚫 {dropped.length} Dropped</span>}
+              {cd.length===0&&<span style={{fontSize:"12px",color:T.sub}}>No deals in this campaign yet</span>}
+            </div>
+
+            {/* Creator list */}
+            {cd.length>0&&<div style={{border:`1px solid ${T.border}`,borderRadius:"8px",overflow:"hidden"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr 0.8fr 0.8fr 1.2fr",padding:"8px 12px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",letterSpacing:".5px"}}>
+                <div>Creator</div><div>Platform</div><div>Amount</div><div>Paid</div><div>Status</div>
+              </div>
+              <div style={{maxHeight:"320px",overflowY:"auto"}}>
+                {cd.map(d=>{
+                  const sc = STATUS_CFG[d.status]||{l:d.status,c:T.sub,bg:T.surfaceAlt,i:"?"};
+                  const paidAmt = totalPaid(d);
+                  return <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{display:"grid",gridTemplateColumns:"1.6fr 1fr 0.8fr 0.8fr 1.2fr",padding:"8px 12px",borderBottom:`1px solid ${T.border}`,fontSize:"12px",cursor:"pointer",transition:"background .1s",alignItems:"center"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceAlt} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <div><div style={{fontWeight:700}}>{d.inf}</div><div style={{fontSize:"10px",color:T.sub}}>{d.collabId}</div></div>
+                    <div style={{color:T.sub}}>{d.platform}</div>
+                    <div style={{fontWeight:700}}>{f(d.amount)}</div>
+                    <div style={{color:paidAmt>0?T.ok:T.sub,fontWeight:paidAmt>0?700:400}}>{paidAmt>0?f(paidAmt):"—"}</div>
+                    <div><span style={{padding:"2px 8px",borderRadius:"8px",fontSize:"10px",fontWeight:700,background:sc.bg,color:sc.c}}>{sc.i} {sc.l}</span></div>
+                  </div>;
+                })}
+              </div>
+            </div>}
+          </>;
+        })()}
       </Modal>
 
       {/* DISPATCH */}

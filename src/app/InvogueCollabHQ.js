@@ -41,6 +41,7 @@ const STATUS_CFG = {
   drop_requested: { l:"Drop Requested",   c:T.err,    bg:T.errBg,    i:"🚫" },
   dropped:        { l:"Dropped",          c:T.err,    bg:T.errBg,    i:"🚫" },
   email_sent:     { l:"Email Sent",       c:T.info,   bg:T.infoBg,   i:"📧" },
+  acknowledged:   { l:"Acknowledged",    c:"#10b981",bg:"#ecfdf5",   i:"🤝" },
   shipped:        { l:"Shipped",          c:T.purple, bg:T.purpleBg, i:"🚚" },
   delivered_prod: { l:"Product Delivered", c:T.teal,  bg:T.tealBg,   i:"📦" },
   partial_live:   { l:"Partially Live",   c:T.warn,   bg:T.warnBg,   i:"⏳" },
@@ -135,7 +136,7 @@ async function loadFromSupabase() {
     product:d.product, amount:d.amount, status:d.status, cid:d.campaign_id,
     usage:d.usage_rights, deadline:d.deadline, profile:d.profile_link,
     phone:d.phone, address:d.address, by:d.created_by, at:d.created_at,
-    appBy:d.approved_by, appAt:d.approved_at,
+    appBy:d.approved_by, appAt:d.approved_at, ackAt:d.acknowledged_at, ackToken:d.acknowledge_token,
     email:d.email||"", payment_terms:d.payment_terms||"", pan_number:d.pan_number||"", pan_name:d.pan_name||"",
     products:d.products||(d.products_json?JSON.parse(d.products_json):[])||[],
     paymentFormSent:d.payment_form_sent||false, paymentFormSentAt:d.payment_form_sent_at||null,
@@ -460,7 +461,7 @@ export default function InvogueCollabHQ() {
             product:d.product, amount:d.amount, status:d.status, cid:d.campaign_id,
             usage:d.usage_rights, deadline:d.deadline, profile:d.profile_link,
             phone:d.phone, address:d.address, by:d.created_by, at:d.created_at,
-            appBy:d.approved_by, appAt:d.approved_at,
+            appBy:d.approved_by, appAt:d.approved_at, ackAt:d.acknowledged_at, ackToken:d.acknowledge_token,
             email:d.email||"", payment_terms:d.payment_terms||"", pan_number:d.pan_number||"", pan_name:d.pan_name||"",
             products:d.products||(d.products_json?JSON.parse(d.products_json):[])||[],
             inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
@@ -757,7 +758,8 @@ export default function InvogueCollabHQ() {
   const awaitingReview = useMemo(()=>pendingDels.filter(d=>d.st==="submitted"),[pendingDels]);
   const revisionNeeded = useMemo(()=>pendingDels.filter(d=>d.st==="revision_requested"),[pendingDels]);
 
-  const pendingShip = useMemo(()=>deals.filter(d=>["approved","email_sent"].includes(d.status)&&!d.ship),[deals]);
+  const pendingShip = useMemo(()=>deals.filter(d=>d.status==="acknowledged"&&!d.ship),[deals]);
+  const awaitingAck = useMemo(()=>deals.filter(d=>d.status==="email_sent"),[deals]);
   const inTransit = useMemo(()=>deals.filter(d=>d.ship?.st==="in_transit"),[deals]);
 
   // Logistics: pickup requests, pending returns, re-shipment queues
@@ -803,7 +805,7 @@ export default function InvogueCollabHQ() {
     if(campFilter) d = d.filter(x=>x.cid===campFilter);
     if(tab==="all") return d;
     if(tab==="pending") return d.filter(x=>x.status==="pending"||x.status==="renegotiate");
-    if(tab==="active") return d.filter(x=>["approved","email_sent","shipped","delivered_prod","partial_live","live"].includes(x.status));
+    if(tab==="active") return d.filter(x=>["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live"].includes(x.status));
     if(tab==="payment") return d.filter(x=>["invoice_ok","disputed","partial_paid","paid"].includes(x.status));
     return d;
   },[deals,tab,campFilter]);
@@ -833,7 +835,7 @@ export default function InvogueCollabHQ() {
     const monthlySpend = {};
     const campaignPerf = {};
     const influencerStats = {};
-    const statusDist = {pending:0, manager_approved:0, approved:0, live:0, paid:0, rejected:0, dropped:0};
+    const statusDist = {pending:0, manager_approved:0, approved:0, acknowledged:0, live:0, paid:0, rejected:0, dropped:0};
 
     deals.forEach(d => {
       const month = d.at?.slice(0,7) || "2026-01";
@@ -1298,7 +1300,7 @@ export default function InvogueCollabHQ() {
     notify("Sent back with revised terms","warn");
   };
 
-  const buildConfirmationEmailHTML = d => {
+  const buildConfirmationEmailHTML = (d, ackToken) => {
     const productList = d.products && d.products.length > 0
       ? d.products.map(p=>`${p.name}${p.size?` (${p.size})`:""}${p.qty>1?` × ${p.qty}`:""}`).join(", ")
       : (d.product||"—");
@@ -1330,6 +1332,12 @@ export default function InvogueCollabHQ() {
       <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;vertical-align:top;">Shipping Address</td><td style="padding:9px 0;font-size:14px;line-height:1.55;">${d.address||"—"}</td></tr>
     </table>
 
+    <div style="margin:28px 0;text-align:center;">
+      <p style="font-size:14px;color:#444;margin:0 0 14px;">If the above details look correct, please confirm by clicking the button below:</p>
+      <a href="${typeof window!=='undefined'?window.location.origin:(process.env.NEXT_PUBLIC_APP_URL||'https://invogue-collab-hq.vercel.app')}/api/acknowledge?token=${ackToken}" target="_blank" style="display:inline-block;background:#770A1C;color:#fff;font-size:15px;font-weight:700;text-decoration:none;padding:14px 36px;border-radius:6px;letter-spacing:.3px;">I Agree to the Terms</a>
+      <p style="font-size:11px;color:#999;margin:10px 0 0;">By clicking the button, you acknowledge and agree to the collaboration terms mentioned above.</p>
+    </div>
+
     <div style="margin-top:28px;padding:14px 16px;background:#F6F4F0;border-left:3px solid #B08D42;border-radius:4px;font-size:12px;color:#6B5B3A;line-height:1.6;">
       <b style="color:#770A1C;">Note:</b> This is an auto-generated email. In case of any confusions or issues, please reach out to your POC, <b>${pocName}</b>, directly.
     </div>
@@ -1348,7 +1356,10 @@ export default function InvogueCollabHQ() {
   const sendEmail = async (d, isResend=false) => {
     if(!d.email) return notify("Influencer email is missing. Add it to the deal first.","err");
     const userName = loggedIn?.name||"Negotiator";
-    const html = buildConfirmationEmailHTML(d);
+
+    // Generate a unique acknowledge token (or reuse existing one on resend)
+    const ackToken = d.ackToken || uid();
+    const html = buildConfirmationEmailHTML(d, ackToken);
     const subjectPrefix = isResend ? "Collaboration Confirmation (Resent)" : "Collaboration Confirmation";
     const subject = `${subjectPrefix} — Invogue × ${d.inf} (${d.collabId||"New Deal"})`;
 
@@ -1369,11 +1380,12 @@ export default function InvogueCollabHQ() {
       // Only advance status on the FIRST send (from "approved" → "email_sent").
       // On resends from later states (shipped, live, etc.), keep the current status.
       if(!isResend && d.status === "approved") {
-        supabase.from('deals').update({status:'email_sent',email_sent_at:ts}).eq('id',d.id).then(({error})=>{if(error) console.error("Email sent save failed:",error);});
-        upDeal(d.id,{status:"email_sent"});
+        supabase.from('deals').update({status:'email_sent',email_sent_at:ts,acknowledge_token:ackToken}).eq('id',d.id).then(({error})=>{if(error) console.error("Email sent save failed:",error);});
+        upDeal(d.id,{status:"email_sent",ackToken});
       } else {
-        // Just update the email_sent_at timestamp for audit
-        supabase.from('deals').update({email_sent_at:ts}).eq('id',d.id).then(({error})=>{if(error) console.error("Email resend timestamp save failed:",error);});
+        // Update timestamp + ensure token is stored (in case of resend before first ack)
+        supabase.from('deals').update({email_sent_at:ts,acknowledge_token:ackToken}).eq('id',d.id).then(({error})=>{if(error) console.error("Email resend timestamp save failed:",error);});
+        if(!d.ackToken) upDeal(d.id,{ackToken});
       }
       addLog(d.id, userName, isResend ? "Confirmation email resent" : "Confirmation email sent", `Sent to ${d.email} · Resend ID: ${data.id||"—"}`);
       setSel(null);
@@ -1526,7 +1538,7 @@ export default function InvogueCollabHQ() {
     const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"live",link}:dl);
     const allLive = newDels.every(dl=>dl.st==="live");
     const newStatus = allLive ? "live" : "partial_live";
-    const shouldUpdateStatus = ["email_sent","shipped","delivered_prod","partial_live"].includes(deal.status);
+    const shouldUpdateStatus = ["email_sent","acknowledged","shipped","delivered_prod","partial_live"].includes(deal.status);
     const delId = deal.dels[delIdx].id;
 
     supabase.from('deliverables').update({status:'live',live_link:link,marked_live_at:new Date().toISOString()}).eq('id',delId).then(({error})=>{if(error) console.error("Mark live save failed:",error);});
@@ -2692,8 +2704,9 @@ return (
         const myNeedAction = myDeals.filter(d=>
           (d.status==="renegotiate") || // needs review & resubmit
           (d.status==="approved") || // needs email sent
-          (d.status==="email_sent"&&!d.ship) || // waiting for logistics
-          (["shipped","delivered_prod","email_sent","partial_live"].includes(d.status)&&d.dels.some(dl=>dl.st==="pending")) || // deliverables to mark
+          (d.status==="email_sent"&&!d.ackAt) || // waiting for acknowledgement
+          (d.status==="acknowledged"&&!d.ship) || // waiting for logistics
+          (["shipped","delivered_prod","email_sent","acknowledged","partial_live"].includes(d.status)&&d.dels.some(dl=>dl.st==="pending")) || // deliverables to mark
           (["live","partial_live"].includes(d.status)&&!d.inv) || // needs invoice
           d.dels.some(dl=>dl.st==="revision_requested") // content needs revision
         );
@@ -2723,7 +2736,9 @@ return (
               if(revCount>0) { actionLabel=`${revCount} revision${revCount>1?"s":""} requested by manager`; actionColor=T.err; }
               else if(d.status==="renegotiate") { actionLabel="Review & Resubmit to Manager"; actionColor=T.warn; }
               else if(d.status==="approved") { actionLabel="Send Confirmation Email"; actionColor=T.info; }
-              else if(["shipped","delivered_prod","email_sent","partial_live"].includes(d.status)&&d.dels.some(dl=>dl.st==="pending")) { actionLabel=`${d.dels.filter(dl=>dl.st==="pending").length} deliverables to mark live`; actionColor=T.purple; }
+              else if(d.status==="email_sent"&&!d.ackAt) { actionLabel="Awaiting Influencer Acknowledgement"; actionColor="#f59e0b"; }
+              else if(d.status==="acknowledged"&&!d.ship) { actionLabel="Acknowledged ✓ — Awaiting Logistics Dispatch"; actionColor="#10b981"; }
+              else if(["shipped","delivered_prod","email_sent","acknowledged","partial_live"].includes(d.status)&&d.dels.some(dl=>dl.st==="pending")) { actionLabel=`${d.dels.filter(dl=>dl.st==="pending").length} deliverables to mark live`; actionColor=T.purple; }
               else if(["live","partial_live"].includes(d.status)&&!d.inv) { actionLabel="Submit Invoice"; actionColor=T.gold; }
               else if(d.status==="payment_requested") { actionLabel="Payment Requested - with Manager"; actionColor=T.info; }
               else { actionLabel="Review needed"; }
@@ -2780,9 +2795,12 @@ return (
 
           {/* Shipment Tracking */}
           <Section title="📦 My Shipment Tracker" icon="">
-            {myDeals.filter(d=>d.ship&&d.ship.st==="in_transit").length===0&&myDeals.filter(d=>["approved","email_sent"].includes(d.status)&&!d.ship).length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>No active shipments</div>}
-            {myDeals.filter(d=>["approved","email_sent"].includes(d.status)&&!d.ship).map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.warnBg,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
-              <span><b>{d.inf}</b> · {d.product}</span><span style={{color:T.warn,fontWeight:700}}>Awaiting dispatch</span>
+            {myDeals.filter(d=>d.ship&&d.ship.st==="in_transit").length===0&&myDeals.filter(d=>["email_sent","acknowledged"].includes(d.status)&&!d.ship).length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>No active shipments</div>}
+            {myDeals.filter(d=>d.status==="email_sent"&&!d.ackAt).map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:"#fef3c7",border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
+              <span><b>{d.inf}</b> · {d.product}</span><span style={{color:"#92400e",fontWeight:700}}>⏳ Awaiting acknowledgement</span>
+            </div>)}
+            {myDeals.filter(d=>d.status==="acknowledged"&&!d.ship).map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:"#ecfdf5",border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
+              <span><b>{d.inf}</b> · {d.product}</span><span style={{color:"#10b981",fontWeight:700}}>🤝 Acknowledged — awaiting dispatch</span>
             </div>)}
             {myDeals.filter(d=>d.ship?.st==="in_transit").map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.purpleBg,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
               <span><b>{d.inf}</b> · {d.ship.carrier}: <span style={{color:T.info,fontWeight:700}}>{d.ship.track}</span></span><span style={{color:T.purple,fontWeight:700}}>In transit</span>
@@ -2967,7 +2985,7 @@ return (
       {((view==="dashboard"&&role==="finance")||(view==="payments"&&role==="admin"))&&(()=>{
         const pendingPayments = deals.filter(d=>["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0);
         const disputed = deals.filter(d=>d.status==="disputed");
-        const advanceDue = deals.filter(d=>["approved","email_sent","shipped","delivered_prod"].includes(d.status)&&totalPaid(d)===0);
+        const advanceDue = deals.filter(d=>["approved","email_sent","acknowledged","shipped","delivered_prod"].includes(d.status)&&totalPaid(d)===0);
         const recentPaid = deals.filter(d=>d.status==="paid").slice(0,5);
         const totalOutstanding = deals.filter(d=>!["rejected","pending","renegotiate","paid"].includes(d.status)).reduce((s,d)=>s+remaining(d),0);
         return <>
@@ -3097,16 +3115,25 @@ return (
         return <>
           <div style={{marginBottom:"14px"}}><span style={{fontSize:"20px",fontWeight:800}}>📦 Shipment Center</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Dispatch, track, pickups & re-shipments</span></div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"8px",marginBottom:"16px"}}>
-            <StatBox l="Awaiting Dispatch" v={pendingShip.length} c={pendingShip.length>0?T.err:T.ok} sub="Ship these now"/>
+            <StatBox l="Awaiting Ack" v={awaitingAck.length} c={awaitingAck.length>0?"#f59e0b":T.ok} sub="Influencer must confirm"/>
+            <StatBox l="Ready to Ship" v={pendingShip.length} c={pendingShip.length>0?T.err:T.ok} sub="Ship these now"/>
             <StatBox l="In Transit" v={inTransit.length} c={inTransit.length>0?T.purple:T.ok}/>
             <StatBox l="Pickup Requests" v={pickupRequests.length} c={pickupRequests.length>0?T.warn:T.ok} sub="Arrange returns"/>
             <StatBox l="Re-ship Pending" v={reshipPending.length} c={reshipPending.length>0?T.err:T.ok} sub="New products to send"/>
             <StatBox l="Delivered" v={delivered.length} c={T.ok}/>
-            <StatBox l="Total Shipments" v={deals.filter(d=>d.ship).length} c={T.brand}/>
           </div>
 
+          {/* AWAITING ACKNOWLEDGEMENT */}
+          {awaitingAck.length>0&&<Section title={`Awaiting Acknowledgement (${awaitingAck.length})`} icon="⏳">
+            <div style={{fontSize:"12px",color:"#92400e",background:"#fef3c7",padding:"8px 10px",borderRadius:"5px",marginBottom:"8px"}}>These influencers haven't confirmed via email yet. Dispatch is blocked until they click "I Agree to the Terms".</div>
+            {awaitingAck.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:"3px solid #f59e0b",borderRadius:"6px",padding:"8px 12px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
+              <span><b>{d.inf}</b> · {d.product} · {getCamp(d.cid)?.name||""}</span>
+              <span style={{color:"#92400e",fontWeight:700,fontSize:"11px"}}>⏳ Pending</span>
+            </div>)}
+          </Section>}
+
           {/* DISPATCH QUEUE */}
-          <Section title={`Awaiting Dispatch (${pendingShip.length})`} icon="⚡" action={pendingShip.length>0?<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Action Required</span>:null}>
+          <Section title={`Ready to Dispatch (${pendingShip.length})`} icon="⚡" action={pendingShip.length>0?<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Action Required</span>:null}>
             {pendingShip.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"10px 0"}}>All products dispatched!</div>}
             {pendingShip.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.err}`,borderRadius:"7px",padding:"12px 14px",marginBottom:"7px",cursor:"pointer"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
@@ -3856,9 +3883,15 @@ return (
         {/* ═══ SHIPMENTS (full view) ═══ */}
         {view==="shipments"&&<>
           <div style={{fontSize:"18px",fontWeight:800,marginBottom:"14px"}}>🚚 All Shipments</div>
-          {pendingShip.length>0&&<Section title={`Awaiting Dispatch (${pendingShip.length})`} icon="📋">
+          {awaitingAck.length>0&&<Section title={`Awaiting Acknowledgement (${awaitingAck.length})`} icon="⏳">
+            {awaitingAck.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:"3px solid #f59e0b",borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Email sent · Deadline: {d.deadline}</div></div>
+              <span style={{fontSize:"11px",color:"#92400e",fontWeight:700}}>⏳ Awaiting influencer confirmation</span>
+            </div>)}
+          </Section>}
+          {pendingShip.length>0&&<Section title={`Ready to Dispatch (${pendingShip.length})`} icon="📋">
             {pendingShip.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Approved: {d.appAt} · Deadline: {d.deadline}</div></div>
+              <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Acknowledged: {d.ackAt?new Date(d.ackAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"}):"—"} · Deadline: {d.deadline}</div></div>
               {role==="logistics"?<Btn v="purple" sm onClick={()=>{setSel(d);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>:<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Awaiting logistics</span>}
             </div>)}
           </Section>}
@@ -4281,7 +4314,7 @@ return (
             <div style={{background:T.goldSoft,border:`1px dashed ${T.goldMid}`,borderRadius:"7px",padding:"12px",marginBottom:"12px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
                 <div>
-                  <div style={{fontSize:"10px",fontWeight:800,color:T.sub,textTransform:"uppercase"}}>{["approved","email_sent","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","partial_paid","paid"].includes(sel.status)?"🔒 Locked Amount":"Proposed Amount"}</div>
+                  <div style={{fontSize:"10px",fontWeight:800,color:T.sub,textTransform:"uppercase"}}>{["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","partial_paid","paid"].includes(sel.status)?"🔒 Locked Amount":"Proposed Amount"}</div>
                   <div style={{fontSize:"22px",fontWeight:900,color:T.gold}}>{f(sel.amount)}</div>
                 </div>
                 <div style={{textAlign:"right"}}>
@@ -4512,7 +4545,15 @@ return (
             </Section>}
 
             {/* Email preview */}
-            {["email_sent","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","partial_paid","paid"].includes(sel.status)&&
+            {/* Acknowledgement status banner */}
+            {sel.status==="email_sent"&&!sel.ackAt&&<div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"7px",padding:"10px 14px",marginBottom:"10px",fontSize:"13px",color:"#92400e"}}>
+              <b>⏳ Awaiting Influencer Acknowledgement</b> — The confirmation email has been sent. Dispatch will be unlocked once the influencer clicks "I Agree to the Terms" in their email.
+            </div>}
+            {(sel.status==="acknowledged"||(sel.ackAt&&sel.status!=="email_sent"))&&<div style={{background:"#ecfdf5",border:"1px solid #10b981",borderRadius:"7px",padding:"10px 14px",marginBottom:"10px",fontSize:"13px",color:"#065f46"}}>
+              <b>🤝 Influencer Acknowledged</b> — {sel.inf} agreed to the collaboration terms on {sel.ackAt?new Date(sel.ackAt).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}):"—"}.{sel.status==="acknowledged"?" Logistics can now dispatch the products.":""}
+            </div>}
+
+            {["email_sent","acknowledged","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","partial_paid","paid"].includes(sel.status)&&
             <Section title="Confirmation Email (System-Generated)" icon="✉">
               <div style={{background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"12px",fontSize:"13px",lineHeight:1.7,color:T.text}}>
                 Dear {sel.inf},<br/><br/>
@@ -4554,9 +4595,10 @@ return (
                 <Btn v="gold" onClick={()=>openResubmitModal(sel)}>↩ Review & Resubmit</Btn>
               </>}
               {(role==="negotiator"||role==="admin")&&sel.status==="approved"&&<Btn v="gold" onClick={()=>sendEmail(sel)}>✉ Send Confirmation Email</Btn>}
-              {(role==="negotiator"||role==="admin")&&["email_sent","shipped","delivered_prod","partial_live","live","invoice_ok","disputed"].includes(sel.status)&&<Btn v="ghost" sm onClick={()=>confirmAndResendEmail(sel)}>🔁 Resend Confirmation Email</Btn>}
-              {(role==="negotiator"||role==="admin")&&["pending","renegotiate","approved","manager_approved","email_sent","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
-              {(role==="logistics"||role==="admin")&&["approved","email_sent"].includes(sel.status)&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>}
+              {(role==="negotiator"||role==="admin")&&["email_sent","acknowledged","shipped","delivered_prod","partial_live","live","invoice_ok","disputed"].includes(sel.status)&&<Btn v="ghost" sm onClick={()=>confirmAndResendEmail(sel)}>🔁 Resend Confirmation Email</Btn>}
+              {(role==="negotiator"||role==="admin")&&["pending","renegotiate","approved","manager_approved","email_sent","acknowledged","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
+              {(role==="logistics"||role==="admin")&&sel.status==="acknowledged"&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>}
+              {(role==="logistics"||role==="admin")&&sel.status==="email_sent"&&!sel.ship&&<div style={{padding:"8px 12px",background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"6px",fontSize:"12px",color:"#92400e"}}>⏳ Awaiting influencer acknowledgement before dispatch</div>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&<Btn v="primary" onClick={()=>setModal("collectPayment")}>{sel.paymentFormSent?"✅ Link Sent — Resend":"📩 Send Invoice Creator"}</Btn>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&!sel.inv&&<Btn v="gold" onClick={()=>{setInvoiceF({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:"",amount:"",panNumber:""});setModal("uploadInvoice")}}>📄 Upload Invoice & Send to Finance</Btn>}
               {sel.inv&&sel.status==="invoice_pending_approval"&&(role==="negotiator"||role==="admin")&&<div style={{fontSize:"12px",color:T.warn,fontWeight:700,padding:"6px 10px",background:T.warnBg,borderRadius:"4px"}}>⏳ Invoice pending manager approval</div>}

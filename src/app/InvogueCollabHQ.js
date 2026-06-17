@@ -105,6 +105,9 @@ async function loadFromSupabase() {
     city:i.city, phone:i.phone, email:i.email, address:i.address,
     poc:i.poc, avgRate:i.avg_rate, rating:i.rating, notes:i.notes,
     tags:i.tags||[], added:i.created_at?.slice(0,10)||'',
+    bankHolder:i.bank_account_holder||"", bankAccount:i.bank_account_number||"",
+    bankIfsc:i.bank_ifsc||"", panNumber:i.pan_number||"", upiId:i.upi_id||"",
+    defaultPaymentTerms:i.default_payment_terms||"next_15th",
   }));
 
   const delsByDeal={}, paysByDeal={}, shipByDeal={}, logsByDeal={};
@@ -141,6 +144,7 @@ async function loadFromSupabase() {
     adNotes:d.ad_notes||"", adPlatformLink:d.ad_platform_link||"",
     reuseRequested:d.reuse_requested||false, reuseRequestedAt:d.reuse_requested_at||null, reuseRequestedBy:d.reuse_requested_by||"",
     email:d.email||"", payment_terms:d.payment_terms||"", pan_number:d.pan_number||"", pan_name:d.pan_name||"",
+    paymentDueDate:d.payment_due_date||null, tdsRate:d.tds_rate??10, tdsAmount:d.tds_amount||0,
     products:d.products||(d.products_json?JSON.parse(d.products_json):[])||[],
     paymentFormSent:d.payment_form_sent||false, paymentFormSentAt:d.payment_form_sent_at||null,
     invoiceGenerated:d.invoice_generated||false, invoiceNumber:d.invoice_number||null, invoiceDate:d.invoice_date||null,
@@ -310,7 +314,7 @@ export default function InvogueCollabHQ() {
   const [linkF, setLinkF] = useState("");
   const [userF, setUserF] = useState({name:"",email:"",role:"negotiator"});
   const [editUser, setEditUser] = useState(null);
-  const [nInf, setNInf] = useState({name:"",platform:"Instagram",handle:"",profile:"",followers:"",category:"Fashion & Lifestyle",city:"",phone:"",email:"",address:"",poc:"",avgRate:"",rating:"B+",notes:"",tags:""});
+  const [nInf, setNInf] = useState({name:"",platform:"Instagram",handle:"",profile:"",followers:"",category:"Fashion & Lifestyle",city:"",phone:"",email:"",address:"",poc:"",avgRate:"",rating:"B+",notes:"",tags:"",bankHolder:"",bankAccount:"",bankIfsc:"",panNumber:"",upiId:"",defaultPaymentTerms:"next_15th"});
 
   // New state variables for enhanced functionality
   const [confirmAction, setConfirmAction] = useState(null); // {title,msg,onConfirm}
@@ -333,6 +337,9 @@ export default function InvogueCollabHQ() {
 
   // Performance Marketer state
   const [adTab, setAdTab] = useState("fresh"); // fresh | running | tested | expiring
+  const [financeTab, setFinanceTab] = useState("pay"); // pay | schedule | tds | disputes
+  const [batchSelected, setBatchSelected] = useState({}); // deal IDs selected for batch export
+  const [batchMode, setBatchMode] = useState(false); // batch export mode toggle
   const [adFilter, setAdFilter] = useState({campaign:"",platform:"",search:""});
   const [editingAdNotes, setEditingAdNotes] = useState(null); // deal id being edited
   const [adNotesF, setAdNotesF] = useState({notes:"",link:""});
@@ -479,6 +486,7 @@ export default function InvogueCollabHQ() {
     adNotes:d.ad_notes||"", adPlatformLink:d.ad_platform_link||"",
     reuseRequested:d.reuse_requested||false, reuseRequestedAt:d.reuse_requested_at||null, reuseRequestedBy:d.reuse_requested_by||"",
             email:d.email||"", payment_terms:d.payment_terms||"", pan_number:d.pan_number||"", pan_name:d.pan_name||"",
+            paymentDueDate:d.payment_due_date||null, tdsRate:d.tds_rate??10, tdsAmount:d.tds_amount||0,
             products:d.products||(d.products_json?JSON.parse(d.products_json):[])||[],
             inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
             shipHistory:d.ship_history||[],
@@ -982,6 +990,47 @@ export default function InvogueCollabHQ() {
     const gst = base * (parseFloat(gstRate) / 100);
     const tds = base * (parseFloat(tdsRate) / 100);
     return { base, gst, tds, netPayable: base + gst - tds };
+  };
+
+  // ── Payment Due Date Calculation ──
+  const PAYMENT_TERMS_LABELS = {next_15th:"15th of Next Month","45_days":"45 Days from Live","60_days":"60 Days from Live",advance:"Advance (on approval)",immediate:"Immediate (on live)",custom:"Custom"};
+  const calcPaymentDueDate = (deal, liveDate) => {
+    // Resolve terms: deal override → influencer default → global default
+    const inf = influencers.find(x=>x.name===deal.inf);
+    const terms = deal.payment_terms || inf?.defaultPaymentTerms || "next_15th";
+    const live = liveDate ? new Date(liveDate) : new Date();
+    if(terms==="advance") return null; // already due
+    if(terms==="immediate") return live.toISOString().slice(0,10);
+    if(terms==="45_days") { const d=new Date(live); d.setDate(d.getDate()+45); return d.toISOString().slice(0,10); }
+    if(terms==="60_days") { const d=new Date(live); d.setDate(d.getDate()+60); return d.toISOString().slice(0,10); }
+    if(terms==="next_15th") {
+      const d=new Date(live); d.setMonth(d.getMonth()+1); d.setDate(15);
+      return d.toISOString().slice(0,10);
+    }
+    return null; // custom — set manually
+  };
+
+  // ── TDS Calculation Helpers ──
+  const getCurrentFY = () => {
+    const now = new Date();
+    const yr = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear()-1;
+    return { start: `${yr}-04-01`, end: `${yr+1}-03-31`, label: `FY ${yr}-${(yr+1).toString().slice(2)}` };
+  };
+  const getFYTotalForInfluencer = (infName) => {
+    const fy = getCurrentFY();
+    return deals.filter(d=>d.inf===infName).reduce((sum,d)=>{
+      return sum + (d.pays||[]).filter(p=>{
+        const pd = p.date||"";
+        return pd >= fy.start && pd <= fy.end;
+      }).reduce((s,p)=>s+p.amount,0);
+    },0);
+  };
+  const isTDSApplicable = (infName, additionalAmount) => {
+    const fyTotal = getFYTotalForInfluencer(infName);
+    return (fyTotal + (additionalAmount||0)) > 50000;
+  };
+  const calcTDSAmount = (amount, rate) => {
+    return Math.round((+amount||0) * ((+rate||10)/100));
   };
 
   // ── Actions ──
@@ -1644,16 +1693,27 @@ export default function InvogueCollabHQ() {
     supabase.from('deliverables').update({status:'live',live_link:link,marked_live_at:new Date().toISOString()}).eq('id',delId).then(({error})=>{if(error) console.error("Mark live save failed:",error);});
     // Auto-set ad_status when deal first goes live; usage_end_date only if usageDays is set
     const dealUpdates = shouldUpdateStatus ? {status:newStatus} : {};
+    const localUpdates = {};
     if(newStatus==="live"&&!deal.adStatus) {
       dealUpdates.ad_status = 'fresh';
+      localUpdates.adStatus = 'fresh';
       if(deal.usageDays && !deal.usageEndDate) {
         const endD = new Date(); endD.setDate(endD.getDate()+deal.usageDays);
         dealUpdates.usage_end_date = endD.toISOString().slice(0,10);
+        localUpdates.usageEndDate = dealUpdates.usage_end_date;
+      }
+    }
+    // Auto-calculate payment due date when deal goes fully live
+    if(newStatus==="live"&&!deal.paymentDueDate) {
+      const dueDate = calcPaymentDueDate(deal, new Date().toISOString());
+      if(dueDate) {
+        dealUpdates.payment_due_date = dueDate;
+        localUpdates.paymentDueDate = dueDate;
       }
     }
     if(shouldUpdateStatus || Object.keys(dealUpdates).length>0) supabase.from('deals').update(dealUpdates).eq('id',deal.id).then(({error})=>{if(error) console.error("Deal status update failed:",error);});
 
-    upDeal(deal.id,{dels:newDels, status:shouldUpdateStatus?newStatus:deal.status, ...(dealUpdates.ad_status?{adStatus:'fresh'}:{}), ...(dealUpdates.usage_end_date?{usageEndDate:dealUpdates.usage_end_date}:{})});
+    upDeal(deal.id,{dels:newDels, status:shouldUpdateStatus?newStatus:deal.status, ...localUpdates});
     addLog(deal.id,loggedIn?.name||"You","Deliverable marked live",`${deal.dels[delIdx].type}: ${deal.dels[delIdx].desc}`);
     setSel(prev=>prev?{...prev,dels:newDels,status:shouldUpdateStatus?newStatus:prev.status}:null);
     setLinkF("");
@@ -3155,18 +3215,214 @@ return (
         const advanceDue = deals.filter(d=>["approved","email_sent","acknowledged","shipped","delivered_prod"].includes(d.status)&&totalPaid(d)===0);
         const recentPaid = deals.filter(d=>d.status==="paid").slice(0,5);
         const totalOutstanding = deals.filter(d=>!["rejected","pending","renegotiate","paid"].includes(d.status)).reduce((s,d)=>s+remaining(d),0);
+
+        // Payment schedule: group payable deals by due date
+        const payableDeals = deals.filter(d=>!["rejected","pending","renegotiate","paid","dropped"].includes(d.status)&&remaining(d)>0);
+        const today = new Date().toISOString().slice(0,10);
+        const byDueDate = {};
+        payableDeals.forEach(d=>{
+          const key = d.paymentDueDate || "unscheduled";
+          if(!byDueDate[key]) byDueDate[key]=[];
+          byDueDate[key].push(d);
+        });
+        const dueDateKeys = Object.keys(byDueDate).filter(k=>k!=="unscheduled").sort();
+        const overdueDates = dueDateKeys.filter(k=>k<today);
+        const upcomingDates = dueDateKeys.filter(k=>k>=today);
+
+        // TDS tracker: cumulative FY payments per influencer
+        const fy = getCurrentFY();
+        const infPayMap = {};
+        deals.forEach(d=>{
+          const fyPaid = (d.pays||[]).filter(p=>(p.date||"")>=fy.start&&(p.date||"")<=fy.end).reduce((s,p)=>s+p.amount,0);
+          const fyCommitted = !["rejected","pending","renegotiate","dropped"].includes(d.status) ? d.amount : 0;
+          if(!infPayMap[d.inf]) infPayMap[d.inf]={paid:0,committed:0,deals:0};
+          infPayMap[d.inf].paid += fyPaid;
+          infPayMap[d.inf].committed += fyCommitted;
+          infPayMap[d.inf].deals += 1;
+        });
+        const tdsInfluencers = Object.entries(infPayMap).filter(([,v])=>v.paid>50000||v.committed>50000).sort((a,b)=>b[1].paid-a[1].paid);
+        const nearingTDS = Object.entries(infPayMap).filter(([,v])=>v.paid<=50000&&v.paid>35000).sort((a,b)=>b[1].paid-a[1].paid);
+
+        // Batch export helpers
+        const toggleBatch = (id) => setBatchSelected(prev=>({...prev,[id]:!prev[id]}));
+        const selectAllInGroup = (dls) => { const obj={}; dls.forEach(d=>{obj[d.id]=true}); setBatchSelected(prev=>({...prev,...obj})); };
+
+        // Export to CSV
+        const exportBatchCSV = () => {
+          const selectedDeals = deals.filter(d=>batchSelected[d.id]);
+          if(selectedDeals.length===0) return notify("No deals selected for export","err");
+          const rows = [["Collab ID","Influencer","Platform","Product","Deal Amount","Already Paid","Amount Due","Payment Terms","Due Date","Account Holder","Account Number","IFSC","PAN","UPI ID","FY Total Paid","TDS Applicable","TDS Rate %","TDS Amount","Net Payable"]];
+          selectedDeals.forEach(d=>{
+            const inf = influencers.find(x=>x.name===d.inf);
+            const rem = remaining(d);
+            const fyTotal = getFYTotalForInfluencer(d.inf);
+            const tdsApply = isTDSApplicable(d.inf, rem);
+            const tdsAmt = tdsApply ? calcTDSAmount(rem, d.tdsRate||10) : 0;
+            const netPay = rem - tdsAmt;
+            const terms = d.payment_terms || inf?.defaultPaymentTerms || "next_15th";
+            rows.push([
+              d.collabId||d.id.slice(0,8), d.inf, d.platform||"", d.products?d.products.map(p=>p.name).join("+"):d.product,
+              d.amount, totalPaid(d), rem, PAYMENT_TERMS_LABELS[terms]||terms, d.paymentDueDate||"Not set",
+              inf?.bankHolder||"", inf?.bankAccount||"", inf?.bankIfsc||"", inf?.panNumber||d.pan_number||"",
+              inf?.upiId||"", fyTotal, tdsApply?"Yes":"No", tdsApply?(d.tdsRate||10):0, tdsAmt, netPay
+            ]);
+          });
+          const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+          const blob = new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8;"});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a"); a.href=url; a.download=`payment_batch_${today}.csv`; a.click();
+          URL.revokeObjectURL(url);
+          notify(`Exported ${selectedDeals.length} deals to CSV!`);
+        };
+
         return <>
-          <div style={{marginBottom:"14px"}}><span style={{fontSize:"20px",fontWeight:800}}>💰 Payment Center</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>All payment operations</span></div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"8px",marginBottom:"16px"}}>
+          <div style={{marginBottom:"14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div><span style={{fontSize:"20px",fontWeight:800}}>💰 Payment Center</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Payment scheduling, TDS tracking & batch exports</span></div>
+            <div style={{display:"flex",gap:"6px"}}>
+              {batchMode&&<Btn v="ok" sm onClick={exportBatchCSV}>📥 Export {Object.values(batchSelected).filter(Boolean).length} Selected</Btn>}
+              <Btn v={batchMode?"danger":"gold"} sm onClick={()=>{setBatchMode(!batchMode);if(batchMode)setBatchSelected({})}}>{batchMode?"✕ Exit Batch":"📋 Batch Export"}</Btn>
+            </div>
+          </div>
+
+          {/* Stats row */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"8px",marginBottom:"16px"}}>
             <StatBox l="Total Outstanding" v={f(totalOutstanding)} c={T.err} sub="Across all deals"/>
             <StatBox l="Ready to Pay" v={pendingPayments.length} c={pendingPayments.length>0?T.warn:T.ok} sub="Invoice matched"/>
             <StatBox l="Disputes" v={disputed.length} c={disputed.length>0?T.err:T.ok} sub="Need resolution"/>
-            <StatBox l="Advances Due" v={advanceDue.length} c={advanceDue.length>0?T.info:T.ok} sub="No payment yet"/>
-            <StatBox l="Total Paid" v={f(stats.paid)} c={T.ok} sub="This period"/>
+            <StatBox l="TDS Applicable" v={tdsInfluencers.length} c={tdsInfluencers.length>0?"#7c3aed":T.ok} sub={`>${f(50000)} in ${fy.label}`}/>
+            <StatBox l="Overdue" v={overdueDates.reduce((s,k)=>s+byDueDate[k].length,0)} c={overdueDates.length>0?T.err:T.ok} sub="Past due date"/>
           </div>
 
-          {/* DISPUTES — TOP PRIORITY */}
-          {disputed.length>0&&<Section title={`⚠ Disputes — Resolve First (${disputed.length})`} icon="" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Urgent</span>}>
+          {/* Tab navigation */}
+          <div style={{display:"flex",gap:"4px",marginBottom:"14px",borderBottom:`2px solid ${T.border}`,paddingBottom:"6px"}}>
+            {[{k:"pay",l:"Ready to Pay",n:pendingPayments.length},{k:"schedule",l:"Payment Schedule",n:payableDeals.length},{k:"tds",l:"TDS Tracker",n:tdsInfluencers.length},{k:"disputes",l:"Disputes",n:disputed.length}].map(t=>
+              <div key={t.k} onClick={()=>setFinanceTab(t.k)} style={{padding:"6px 14px",borderRadius:"6px 6px 0 0",fontSize:"12px",fontWeight:700,cursor:"pointer",background:financeTab===t.k?T.gold+"18":"transparent",color:financeTab===t.k?T.gold:T.sub,borderBottom:financeTab===t.k?`2px solid ${T.gold}`:"2px solid transparent",marginBottom:"-8px"}}>{t.l}{t.n>0?` (${t.n})`:""}</div>
+            )}
+          </div>
+
+          {/* ── TAB: READY TO PAY ── */}
+          {financeTab==="pay"&&<>
+            {pendingPayments.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"20px 0",textAlign:"center"}}>No invoices pending payment</div>}
+            {batchMode&&pendingPayments.length>0&&<div style={{marginBottom:"8px"}}><Btn v="outline" sm onClick={()=>selectAllInGroup(pendingPayments)}>Select All ({pendingPayments.length})</Btn></div>}
+            {pendingPayments.map(d=>{
+              const paid=totalPaid(d),rem=remaining(d);
+              const rawLink=d.inv?.link||d.inv?.note||d.invoice_note||"";
+              const invLink=rawLink.includes("LINK: ")?rawLink.split("LINK: ")[1]:rawLink;
+              const inf = influencers.find(x=>x.name===d.inf);
+              const fyTotal = getFYTotalForInfluencer(d.inf);
+              const tdsApply = isTDSApplicable(d.inf, rem);
+              const tdsAmt = tdsApply ? calcTDSAmount(rem, d.tdsRate||10) : 0;
+              return <div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderLeft:`3px solid ${tdsApply?"#7c3aed":T.ok}`,borderRadius:"8px",padding:"14px 16px",marginBottom:"10px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:"8px"}}>
+                    {batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={()=>toggleBatch(d.id)} style={{marginTop:"4px",cursor:"pointer"}}/>}
+                    <div>
+                      <div style={{fontWeight:800,fontSize:"15px",color:T.text}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"12px",marginLeft:"4px"}}>· {d.platform||""}</span></div>
+                      <div style={{fontSize:"11px",color:T.sub,marginTop:"1px"}}>{getCamp(d.cid)?.name||"—"} · {d.collabId||d.id.slice(0,8)}{d.paymentDueDate?` · Due: ${new Date(d.paymentDueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}`:""}</div>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                    <Btn v="outline" sm onClick={()=>{setSel(d);setModal("detail")}}>View</Btn>
+                    <Btn v="ok" sm onClick={()=>{setSel(d);setPayF({type:paid===0?"final":"final",amount:String(rem),note:"Paying on matched invoice"});setModal("payment")}}>💰 Pay {f(rem)}</Btn>
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"6px",marginBottom:"8px"}}>
+                  <div style={{background:T.goldSoft,padding:"5px 7px",borderRadius:"5px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Locked</div><div style={{fontSize:"12px",fontWeight:800,color:T.gold}}>{f(d.amount)}</div></div>
+                  <div style={{background:d.inv?.match===false?T.errBg:T.infoBg,padding:"5px 7px",borderRadius:"5px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Invoice</div><div style={{fontSize:"12px",fontWeight:800,color:d.inv?.match===false?T.err:T.info}}>{f(d.inv?.amount||d.amount)}{d.inv?.match===false?" ⚠":" ✓"}</div></div>
+                  <div style={{background:T.okBg,padding:"5px 7px",borderRadius:"5px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Paid</div><div style={{fontSize:"12px",fontWeight:800,color:T.ok}}>{f(paid)}</div></div>
+                  <div style={{background:T.warnBg,padding:"5px 7px",borderRadius:"5px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Due</div><div style={{fontSize:"12px",fontWeight:800,color:T.warn}}>{f(rem)}</div></div>
+                  <div style={{background:tdsApply?"#f5f3ff":"#f0fdf4",padding:"5px 7px",borderRadius:"5px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>TDS</div><div style={{fontSize:"12px",fontWeight:800,color:tdsApply?"#7c3aed":T.ok}}>{tdsApply?`${f(tdsAmt)} (${d.tdsRate||10}%)`:"N/A"}</div></div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 12px",fontSize:"11px",color:T.sub}}>
+                  <div>PAN: <b style={{fontFamily:"monospace"}}>{inf?.panNumber||d.pan_number||"—"}</b></div>
+                  <div>Bank: <b>{inf?.bankHolder||"—"}</b>{inf?.bankIfsc?` · ${inf.bankIfsc}`:""}</div>
+                  <div>FY Total Paid: <b style={{color:fyTotal>50000?"#7c3aed":T.text}}>{f(fyTotal)}</b></div>
+                  <div>Terms: <b>{PAYMENT_TERMS_LABELS[d.payment_terms||inf?.defaultPaymentTerms||"next_15th"]||"—"}</b></div>
+                </div>
+                {paid>0&&<div style={{height:"3px",borderRadius:"2px",background:T.border,marginTop:"8px"}}><div style={{height:"100%",width:`${(paid/d.amount)*100}%`,background:T.ok,borderRadius:"2px"}}/></div>}
+              </div>;
+            })}
+
+            {/* Advances Due */}
+            {advanceDue.length>0&&<Section title={`Advance Payments Pending (${advanceDue.length})`} icon="⏰">
+              {advanceDue.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+                <div><b>{d.inf}</b> <span style={{color:T.sub}}>· {f(d.amount)} · {d.status==="approved"?"Just approved":d.status==="shipped"?"Product shipped":"In progress"}</span></div>
+                <Btn v="outline" sm onClick={(e)=>{e.stopPropagation();setSel(d);setPayF({type:"advance",amount:"",note:""});setModal("payment")}}>Record Advance</Btn>
+              </div>)}
+            </Section>}
+
+            {/* Recently Completed */}
+            <Section title="Recently Completed" icon="✅">
+              {recentPaid.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>No completed payments yet</div>}
+              {recentPaid.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",opacity:.85,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.opacity="1"}} onMouseLeave={e=>{e.currentTarget.style.opacity=".85"}}>
+                <span><b>{d.inf}</b> · {getCamp(d.cid)?.name||""}</span>
+                <span style={{color:T.ok,fontWeight:700}}>⭐ {f(d.amount)} paid</span>
+              </div>)}
+            </Section>
+          </>}
+
+          {/* ── TAB: PAYMENT SCHEDULE ── */}
+          {financeTab==="schedule"&&<>
+            {batchMode&&payableDeals.length>0&&<div style={{marginBottom:"8px",display:"flex",gap:"6px"}}><Btn v="outline" sm onClick={()=>selectAllInGroup(payableDeals)}>Select All ({payableDeals.length})</Btn></div>}
+            {/* Overdue */}
+            {overdueDates.map(dateKey=><Section key={dateKey} title={`⚠ OVERDUE — ${new Date(dateKey).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}`} icon="" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700}}>{byDueDate[dateKey].length} deal{byDueDate[dateKey].length>1?"s":""} · {f(byDueDate[dateKey].reduce((s,d)=>s+remaining(d),0))}</span>}>
+              {byDueDate[dateKey].map(d=><div key={d.id} style={{background:T.errBg,border:`1px solid ${T.err}22`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>{setSel(d);setModal("detail")}}>
+                <div style={{display:"flex",alignItems:"center",gap:"6px"}}>{batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{cursor:"pointer"}}/>}<div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.product}</span></div></div>
+                <div style={{textAlign:"right"}}><span style={{color:T.err,fontWeight:700}}>{f(remaining(d))} due</span></div>
+              </div>)}
+            </Section>)}
+            {/* Upcoming */}
+            {upcomingDates.map(dateKey=><Section key={dateKey} title={`📅 ${new Date(dateKey).toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short",year:"numeric"})}`} icon="" action={<span style={{fontSize:"11px",color:T.sub,fontWeight:700}}>{byDueDate[dateKey].length} deal{byDueDate[dateKey].length>1?"s":""} · {f(byDueDate[dateKey].reduce((s,d)=>s+remaining(d),0))}</span>}>
+              {byDueDate[dateKey].map(d=>{const inf=influencers.find(x=>x.name===d.inf);return <div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>{setSel(d);setModal("detail")}}>
+                <div style={{display:"flex",alignItems:"center",gap:"6px"}}>{batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{cursor:"pointer"}}/>}<div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.product} · {PAYMENT_TERMS_LABELS[d.payment_terms||inf?.defaultPaymentTerms||"next_15th"]||""}</span></div></div>
+                <div><span style={{fontWeight:700}}>{f(remaining(d))}</span>{isTDSApplicable(d.inf,remaining(d))&&<span style={{marginLeft:"6px",padding:"1px 5px",borderRadius:"3px",fontSize:"9px",fontWeight:700,background:"#f5f3ff",color:"#7c3aed"}}>TDS</span>}</div>
+              </div>;})}
+            </Section>)}
+            {/* Unscheduled */}
+            {byDueDate.unscheduled&&byDueDate.unscheduled.length>0&&<Section title={`Unscheduled (${byDueDate.unscheduled.length})`} icon="❓" action={<span style={{fontSize:"11px",color:T.sub}}>No due date set</span>}>
+              {byDueDate.unscheduled.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>{setSel(d);setModal("detail")}}>
+                <div style={{display:"flex",alignItems:"center",gap:"6px"}}>{batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{cursor:"pointer"}}/>}<div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.product} · <Badge s={d.status} sm/></span></div></div>
+                <span style={{fontWeight:700}}>{f(remaining(d))}</span>
+              </div>)}
+            </Section>}
+            {payableDeals.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"20px 0",textAlign:"center"}}>No outstanding payments</div>}
+          </>}
+
+          {/* ── TAB: TDS TRACKER ── */}
+          {financeTab==="tds"&&<>
+            <div style={{padding:"10px 12px",background:"#f5f3ff",border:"1px solid #c4b5fd",borderRadius:"7px",marginBottom:"14px",fontSize:"12px",color:"#5b21b6"}}>
+              <b>TDS Rule:</b> 10% TDS applies on payments to any creator whose cumulative financial transactions exceed ₹50,000 in {fy.label} (Apr 1 – Mar 31). Rate can be overridden per deal if invoice specifies otherwise.
+            </div>
+
+            {tdsInfluencers.length>0&&<Section title={`TDS Applicable — Above ₹50K (${tdsInfluencers.length})`} icon="🏛️">
+              {tdsInfluencers.map(([name,data])=>{const inf=influencers.find(x=>x.name===name);return <div key={name} onClick={()=>{if(inf)setInfProfile(inf)}} style={{background:T.surface,border:"1px solid #c4b5fd",borderLeft:"3px solid #7c3aed",borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",cursor:inf?"pointer":"default"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:"14px"}}>{name}</div>
+                    <div style={{fontSize:"11px",color:T.sub}}>{data.deals} deals in {fy.label} · PAN: <b style={{fontFamily:"monospace"}}>{inf?.panNumber||"Not on file"}</b></div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:"13px",fontWeight:800,color:"#7c3aed"}}>{f(data.paid)} paid</div>
+                    <div style={{fontSize:"11px",color:T.sub}}>Committed: {f(data.committed)}</div>
+                  </div>
+                </div>
+                {!inf?.panNumber&&<div style={{fontSize:"10px",color:T.err,marginTop:"4px",fontWeight:700}}>⚠ PAN missing — required for TDS deduction</div>}
+              </div>;})}
+            </Section>}
+
+            {nearingTDS.length>0&&<Section title={`Nearing Threshold — ₹35K-50K (${nearingTDS.length})`} icon="⚡" action={<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Watch list</span>}>
+              {nearingTDS.map(([name,data])=>{const inf=influencers.find(x=>x.name===name);const pct=Math.round(data.paid/50000*100);return <div key={name} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:"4px"}}><b>{name}</b><span style={{color:T.warn,fontWeight:700}}>{f(data.paid)} / {f(50000)} ({pct}%)</span></div>
+                <div style={{height:"4px",borderRadius:"2px",background:T.border}}><div style={{height:"100%",width:`${pct}%`,background:pct>90?"#ef4444":"#f59e0b",borderRadius:"2px"}}/></div>
+              </div>;})}
+            </Section>}
+
+            {tdsInfluencers.length===0&&nearingTDS.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"20px 0",textAlign:"center"}}>No influencers have crossed or are nearing the ₹50K TDS threshold in {fy.label}</div>}
+          </>}
+
+          {/* ── TAB: DISPUTES ── */}
+          {financeTab==="disputes"&&<>
+            {disputed.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"20px 0",textAlign:"center"}}>No active disputes</div>}
             {disputed.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.errBg,border:`1px solid ${T.err}33`,borderLeft:`3px solid ${T.err}`,borderRadius:"7px",padding:"11px 13px",marginBottom:"6px",cursor:"pointer"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div>
@@ -3181,94 +3437,7 @@ return (
               </div>
               {d.inv?.note&&<div style={{fontSize:"11px",color:T.err,marginTop:"4px",fontStyle:"italic"}}>{d.inv.note}</div>}
             </div>)}
-          </Section>}
-
-          {/* READY TO PAY — Full deal terms + invoice details for finance */}
-          <Section title={`Ready to Pay (${pendingPayments.length})`} icon="💳" action={<span style={{fontSize:"11px",color:T.sub}}>{f(pendingPayments.reduce((s,d)=>s+remaining(d),0))} total</span>}>
-            {pendingPayments.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>No invoices pending payment</div>}
-            {pendingPayments.map(d=>{
-              const paid=totalPaid(d),rem=remaining(d);
-              const rawLink=d.inv?.link||d.inv?.note||d.invoice_note||"";
-              // Strip mismatch prefix if present (format: "⚠ MISMATCH | LINK: <url>")
-              const invLink=rawLink.includes("LINK: ")?rawLink.split("LINK: ")[1]:rawLink;
-              return <div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.ok}`,borderRadius:"8px",padding:"14px 16px",marginBottom:"10px"}}>
-                {/* Header: Influencer + Campaign + Action */}
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
-                  <div>
-                    <div style={{fontWeight:800,fontSize:"15px",color:T.text}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"12px",marginLeft:"4px"}}>· {d.platform||""}</span></div>
-                    <div style={{fontSize:"11px",color:T.sub,marginTop:"1px"}}>{getCamp(d.cid)?.name||"—"} · {d.collabId||d.id.slice(0,8)}</div>
-                  </div>
-                  <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
-                    <Btn v="outline" sm onClick={()=>{setSel(d);setModal("detail")}}>View Details</Btn>
-                    <Btn v="ok" sm onClick={()=>{setSel(d);setPayF({type:paid===0?"final":"final",amount:String(rem),note:"Paying on matched invoice"});setModal("payment")}}>💰 Pay {f(rem)}</Btn>
-                  </div>
-                </div>
-
-                {/* Amount Summary Bar */}
-                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"6px",marginBottom:"10px"}}>
-                  <div style={{background:T.goldSoft,padding:"6px 8px",borderRadius:"5px"}}>
-                    <div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".3px"}}>Locked</div>
-                    <div style={{fontSize:"13px",fontWeight:800,color:T.gold}}>{f(d.amount)}</div>
-                  </div>
-                  <div style={{background:d.inv?.match===false?T.errBg:T.infoBg,padding:"6px 8px",borderRadius:"5px"}}>
-                    <div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".3px"}}>Invoice</div>
-                    <div style={{fontSize:"13px",fontWeight:800,color:d.inv?.match===false?T.err:T.info}}>{f(d.inv?.amount||d.amount)}{d.inv?.match===false?" ⚠":" ✓"}</div>
-                  </div>
-                  <div style={{background:T.okBg,padding:"6px 8px",borderRadius:"5px"}}>
-                    <div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".3px"}}>Paid</div>
-                    <div style={{fontSize:"13px",fontWeight:800,color:T.ok}}>{f(paid)}</div>
-                  </div>
-                  <div style={{background:T.warnBg,padding:"6px 8px",borderRadius:"5px"}}>
-                    <div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".3px"}}>Due Now</div>
-                    <div style={{fontSize:"13px",fontWeight:800,color:T.warn}}>{f(rem)}</div>
-                  </div>
-                </div>
-
-                {/* Deal Terms Grid */}
-                <div style={{background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"10px 12px",marginBottom:"8px"}}>
-                  <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>📋 Original Deal Terms</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 12px",fontSize:"12px"}}>
-                    <div><span style={{color:T.sub}}>Product:</span> <b>{d.products?d.products.map(p=>p.name).join(", "):d.product}</b></div>
-                    <div><span style={{color:T.sub}}>Usage Rights:</span> <b>{d.usage||"—"}</b></div>
-                    <div><span style={{color:T.sub}}>Deadline:</span> <b>{d.deadline||"—"}</b></div>
-                    <div><span style={{color:T.sub}}>Payment Terms:</span> <b>{d.paymentTerms||"Net 15 days"}</b></div>
-                    <div style={{gridColumn:"1 / -1"}}><span style={{color:T.sub}}>Deliverables:</span> <b>{d.dels.map(dl=>`${dl.type} (${dl.st==="live"?"✓ Live":dl.st})`).join(" · ")}</b></div>
-                  </div>
-                </div>
-
-                {/* Invoice + PAN Details */}
-                <div style={{background:T.infoBg,border:`1px solid ${T.info}33`,borderRadius:"6px",padding:"10px 12px"}}>
-                  <div style={{fontSize:"10px",fontWeight:700,color:T.info,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>🧾 Invoice & Payment Details</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 12px",fontSize:"12px"}}>
-                    <div><span style={{color:T.sub}}>Invoice #:</span> <b>{d.invoiceNumber||"—"}</b></div>
-                    <div><span style={{color:T.sub}}>Invoice Date:</span> <b>{d.invoiceDate||"—"}</b></div>
-                    {invLink&&<div style={{gridColumn:"1 / -1"}}><span style={{color:T.sub}}>Invoice Link:</span> <a href={ensureUrl(invLink)} target="_blank" rel="noopener noreferrer" style={{color:T.info,fontWeight:700,wordBreak:"break-all"}}>🔗 {invLink}</a></div>}
-                    <div><span style={{color:T.sub}}>PAN:</span> <b style={{fontFamily:"monospace"}}>{d.pan?.number||d.pan_number||"—"}</b></div>
-                    <div><span style={{color:T.sub}}>Legal Name:</span> <b>{d.pan?.name||d.pan_name||"—"}</b></div>
-                  </div>
-                </div>
-
-                {paid>0&&<div style={{height:"3px",borderRadius:"2px",background:T.border,marginTop:"8px"}}><div style={{height:"100%",width:`${(paid/d.amount)*100}%`,background:T.ok,borderRadius:"2px"}}/></div>}
-              </div>;
-            })}
-          </Section>
-
-          {/* ADVANCES DUE */}
-          {advanceDue.length>0&&<Section title={`Advance Payments Pending (${advanceDue.length})`} icon="⏰">
-            {advanceDue.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-              <div><b>{d.inf}</b> <span style={{color:T.sub}}>· {f(d.amount)} · {d.status==="approved"?"Just approved":d.status==="shipped"?"Product shipped":"In progress"}</span></div>
-              <Btn v="outline" sm onClick={(e)=>{e.stopPropagation();setSel(d);setPayF({type:"advance",amount:"",note:""});setModal("payment")}}>Record Advance</Btn>
-            </div>)}
-          </Section>}
-
-          {/* RECENT PAYMENTS */}
-          <Section title="Recently Completed" icon="✅">
-            {recentPaid.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>No completed payments yet</div>}
-            {recentPaid.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",opacity:.85,cursor:"pointer",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.opacity="1";e.currentTarget.style.borderColor=T.maroon}} onMouseLeave={e=>{e.currentTarget.style.opacity=".85";e.currentTarget.style.borderColor=T.border}}>
-              <span><b>{d.inf}</b> · {getCamp(d.cid)?.name||""}</span>
-              <span style={{color:T.ok,fontWeight:700}}>⭐ {f(d.amount)} paid</span>
-            </div>)}
-          </Section>
+          </>}
 
         </>;
       })()}
@@ -3767,6 +3936,17 @@ return (
                 <StatBox l="Deliverables" v={`${doneDels}/${totalDels}`} c={T.purple}/>
               </div>
 
+              {/* Bank & Payment Details */}
+              {(inf.bankHolder||inf.bankAccount||inf.panNumber||inf.upiId)&&<div style={{padding:"10px 12px",background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:"7px",marginBottom:"14px"}}>
+                <div style={{fontSize:"11px",fontWeight:700,color:"#0284c7",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px"}}>💳 Bank & Payment Details</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
+                  {[["Account Holder",inf.bankHolder],["Account Number",inf.bankAccount],["IFSC",inf.bankIfsc],["PAN",inf.panNumber],["UPI ID",inf.upiId],["Default Terms",{next_15th:"15th of Next Month",45_days:"45 Days",60_days:"60 Days",advance:"Advance",immediate:"Immediate",custom:"Custom"}[inf.defaultPaymentTerms]||inf.defaultPaymentTerms]].filter(([,v])=>v).map(([l,v])=><div key={l} style={{padding:"4px 8px",background:"#fff",borderRadius:"4px",fontSize:"12px"}}><span style={{fontWeight:700,color:T.sub,fontSize:"10px"}}>{l}:</span> {v}</div>)}
+                </div>
+              </div>}
+              {!(inf.bankHolder||inf.bankAccount||inf.panNumber||inf.upiId)&&(role==="finance"||role==="admin")&&<div style={{padding:"10px 12px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderRadius:"7px",marginBottom:"14px",fontSize:"12px",color:T.warn}}>
+                ⚠ No bank details on file. Ask the negotiator to update this influencer's profile with bank details for payment processing.
+              </div>}
+
               {/* Tags */}
               <div style={{display:"flex",gap:"4px",marginBottom:"14px",flexWrap:"wrap"}}>
                 {(inf.tags||[]).map((tag,i)=><span key={i} style={{padding:"2px 8px",borderRadius:"5px",fontSize:"11px",fontWeight:600,background:T.goldSoft,color:T.gold}}>#{tag}</span>)}
@@ -3837,6 +4017,17 @@ return (
               <Field label="Address" span={2}><Inp value={nInf.address} onChange={e=>setNInf({...nInf,address:e.target.value})} placeholder="Full shipping address"/></Field>
               <Field label="Tags (comma separated)"><Inp value={nInf.tags} onChange={e=>setNInf({...nInf,tags:e.target.value})} placeholder="fashion, lifestyle, mumbai"/></Field>
               <Field label="Notes"><Inp value={nInf.notes} onChange={e=>setNInf({...nInf,notes:e.target.value})} placeholder="Any important notes about this influencer..."/></Field>
+              <div style={{marginTop:"10px",padding:"10px",background:T.surfaceAlt,borderRadius:"7px",border:`1px solid ${T.border}`}}>
+                <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"8px"}}>💳 Bank & Payment Details (optional)</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 10px"}}>
+                  <Field label="Account Holder Name"><Inp value={nInf.bankHolder} onChange={e=>setNInf({...nInf,bankHolder:e.target.value})} placeholder="As per bank records"/></Field>
+                  <Field label="Account Number"><Inp value={nInf.bankAccount} onChange={e=>setNInf({...nInf,bankAccount:e.target.value})} placeholder="1234567890"/></Field>
+                  <Field label="IFSC Code"><Inp value={nInf.bankIfsc} onChange={e=>setNInf({...nInf,bankIfsc:e.target.value})} placeholder="SBIN0001234"/></Field>
+                  <Field label="PAN Number"><Inp value={nInf.panNumber} onChange={e=>setNInf({...nInf,panNumber:e.target.value})} placeholder="ABCPD1234E"/></Field>
+                  <Field label="UPI ID"><Inp value={nInf.upiId} onChange={e=>setNInf({...nInf,upiId:e.target.value})} placeholder="name@upi"/></Field>
+                  <Field label="Default Payment Terms"><Sel value={nInf.defaultPaymentTerms} onChange={e=>setNInf({...nInf,defaultPaymentTerms:e.target.value})} options={[{v:"next_15th",l:"15th of Next Month"},{v:"45_days",l:"45 Days from Live"},{v:"60_days",l:"60 Days from Live"},{v:"advance",l:"Advance (on approval)"},{v:"immediate",l:"Immediate (on live)"},{v:"custom",l:"Custom"}]}/></Field>
+                </div>
+              </div>
               <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"14px",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>
                 <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
                 <Btn v="gold" onClick={()=>{
@@ -3846,8 +4037,8 @@ return (
                   if(nInf.profile && !validUrl(nInf.profile)) { notify("Invalid profile URL","err"); return; }
                   const infId = uid();
                   const parsedTags = nInf.tags?nInf.tags.split(",").map(t=>t.trim().toLowerCase()).filter(Boolean):[];
-                  supabase.from('influencers').insert({id:infId,name:nInf.name,platform:nInf.platform,handle:nInf.handle,profile:nInf.profile,followers:nInf.followers,category:nInf.category,city:nInf.city,phone:nInf.phone,email:nInf.email,address:nInf.address,poc:nInf.poc,avg_rate:+nInf.avgRate||0,rating:nInf.rating,notes:nInf.notes,tags:parsedTags}).then(({error})=>{if(error){console.error("Add influencer failed:",error);notify("Failed to save: "+error.message,"err");}});
-                  setInfluencers(prev=>[...prev,{id:infId,name:nInf.name,platform:nInf.platform,handle:nInf.handle,profile:nInf.profile,followers:nInf.followers,category:nInf.category,city:nInf.city,phone:nInf.phone,email:nInf.email,address:nInf.address,poc:nInf.poc,avgRate:+nInf.avgRate||0,rating:nInf.rating,notes:nInf.notes,tags:parsedTags,added:new Date().toISOString().slice(0,10)}]);
+                  supabase.from('influencers').insert({id:infId,name:nInf.name,platform:nInf.platform,handle:nInf.handle,profile:nInf.profile,followers:nInf.followers,category:nInf.category,city:nInf.city,phone:nInf.phone,email:nInf.email,address:nInf.address,poc:nInf.poc,avg_rate:+nInf.avgRate||0,rating:nInf.rating,notes:nInf.notes,tags:parsedTags,bank_account_holder:nInf.bankHolder||null,bank_account_number:nInf.bankAccount||null,bank_ifsc:nInf.bankIfsc||null,pan_number:nInf.panNumber||null,upi_id:nInf.upiId||null,default_payment_terms:nInf.defaultPaymentTerms||'next_15th'}).then(({error})=>{if(error){console.error("Add influencer failed:",error);notify("Failed to save: "+error.message,"err");}});
+                  setInfluencers(prev=>[...prev,{id:infId,name:nInf.name,platform:nInf.platform,handle:nInf.handle,profile:nInf.profile,followers:nInf.followers,category:nInf.category,city:nInf.city,phone:nInf.phone,email:nInf.email,address:nInf.address,poc:nInf.poc,avgRate:+nInf.avgRate||0,rating:nInf.rating,notes:nInf.notes,tags:parsedTags,added:new Date().toISOString().slice(0,10),bankHolder:nInf.bankHolder||"",bankAccount:nInf.bankAccount||"",bankIfsc:nInf.bankIfsc||"",panNumber:nInf.panNumber||"",upiId:nInf.upiId||"",defaultPaymentTerms:nInf.defaultPaymentTerms||"next_15th"}]);
                   setModal(null);
                   setNInf({name:"",platform:"Instagram",handle:"",profile:"",followers:"",category:"",city:"",phone:"",email:"",address:"",poc:"",avgRate:"",rating:"B+",notes:"",tags:""});
                   notify(`${nInf.name} added to database!`);

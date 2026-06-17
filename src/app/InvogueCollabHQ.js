@@ -2503,7 +2503,7 @@ return (
       const unreads = recentNotifs.filter(n => new Date(n.time) > new Date(lastSeenTime)).length;
 
       const navItems = {
-        admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"analytics",l:"Analytics",i:"📊"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"payments",l:"Payments",i:"💰",n:deals.filter(d=>["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0).length},{k:"audit",l:"Audit Log",i:"📜"}],
+        admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"creatives",l:"Creative Hub",i:"📈"},{k:"analytics",l:"Analytics",i:"📊"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"payments",l:"Payments",i:"💰",n:deals.filter(d=>["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0).length},{k:"audit",l:"Audit Log",i:"📜"}],
         negotiator: [{k:"dashboard",l:"My Dashboard",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"dropped",l:"Dropped Collabs",i:"🚫",n:stats.dropped},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
         approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.awaitingReview||stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
         finance: [{k:"dashboard",l:"Payment Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"}],
@@ -3500,7 +3500,7 @@ return (
       {/* ═══════════════════════════════════════════════════════
           PERFORMANCE MARKETER DASHBOARD — Creative Hub
          ═══════════════════════════════════════════════════════ */}
-      {view==="dashboard"&&role==="performance_marketer"&&(()=>{
+      {((view==="dashboard"&&role==="performance_marketer")||(view==="creatives"&&role==="admin"))&&(()=>{
         // All live/completed creatives for the performance marketer
         const liveStatuses = ["partial_live","live","invoice_ok","invoice_pending_approval","payment_requested","payment_approved","partial_paid","paid"];
         const allCreatives = deals.filter(d=>liveStatuses.includes(d.status));

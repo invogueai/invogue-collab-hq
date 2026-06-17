@@ -137,7 +137,7 @@ async function loadFromSupabase() {
     usage:d.usage_rights, deadline:d.deadline, profile:d.profile_link,
     phone:d.phone, address:d.address, by:d.created_by, at:d.created_at,
     appBy:d.approved_by, appAt:d.approved_at, ackAt:d.acknowledged_at, ackToken:d.acknowledge_token,
-    adStatus:d.ad_status||null, usageDays:d.usage_days||30, usageEndDate:d.usage_end_date||null,
+    adStatus:d.ad_status||null, usageDays:d.usage_days||null, usageEndDate:d.usage_end_date||null,
     adNotes:d.ad_notes||"", adPlatformLink:d.ad_platform_link||"",
     reuseRequested:d.reuse_requested||false, reuseRequestedAt:d.reuse_requested_at||null, reuseRequestedBy:d.reuse_requested_by||"",
     email:d.email||"", payment_terms:d.payment_terms||"", pan_number:d.pan_number||"", pan_name:d.pan_name||"",
@@ -475,7 +475,7 @@ export default function InvogueCollabHQ() {
             usage:d.usage_rights, deadline:d.deadline, profile:d.profile_link,
             phone:d.phone, address:d.address, by:d.created_by, at:d.created_at,
             appBy:d.approved_by, appAt:d.approved_at, ackAt:d.acknowledged_at, ackToken:d.acknowledge_token,
-    adStatus:d.ad_status||null, usageDays:d.usage_days||30, usageEndDate:d.usage_end_date||null,
+    adStatus:d.ad_status||null, usageDays:d.usage_days||null, usageEndDate:d.usage_end_date||null,
     adNotes:d.ad_notes||"", adPlatformLink:d.ad_platform_link||"",
     reuseRequested:d.reuse_requested||false, reuseRequestedAt:d.reuse_requested_at||null, reuseRequestedBy:d.reuse_requested_by||"",
             email:d.email||"", payment_terms:d.payment_terms||"", pan_number:d.pan_number||"", pan_name:d.pan_name||"",
@@ -1642,16 +1642,18 @@ export default function InvogueCollabHQ() {
     const delId = deal.dels[delIdx].id;
 
     supabase.from('deliverables').update({status:'live',live_link:link,marked_live_at:new Date().toISOString()}).eq('id',delId).then(({error})=>{if(error) console.error("Mark live save failed:",error);});
-    // Auto-set usage_end_date and ad_status when deal first goes live
+    // Auto-set ad_status when deal first goes live; usage_end_date only if usageDays is set
     const dealUpdates = shouldUpdateStatus ? {status:newStatus} : {};
-    if(newStatus==="live"&&!deal.usageEndDate) {
-      const endD = new Date(); endD.setDate(endD.getDate()+(deal.usageDays||30));
-      dealUpdates.usage_end_date = endD.toISOString().slice(0,10);
+    if(newStatus==="live"&&!deal.adStatus) {
       dealUpdates.ad_status = 'fresh';
+      if(deal.usageDays && !deal.usageEndDate) {
+        const endD = new Date(); endD.setDate(endD.getDate()+deal.usageDays);
+        dealUpdates.usage_end_date = endD.toISOString().slice(0,10);
+      }
     }
     if(shouldUpdateStatus || Object.keys(dealUpdates).length>0) supabase.from('deals').update(dealUpdates).eq('id',deal.id).then(({error})=>{if(error) console.error("Deal status update failed:",error);});
 
-    upDeal(deal.id,{dels:newDels, status:shouldUpdateStatus?newStatus:deal.status, ...(dealUpdates.usage_end_date?{usageEndDate:dealUpdates.usage_end_date,adStatus:'fresh'}:{})});
+    upDeal(deal.id,{dels:newDels, status:shouldUpdateStatus?newStatus:deal.status, ...(dealUpdates.ad_status?{adStatus:'fresh'}:{}), ...(dealUpdates.usage_end_date?{usageEndDate:dealUpdates.usage_end_date}:{})});
     addLog(deal.id,loggedIn?.name||"You","Deliverable marked live",`${deal.dels[delIdx].type}: ${deal.dels[delIdx].desc}`);
     setSel(prev=>prev?{...prev,dels:newDels,status:shouldUpdateStatus?newStatus:prev.status}:null);
     setLinkF("");
@@ -1712,21 +1714,18 @@ export default function InvogueCollabHQ() {
 
   // ─── PERFORMANCE MARKETER FUNCTIONS ───
   const updateAdStatus = (deal, newAdStatus) => {
-    const userName = loggedIn?.name||"You (Perf Marketer)";
-    const ts = new Date().toISOString();
+    const userName = loggedIn?.name||"You";
     const updates = {ad_status:newAdStatus};
-    // When moving to 'fresh' and no usage_end_date, auto-set it
-    if(!deal.usageEndDate) {
-      const days = deal.usageDays||30;
-      const liveDate = deal.dels?.find(dl=>dl.st==="live")?.link ? new Date() : new Date();
-      liveDate.setDate(liveDate.getDate()+days);
-      const endDate = liveDate.toISOString().slice(0,10);
+    const patch = {adStatus:newAdStatus};
+    // Only auto-set usage_end_date if usageDays is explicitly set and no end date yet
+    if(deal.usageDays && !deal.usageEndDate) {
+      const endD = new Date(); endD.setDate(endD.getDate()+deal.usageDays);
+      const endDate = endD.toISOString().slice(0,10);
       updates.usage_end_date = endDate;
-      upDeal(deal.id,{adStatus:newAdStatus, usageEndDate:endDate});
-    } else {
-      upDeal(deal.id,{adStatus:newAdStatus});
+      patch.usageEndDate = endDate;
     }
     supabase.from('deals').update(updates).eq('id',deal.id).then(({error})=>{if(error){console.error("Ad status update failed:",error);notify("Failed to update status","err");}});
+    upDeal(deal.id,patch);
     addLog(deal.id,userName,`Creative moved to ${newAdStatus}`,"");
     notify(`Creative moved to ${newAdStatus.charAt(0).toUpperCase()+newAdStatus.slice(1)}!`);
   };
@@ -3547,7 +3546,11 @@ return (
           const isExpired = daysLeft!==null && daysLeft<=0;
           const isEditing = editingAdNotes===d.id;
           const liveLinks = (d.dels||[]).filter(dl=>dl.st==="live"&&dl.link);
-          return <div style={{background:T.surface,border:`1px solid ${isExpired?T.err+"44":isExpiring?"#f59e0b44":T.border}`,borderLeft:`3px solid ${isExpired?T.err:isExpiring?"#f59e0b":d.adStatus==="running"?T.info:d.adStatus==="tested"?T.ok:"#0891b2"}`,borderRadius:"8px",padding:"14px",marginBottom:"8px",transition:"all .15s"}}>
+          const isFresh = d.adStatus==="fresh"||!d.adStatus;
+          const statusLabel = d.adStatus==="running"?"🏃 Running":d.adStatus==="tested"?"✅ Tested":"🆕 Fresh";
+          return <div onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${isExpired?T.err+"44":isExpiring?"#f59e0b44":T.border}`,borderLeft:`3px solid ${isExpired?T.err:isExpiring?"#f59e0b":d.adStatus==="running"?T.info:d.adStatus==="tested"?T.ok:"#0891b2"}`,borderRadius:"8px",padding:"14px",marginBottom:"8px",cursor:"pointer",transition:"all .15s"}}
+            onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.08)"}}
+            onMouseLeave={e=>{e.currentTarget.style.boxShadow="none"}}>
             {/* Header */}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"8px"}}>
               <div style={{flex:1}}>
@@ -3561,6 +3564,7 @@ return (
                 <div style={{fontSize:"12px",color:T.sub}}>📦 {d.product} · 🎯 {camp?.name||"—"}</div>
               </div>
               <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"4px"}}>
+                <span style={{padding:"3px 8px",borderRadius:"4px",fontSize:"10px",fontWeight:700,background:d.adStatus==="running"?T.infoBg:d.adStatus==="tested"?T.okBg:"#ecfeff",color:d.adStatus==="running"?T.info:d.adStatus==="tested"?T.ok:"#0891b2"}}>{statusLabel}</span>
                 {daysLeft!==null&&<span style={{padding:"3px 8px",borderRadius:"4px",fontSize:"10px",fontWeight:700,background:isExpired?"#fef2f2":isExpiring?"#fef3c7":"#ecfdf5",color:isExpired?T.err:isExpiring?"#92400e":T.ok}}>{isExpired?`Expired ${Math.abs(daysLeft)}d ago`:daysLeft===0?"Expires today":`${daysLeft}d left`}</span>}
                 {d.reuseRequested&&<span style={{padding:"2px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700,background:T.infoBg,color:T.info}}>🔄 REUSE REQUESTED</span>}
               </div>
@@ -3569,17 +3573,17 @@ return (
             {/* Live content links */}
             {liveLinks.length>0&&<div style={{background:T.surfaceAlt,borderRadius:"5px",padding:"6px 8px",marginBottom:"6px",fontSize:"11px"}}>
               <span style={{fontWeight:700,color:T.text}}>📎 Live Content:</span>
-              {liveLinks.map((dl,i)=><span key={i} style={{marginLeft:"6px"}}><a href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info,textDecoration:"none",fontWeight:600}}>{dl.type}: {dl.desc}</a>{i<liveLinks.length-1?", ":""}</span>)}
+              {liveLinks.map((dl,i)=><span key={i} style={{marginLeft:"6px"}}><a href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{color:T.info,textDecoration:"none",fontWeight:600}}>{dl.type}: {dl.desc}</a>{i<liveLinks.length-1?", ":""}</span>)}
             </div>}
 
             {/* Ad platform link & notes (read mode) */}
             {!isEditing&&(d.adPlatformLink||d.adNotes)&&<div style={{background:"#f0f9ff",borderRadius:"5px",padding:"6px 8px",marginBottom:"6px",fontSize:"11px"}}>
-              {d.adPlatformLink&&<div>🔗 <a href={ensureUrl(d.adPlatformLink)} target="_blank" rel="noopener noreferrer" style={{color:T.info,textDecoration:"none",fontWeight:600}}>Ad Platform Link</a></div>}
+              {d.adPlatformLink&&<div>🔗 <a href={ensureUrl(d.adPlatformLink)} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{color:T.info,textDecoration:"none",fontWeight:600}}>Ad Platform Link</a></div>}
               {d.adNotes&&<div style={{marginTop:"2px",color:T.sub}}>📝 {d.adNotes}</div>}
             </div>}
 
             {/* Edit mode for notes */}
-            {isEditing&&<div style={{background:"#f0f9ff",border:"1px dashed #0891b2",borderRadius:"5px",padding:"8px",marginBottom:"6px"}}>
+            {isEditing&&<div onClick={e=>e.stopPropagation()} style={{background:"#f0f9ff",border:"1px dashed #0891b2",borderRadius:"5px",padding:"8px",marginBottom:"6px"}}>
               <div style={{fontSize:"10px",fontWeight:700,color:"#0891b2",marginBottom:"4px"}}>AD NOTES & LINK</div>
               <Inp value={adNotesF.link} onChange={e=>setAdNotesF({...adNotesF,link:e.target.value})} placeholder="Meta/Google ad link..." />
               <textarea value={adNotesF.notes} onChange={e=>setAdNotesF({...adNotesF,notes:e.target.value})} placeholder="Performance notes, ROAS, observations..." rows={2} style={{width:"100%",padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"12px",marginTop:"4px",fontFamily:"Archivo,sans-serif",resize:"vertical",boxSizing:"border-box"}}/>
@@ -3591,13 +3595,13 @@ return (
 
             {/* Usage period info */}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"11px",color:T.sub,marginBottom:"8px",paddingTop:"6px",borderTop:`1px solid ${T.border}`}}>
-              <span>Usage: {d.usageDays||30} days{d.usageEndDate?` · Ends: ${new Date(d.usageEndDate).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}`:""}</span>
+              <span>Usage: {d.usageDays?`${d.usageDays} days`:"Perpetual"}{d.usageEndDate?` · Ends: ${new Date(d.usageEndDate).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}`:""}</span>
               <span>{f(d.amount)}</span>
             </div>
 
             {/* Action buttons */}
-            <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
-              {d.adStatus==="fresh"&&<Btn v="primary" sm onClick={()=>updateAdStatus(d,"running")}>▶ Start Running</Btn>}
+            <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
+              {isFresh&&<Btn v="primary" sm onClick={()=>updateAdStatus(d,"running")}>▶ Start Running</Btn>}
               {d.adStatus==="running"&&<Btn v="ok" sm onClick={()=>updateAdStatus(d,"tested")}>✓ Mark Tested</Btn>}
               {d.adStatus==="tested"&&<Btn v="primary" sm onClick={()=>updateAdStatus(d,"running")}>▶ Re-run</Btn>}
               {d.adStatus==="running"&&<Btn v="outline" sm onClick={()=>updateAdStatus(d,"fresh")}>← Back to Fresh</Btn>}

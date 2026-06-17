@@ -417,13 +417,15 @@ export default function InvogueCollabHQ() {
   useEffect(()=>{
     (async()=>{
       try {
+        console.log("[AUTH-DEBUG] Loading data from Supabase...");
         const d = await loadFromSupabase();
+        console.log("[AUTH-DEBUG] Data loaded — users:", d.users.length, "deals:", d.deals.length);
         setCampaigns(d.campaigns);
         setDeals(d.deals);
         setUsers(d.users.length>0?d.users:SEED_USERS);
         setInfluencers(d.influencers);
       } catch(e) {
-        console.error("Supabase load failed:", e);
+        console.error("[AUTH-DEBUG] ❌ Supabase load FAILED:", e);
         setUsers(SEED_USERS);
       }
       setLoaded(true);
@@ -602,16 +604,20 @@ export default function InvogueCollabHQ() {
     if (!loaded) return; // wait until users list has been fetched
     let cancelled = false;
 
-    const resolveSession = async (session) => {
+    const resolveSession = async (session, source="unknown") => {
       if (cancelled) return;
+      console.log(`[AUTH-DEBUG] resolveSession(${source}) — session:`, !!session, "email:", session?.user?.email, "users in memory:", users.length);
       if (!session?.user?.email) {
+        console.log(`[AUTH-DEBUG] No session/email — showing login screen`);
         setLoggedIn(null);
         setAuthChecking(false);
         return;
       }
       const email = session.user.email.toLowerCase();
       const u = users.find(x => (x.email||'').toLowerCase() === email);
+      console.log(`[AUTH-DEBUG] Looking up "${email}" in users table — found:`, !!u, u ? `(${u.name}, role=${u.role}, status=${u.status})` : "(no match)");
       if (!u) {
+        console.error(`[AUTH-DEBUG] ❌ User not found! Users list:`, users.map(x=>x.email));
         setLoginErr(`${session.user.email} is not authorized. Contact your admin to request access.`);
         try { await supabase.auth.signOut(); } catch {}
         setLoggedIn(null);
@@ -619,12 +625,14 @@ export default function InvogueCollabHQ() {
         return;
       }
       if (u.status === 'inactive') {
+        console.error(`[AUTH-DEBUG] ❌ User is inactive`);
         setLoginErr('This account has been deactivated. Contact your admin.');
         try { await supabase.auth.signOut(); } catch {}
         setLoggedIn(null);
         setAuthChecking(false);
         return;
       }
+      console.log(`[AUTH-DEBUG] ✅ Login success — ${u.name} (${u.role})`);
       setLoggedIn(u);
       setLoginErr("");
       setAuthChecking(false);
@@ -632,12 +640,15 @@ export default function InvogueCollabHQ() {
     };
 
     (async () => {
-      const { data } = await supabase.auth.getSession();
-      await resolveSession(data?.session);
+      console.log("[AUTH-DEBUG] Checking existing session...");
+      const { data, error } = await supabase.auth.getSession();
+      console.log("[AUTH-DEBUG] getSession result — hasSession:", !!data?.session, "error:", error?.message||"none");
+      await resolveSession(data?.session, "getSession");
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      resolveSession(session);
+      console.log(`[AUTH-DEBUG] onAuthStateChange event: ${_event}`);
+      resolveSession(session, `onAuthStateChange(${_event})`);
     });
 
     return () => { cancelled = true; sub?.subscription?.unsubscribe?.(); };

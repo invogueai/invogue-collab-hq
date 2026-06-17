@@ -137,6 +137,9 @@ async function loadFromSupabase() {
     usage:d.usage_rights, deadline:d.deadline, profile:d.profile_link,
     phone:d.phone, address:d.address, by:d.created_by, at:d.created_at,
     appBy:d.approved_by, appAt:d.approved_at, ackAt:d.acknowledged_at, ackToken:d.acknowledge_token,
+    adStatus:d.ad_status||null, usageDays:d.usage_days||30, usageEndDate:d.usage_end_date||null,
+    adNotes:d.ad_notes||"", adPlatformLink:d.ad_platform_link||"",
+    reuseRequested:d.reuse_requested||false, reuseRequestedAt:d.reuse_requested_at||null, reuseRequestedBy:d.reuse_requested_by||"",
     email:d.email||"", payment_terms:d.payment_terms||"", pan_number:d.pan_number||"", pan_name:d.pan_name||"",
     products:d.products||(d.products_json?JSON.parse(d.products_json):[])||[],
     paymentFormSent:d.payment_form_sent||false, paymentFormSentAt:d.payment_form_sent_at||null,
@@ -170,6 +173,7 @@ const ROLE_CFG = {
   approver:   { l:"Manager",     c:T.ok,     bg:T.okBg,    i:"✅" },
   finance:    { l:"Finance",     c:T.gold,   bg:T.goldSoft, i:"💰" },
   logistics:  { l:"Logistics",   c:T.purple, bg:T.purpleBg, i:"📦" },
+  performance_marketer: { l:"Performance Marketer", c:"#0891b2", bg:"#ecfeff", i:"📈" },
   viewer:     { l:"Viewer",      c:T.sub,    bg:"#f0ede8",  i:"👁" },
 };
 
@@ -327,6 +331,12 @@ export default function InvogueCollabHQ() {
   const [attachmentDesc, setAttachmentDesc] = useState({}); // {delId: description}
   const [revisionFeedback, setRevisionFeedback] = useState({}); // {delId: feedback text}
 
+  // Performance Marketer state
+  const [adTab, setAdTab] = useState("fresh"); // fresh | running | tested | expiring
+  const [adFilter, setAdFilter] = useState({campaign:"",platform:"",search:""});
+  const [editingAdNotes, setEditingAdNotes] = useState(null); // deal id being edited
+  const [adNotesF, setAdNotesF] = useState({notes:"",link:""});
+
   // Product Catalog Management
   const [productCatalog, setProductCatalog] = useState([
     {id:'p1',name:'Essentials Snatched Bodysuit Bodyshaper',sizes:['S','M','L','XL','2XL','3XL'],colors:['Beige','Black']},
@@ -463,6 +473,9 @@ export default function InvogueCollabHQ() {
             usage:d.usage_rights, deadline:d.deadline, profile:d.profile_link,
             phone:d.phone, address:d.address, by:d.created_by, at:d.created_at,
             appBy:d.approved_by, appAt:d.approved_at, ackAt:d.acknowledged_at, ackToken:d.acknowledge_token,
+    adStatus:d.ad_status||null, usageDays:d.usage_days||30, usageEndDate:d.usage_end_date||null,
+    adNotes:d.ad_notes||"", adPlatformLink:d.ad_platform_link||"",
+    reuseRequested:d.reuse_requested||false, reuseRequestedAt:d.reuse_requested_at||null, reuseRequestedBy:d.reuse_requested_by||"",
             email:d.email||"", payment_terms:d.payment_terms||"", pan_number:d.pan_number||"", pan_name:d.pan_name||"",
             products:d.products||(d.products_json?JSON.parse(d.products_json):[])||[],
             inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
@@ -1618,9 +1631,16 @@ export default function InvogueCollabHQ() {
     const delId = deal.dels[delIdx].id;
 
     supabase.from('deliverables').update({status:'live',live_link:link,marked_live_at:new Date().toISOString()}).eq('id',delId).then(({error})=>{if(error) console.error("Mark live save failed:",error);});
-    if(shouldUpdateStatus) supabase.from('deals').update({status:newStatus}).eq('id',deal.id).then(({error})=>{if(error) console.error("Deal status update failed:",error);});
+    // Auto-set usage_end_date and ad_status when deal first goes live
+    const dealUpdates = shouldUpdateStatus ? {status:newStatus} : {};
+    if(newStatus==="live"&&!deal.usageEndDate) {
+      const endD = new Date(); endD.setDate(endD.getDate()+(deal.usageDays||30));
+      dealUpdates.usage_end_date = endD.toISOString().slice(0,10);
+      dealUpdates.ad_status = 'fresh';
+    }
+    if(shouldUpdateStatus || Object.keys(dealUpdates).length>0) supabase.from('deals').update(dealUpdates).eq('id',deal.id).then(({error})=>{if(error) console.error("Deal status update failed:",error);});
 
-    upDeal(deal.id,{dels:newDels, status:shouldUpdateStatus?newStatus:deal.status});
+    upDeal(deal.id,{dels:newDels, status:shouldUpdateStatus?newStatus:deal.status, ...(dealUpdates.usage_end_date?{usageEndDate:dealUpdates.usage_end_date,adStatus:'fresh'}:{})});
     addLog(deal.id,loggedIn?.name||"You","Deliverable marked live",`${deal.dels[delIdx].type}: ${deal.dels[delIdx].desc}`);
     setSel(prev=>prev?{...prev,dels:newDels,status:shouldUpdateStatus?newStatus:prev.status}:null);
     setLinkF("");
@@ -1677,6 +1697,53 @@ export default function InvogueCollabHQ() {
     setSel(prev=>prev?{...prev,dels:newDels}:null);
     setRevisionFeedback(prev=>{const copy={...prev};delete copy[delId];return copy;});
     notify("Revision requested. Negotiator will be notified.","warn");
+  };
+
+  // ─── PERFORMANCE MARKETER FUNCTIONS ───
+  const updateAdStatus = (deal, newAdStatus) => {
+    const userName = loggedIn?.name||"You (Perf Marketer)";
+    const ts = new Date().toISOString();
+    const updates = {ad_status:newAdStatus};
+    // When moving to 'fresh' and no usage_end_date, auto-set it
+    if(!deal.usageEndDate) {
+      const days = deal.usageDays||30;
+      const liveDate = deal.dels?.find(dl=>dl.st==="live")?.link ? new Date() : new Date();
+      liveDate.setDate(liveDate.getDate()+days);
+      const endDate = liveDate.toISOString().slice(0,10);
+      updates.usage_end_date = endDate;
+      upDeal(deal.id,{adStatus:newAdStatus, usageEndDate:endDate});
+    } else {
+      upDeal(deal.id,{adStatus:newAdStatus});
+    }
+    supabase.from('deals').update(updates).eq('id',deal.id).then(({error})=>{if(error){console.error("Ad status update failed:",error);notify("Failed to update status","err");}});
+    addLog(deal.id,userName,`Creative moved to ${newAdStatus}`,"");
+    notify(`Creative moved to ${newAdStatus.charAt(0).toUpperCase()+newAdStatus.slice(1)}!`);
+  };
+
+  const saveAdNotes = (deal, notes, platformLink) => {
+    const updates = {};
+    if(notes!==undefined) updates.ad_notes = notes;
+    if(platformLink!==undefined) updates.ad_platform_link = platformLink;
+    supabase.from('deals').update(updates).eq('id',deal.id).then(({error})=>{if(error){console.error("Ad notes save failed:",error);notify("Failed to save notes","err");}});
+    upDeal(deal.id,{adNotes:notes!==undefined?notes:deal.adNotes, adPlatformLink:platformLink!==undefined?platformLink:deal.adPlatformLink});
+    setEditingAdNotes(null);
+    notify("Notes saved!");
+  };
+
+  const requestReuse = (deal) => {
+    const userName = loggedIn?.name||"You (Perf Marketer)";
+    const ts = new Date().toISOString();
+    supabase.from('deals').update({reuse_requested:true, reuse_requested_at:ts, reuse_requested_by:userName}).eq('id',deal.id).then(({error})=>{if(error){console.error("Reuse request failed:",error);notify("Failed to request reuse","err");}});
+    upDeal(deal.id,{reuseRequested:true, reuseRequestedAt:ts, reuseRequestedBy:userName});
+    addLog(deal.id,userName,"Usage extension requested","Performance marketer requested license renewal");
+    notify("Reuse request sent to negotiator!");
+  };
+
+  const setUsageEndDate = (deal, dateStr) => {
+    if(!dateStr) return;
+    supabase.from('deals').update({usage_end_date:dateStr}).eq('id',deal.id).then(({error})=>{if(error){console.error("Usage date update failed:",error);notify("Failed to update","err");}});
+    upDeal(deal.id,{usageEndDate:dateStr});
+    notify("Usage end date updated!");
   };
 
   const submitInvoice = (deal) => {
@@ -2430,6 +2497,7 @@ return (
         approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.awaitingReview||stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
         finance: [{k:"dashboard",l:"Payment Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"}],
         logistics: [{k:"dashboard",l:"Shipment Center",i:"🔵"},{k:"shipments",l:"All Shipments",i:"🚚",n:stats.pendingShip+inTransit.length+stats.pickupRequests+stats.reshipPending}],
+        performance_marketer: [{k:"dashboard",l:"Creative Hub",i:"📈"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"influencers",l:"Influencer DB",i:"⭐"}],
       };
       const items = navItems[role]||navItems.negotiator;
       return <div role="navigation" aria-label="Main navigation" style={{background:"#FFFFFF",borderBottom:"1px solid rgba(26,26,26,.08)",padding:"0 28px",display:"flex",gap:"8px",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
@@ -2903,6 +2971,19 @@ return (
           <Section title="Content Pipeline" icon="🎬">
             <ContentPipeline deals={myDeals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>
           </Section>
+
+          {/* REUSE REQUESTS FROM PERFORMANCE MARKETER */}
+          {(()=>{
+            const reuseDeals = deals.filter(d=>d.reuseRequested);
+            if(reuseDeals.length===0) return null;
+            return <Section title={`Usage Extension Requests (${reuseDeals.length})`} icon="🔄" action={<span style={{fontSize:"11px",color:T.info,fontWeight:700}}>From Performance Marketer</span>}>
+              <div style={{fontSize:"12px",color:T.info,background:T.infoBg,padding:"6px 10px",borderRadius:"5px",marginBottom:"8px"}}>The performance marketing team is requesting usage extensions for high-performing creatives. Contact the influencer to negotiate extended rights.</div>
+              {reuseDeals.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.info}`,borderRadius:"6px",padding:"8px 12px",marginBottom:"4px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div><b style={{fontSize:"13px"}}>{d.inf}</b> <span style={{color:T.sub,fontSize:"12px"}}>· {d.product} · Usage ends: {d.usageEndDate||"N/A"}</span></div>
+                <span style={{fontSize:"11px",color:T.info,fontWeight:700}}>🔄 {d.reuseRequestedBy?`By ${d.reuseRequestedBy}`:"Requested"}</span>
+              </div>)}
+            </Section>;
+          })()}
         </>;
       })()}
 
@@ -3402,6 +3483,182 @@ return (
             </div>
           </Section>
 
+        </>;
+      })()}
+
+      {/* ═══════════════════════════════════════════════════════
+          PERFORMANCE MARKETER DASHBOARD — Creative Hub
+         ═══════════════════════════════════════════════════════ */}
+      {view==="dashboard"&&role==="performance_marketer"&&(()=>{
+        // All live/completed creatives for the performance marketer
+        const liveStatuses = ["partial_live","live","invoice_ok","invoice_pending_approval","payment_requested","payment_approved","partial_paid","paid"];
+        const allCreatives = deals.filter(d=>liveStatuses.includes(d.status));
+
+        const freshCreatives = allCreatives.filter(d=>d.adStatus==="fresh"||!d.adStatus);
+        const runningCreatives = allCreatives.filter(d=>d.adStatus==="running");
+        const testedCreatives = allCreatives.filter(d=>d.adStatus==="tested");
+
+        // Expiring: within 7 days of usage_end_date or past it
+        const today = new Date();
+        const expiringCreatives = allCreatives.filter(d=>{
+          if(!d.usageEndDate) return false;
+          const end = new Date(d.usageEndDate);
+          const daysLeft = Math.ceil((end-today)/(1000*60*60*24));
+          return daysLeft <= 7;
+        });
+        const expiredCreatives = allCreatives.filter(d=>{
+          if(!d.usageEndDate) return false;
+          return new Date(d.usageEndDate) < today;
+        });
+
+        const getDaysLeft = (d) => {
+          if(!d.usageEndDate) return null;
+          return Math.ceil((new Date(d.usageEndDate)-today)/(1000*60*60*24));
+        };
+
+        // Quick filter logic
+        let filtered = adTab==="fresh"?freshCreatives:adTab==="running"?runningCreatives:adTab==="tested"?testedCreatives:expiringCreatives;
+        if(adFilter.campaign) filtered = filtered.filter(d=>d.cid===adFilter.campaign);
+        if(adFilter.platform) filtered = filtered.filter(d=>d.platform===adFilter.platform);
+        if(adFilter.search) {
+          const q = adFilter.search.toLowerCase();
+          filtered = filtered.filter(d=>d.inf.toLowerCase().includes(q)||d.product.toLowerCase().includes(q)||(getCamp(d.cid)?.name||"").toLowerCase().includes(q));
+        }
+
+        // Unique platforms and campaigns for filter dropdowns
+        const platforms = [...new Set(allCreatives.map(d=>d.platform).filter(Boolean))];
+        const campIds = [...new Set(allCreatives.map(d=>d.cid).filter(Boolean))];
+
+        const CreativeCard = ({d}) => {
+          const camp = getCamp(d.cid);
+          const daysLeft = getDaysLeft(d);
+          const isExpiring = daysLeft!==null && daysLeft<=7;
+          const isExpired = daysLeft!==null && daysLeft<=0;
+          const isEditing = editingAdNotes===d.id;
+          const liveLinks = (d.dels||[]).filter(dl=>dl.st==="live"&&dl.link);
+          return <div style={{background:T.surface,border:`1px solid ${isExpired?T.err+"44":isExpiring?"#f59e0b44":T.border}`,borderLeft:`3px solid ${isExpired?T.err:isExpiring?"#f59e0b":d.adStatus==="running"?T.info:d.adStatus==="tested"?T.ok:"#0891b2"}`,borderRadius:"8px",padding:"14px",marginBottom:"8px",transition:"all .15s"}}>
+            {/* Header */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"8px"}}>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
+                  <div style={{width:"32px",height:"32px",borderRadius:"50%",background:"linear-gradient(135deg,#ecfeff,#a5f3fc)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",fontWeight:800,color:"#0891b2"}}>{d.inf.split(" ").map(w=>w[0]).join("")}</div>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf}</div>
+                    <div style={{fontSize:"11px",color:T.sub}}>{d.platform} · {d.followers}</div>
+                  </div>
+                </div>
+                <div style={{fontSize:"12px",color:T.sub}}>📦 {d.product} · 🎯 {camp?.name||"—"}</div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"4px"}}>
+                {daysLeft!==null&&<span style={{padding:"3px 8px",borderRadius:"4px",fontSize:"10px",fontWeight:700,background:isExpired?"#fef2f2":isExpiring?"#fef3c7":"#ecfdf5",color:isExpired?T.err:isExpiring?"#92400e":T.ok}}>{isExpired?`Expired ${Math.abs(daysLeft)}d ago`:daysLeft===0?"Expires today":`${daysLeft}d left`}</span>}
+                {d.reuseRequested&&<span style={{padding:"2px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700,background:T.infoBg,color:T.info}}>🔄 REUSE REQUESTED</span>}
+              </div>
+            </div>
+
+            {/* Live content links */}
+            {liveLinks.length>0&&<div style={{background:T.surfaceAlt,borderRadius:"5px",padding:"6px 8px",marginBottom:"6px",fontSize:"11px"}}>
+              <span style={{fontWeight:700,color:T.text}}>📎 Live Content:</span>
+              {liveLinks.map((dl,i)=><span key={i} style={{marginLeft:"6px"}}><a href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info,textDecoration:"none",fontWeight:600}}>{dl.type}: {dl.desc}</a>{i<liveLinks.length-1?", ":""}</span>)}
+            </div>}
+
+            {/* Ad platform link & notes (read mode) */}
+            {!isEditing&&(d.adPlatformLink||d.adNotes)&&<div style={{background:"#f0f9ff",borderRadius:"5px",padding:"6px 8px",marginBottom:"6px",fontSize:"11px"}}>
+              {d.adPlatformLink&&<div>🔗 <a href={ensureUrl(d.adPlatformLink)} target="_blank" rel="noopener noreferrer" style={{color:T.info,textDecoration:"none",fontWeight:600}}>Ad Platform Link</a></div>}
+              {d.adNotes&&<div style={{marginTop:"2px",color:T.sub}}>📝 {d.adNotes}</div>}
+            </div>}
+
+            {/* Edit mode for notes */}
+            {isEditing&&<div style={{background:"#f0f9ff",border:"1px dashed #0891b2",borderRadius:"5px",padding:"8px",marginBottom:"6px"}}>
+              <div style={{fontSize:"10px",fontWeight:700,color:"#0891b2",marginBottom:"4px"}}>AD NOTES & LINK</div>
+              <Inp value={adNotesF.link} onChange={e=>setAdNotesF({...adNotesF,link:e.target.value})} placeholder="Meta/Google ad link..." />
+              <textarea value={adNotesF.notes} onChange={e=>setAdNotesF({...adNotesF,notes:e.target.value})} placeholder="Performance notes, ROAS, observations..." rows={2} style={{width:"100%",padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"12px",marginTop:"4px",fontFamily:"Archivo,sans-serif",resize:"vertical",boxSizing:"border-box"}}/>
+              <div style={{display:"flex",gap:"4px",marginTop:"4px"}}>
+                <Btn v="ok" sm onClick={()=>saveAdNotes(d,adNotesF.notes,adNotesF.link)}>Save</Btn>
+                <Btn v="ghost" sm onClick={()=>setEditingAdNotes(null)}>Cancel</Btn>
+              </div>
+            </div>}
+
+            {/* Usage period info */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"11px",color:T.sub,marginBottom:"8px",paddingTop:"6px",borderTop:`1px solid ${T.border}`}}>
+              <span>Usage: {d.usageDays||30} days{d.usageEndDate?` · Ends: ${new Date(d.usageEndDate).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}`:""}</span>
+              <span>{f(d.amount)}</span>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
+              {d.adStatus==="fresh"&&<Btn v="primary" sm onClick={()=>updateAdStatus(d,"running")}>▶ Start Running</Btn>}
+              {d.adStatus==="running"&&<Btn v="ok" sm onClick={()=>updateAdStatus(d,"tested")}>✓ Mark Tested</Btn>}
+              {d.adStatus==="tested"&&<Btn v="primary" sm onClick={()=>updateAdStatus(d,"running")}>▶ Re-run</Btn>}
+              {d.adStatus==="running"&&<Btn v="outline" sm onClick={()=>updateAdStatus(d,"fresh")}>← Back to Fresh</Btn>}
+              <Btn v="outline" sm onClick={()=>{setEditingAdNotes(d.id);setAdNotesF({notes:d.adNotes||"",link:d.adPlatformLink||""})}}>{d.adNotes||d.adPlatformLink?"✏ Edit Notes":"+ Add Notes"}</Btn>
+              {!d.reuseRequested&&isExpiring&&<Btn v="gold" sm onClick={()=>requestReuse(d)}>🔄 Request Reuse</Btn>}
+            </div>
+          </div>;
+        };
+
+        return <>
+          {/* Header */}
+          <div style={{background:"linear-gradient(135deg,#0e7490,#0891b2)",borderRadius:"6px",padding:"16px 20px",marginBottom:"16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:"20px",fontWeight:800,color:"#ecfeff",fontFamily:"Barlow,sans-serif",textTransform:"uppercase",letterSpacing:"1.5px"}}>📈 Creative Performance Hub</div>
+              <div style={{fontSize:"13px",color:"rgba(236,254,255,.6)",marginTop:"2px"}}>Manage influencer creatives for paid ad campaigns</div>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"8px",marginBottom:"16px"}}>
+            <StatBox l="Total Creatives" v={allCreatives.length} c="#0891b2"/>
+            <StatBox l="Fresh" v={freshCreatives.length} c="#0891b2" sub="Ready to test"/>
+            <StatBox l="Running" v={runningCreatives.length} c={T.info} sub="In ad rotation"/>
+            <StatBox l="Tested" v={testedCreatives.length} c={T.ok} sub="Testing complete"/>
+            <StatBox l="Expiring Soon" v={expiringCreatives.length} c={expiringCreatives.length>0?"#f59e0b":T.ok} sub="Within 7 days"/>
+            <StatBox l="Expired" v={expiredCreatives.length} c={expiredCreatives.length>0?T.err:T.ok} sub="Usage ended"/>
+          </div>
+
+          {/* Expiring alerts */}
+          {expiringCreatives.length>0&&<div style={{background:"#fef3c7",border:"1px solid #f59e0b33",borderRadius:"6px",padding:"10px 14px",marginBottom:"14px"}}>
+            <div style={{fontSize:"12px",fontWeight:700,color:"#92400e",marginBottom:"4px"}}>⚠️ EXPIRING CREATIVES ({expiringCreatives.length})</div>
+            {expiringCreatives.slice(0,3).map(d=>{const dl=getDaysLeft(d);return <div key={d.id} style={{fontSize:"12px",color:"#92400e",padding:"2px 0"}}>
+              <b>{d.inf}</b> — {d.product} — {dl<=0?<span style={{color:T.err,fontWeight:700}}>EXPIRED</span>:<span>{dl} day{dl!==1?"s":""} left</span>}
+              {!d.reuseRequested&&<span onClick={()=>requestReuse(d)} style={{marginLeft:"8px",color:T.info,cursor:"pointer",fontWeight:600,fontSize:"11px"}}>🔄 Request Reuse</span>}
+            </div>;})}
+            {expiringCreatives.length>3&&<div style={{fontSize:"11px",color:"#92400e",marginTop:"2px"}}>+ {expiringCreatives.length-3} more — switch to Expiring tab to see all</div>}
+          </div>}
+
+          {/* Reuse requests pending (visible to negotiator/admin too) */}
+          {allCreatives.filter(d=>d.reuseRequested).length>0&&<div style={{background:T.infoBg,border:`1px solid ${T.info}22`,borderRadius:"6px",padding:"10px 14px",marginBottom:"14px"}}>
+            <div style={{fontSize:"12px",fontWeight:700,color:T.info,marginBottom:"2px"}}>🔄 REUSE REQUESTS ({allCreatives.filter(d=>d.reuseRequested).length})</div>
+            <div style={{fontSize:"11px",color:T.info}}>These creatives have pending usage extension requests sent to the negotiation team.</div>
+          </div>}
+
+          {/* Tab navigation */}
+          <div style={{display:"flex",gap:"4px",marginBottom:"12px",borderBottom:`1px solid ${T.border}`,paddingBottom:"6px"}}>
+            {[{k:"fresh",l:"🆕 Fresh",n:freshCreatives.length},{k:"running",l:"🏃 Running",n:runningCreatives.length},{k:"tested",l:"✅ Tested",n:testedCreatives.length},{k:"expiring",l:"⚠️ Expiring",n:expiringCreatives.length}].map(t=>(
+              <button key={t.k} onClick={()=>setAdTab(t.k)} style={{padding:"8px 14px",border:"none",borderBottom:adTab===t.k?"2px solid #0891b2":"2px solid transparent",background:"transparent",color:adTab===t.k?"#0891b2":T.sub,fontWeight:adTab===t.k?700:600,fontSize:"12px",cursor:"pointer",fontFamily:"Barlow,sans-serif",textTransform:"uppercase",letterSpacing:".5px"}}>
+                {t.l} <span style={{background:adTab===t.k?"#0891b2":T.border,color:adTab===t.k?"#fff":T.sub,borderRadius:"50%",padding:"1px 5px",fontSize:"9px",fontWeight:800,marginLeft:"4px"}}>{t.n}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Quick filters */}
+          <div style={{display:"flex",gap:"8px",marginBottom:"14px",flexWrap:"wrap",alignItems:"center"}}>
+            <div style={{flex:"0 0 200px"}}><Inp value={adFilter.search} onChange={e=>setAdFilter({...adFilter,search:e.target.value})} placeholder="🔍 Search influencer, product..."/></div>
+            <select value={adFilter.campaign} onChange={e=>setAdFilter({...adFilter,campaign:e.target.value})} style={{padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"12px",fontFamily:"Archivo,sans-serif",color:T.text,background:T.surface}}>
+              <option value="">All Campaigns</option>
+              {campIds.map(cid=><option key={cid} value={cid}>{getCamp(cid)?.name||cid}</option>)}
+            </select>
+            <select value={adFilter.platform} onChange={e=>setAdFilter({...adFilter,platform:e.target.value})} style={{padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"12px",fontFamily:"Archivo,sans-serif",color:T.text,background:T.surface}}>
+              <option value="">All Platforms</option>
+              {platforms.map(p=><option key={p} value={p}>{p}</option>)}
+            </select>
+            {(adFilter.search||adFilter.campaign||adFilter.platform)&&<Btn v="ghost" sm onClick={()=>setAdFilter({campaign:"",platform:"",search:""})}>✕ Clear</Btn>}
+          </div>
+
+          {/* Creative cards */}
+          {filtered.length===0&&<div style={{padding:"30px 20px",textAlign:"center",color:T.sub,fontSize:"13px"}}>
+            {adTab==="fresh"?"No fresh creatives — they'll appear here when collabs go live.":adTab==="running"?"No creatives currently running. Move fresh creatives here when you start testing.":adTab==="tested"?"No tested creatives yet.":"No creatives expiring soon — all good!"}
+          </div>}
+          {filtered.map(d=><CreativeCard key={d.id} d={d}/>)}
         </>;
       })()}
 
@@ -4286,6 +4543,7 @@ return (
             {v:"approver",l:"✅ Manager — Approves deals, creates campaigns, views all"},
             {v:"finance",l:"💰 Finance — Processes payments, resolves disputes"},
             {v:"logistics",l:"📦 Logistics — Dispatches shipments, no financial access"},
+            {v:"performance_marketer",l:"📈 Performance Marketer — Manages creatives for paid ads"},
             {v:"viewer",l:"👁 Viewer — Read-only access to dashboards"},
           ]}/>
         </Field>
@@ -4294,6 +4552,7 @@ return (
           {userF.role==="approver"&&"Managers can approve/reject deals, create campaigns with budgets, record advance payments, and see the full bird's-eye view of all operations."}
           {userF.role==="finance"&&"Finance can process all payment types (advance, partial, final), resolve invoice disputes, view complete audit trails, and override amounts with logged reasons."}
           {userF.role==="logistics"&&"Logistics can dispatch shipments and mark deliveries. They have ZERO visibility into financial data — they only see product names and shipping info."}
+          {userF.role==="performance_marketer"&&"Performance Marketers see live/completed creatives and manage them through Fresh → Running → Tested stages. They can add ad platform links, notes, and request usage extensions. No deal creation or financial access."}
           {userF.role==="viewer"&&"Viewers get read-only access to dashboards and reports. They cannot create, edit, or approve anything."}
         </div>
         <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"14px",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>

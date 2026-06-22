@@ -76,6 +76,10 @@ export default function PaymentForm() {
     if (!form.pan.trim()) e.pan = "Required";
     else if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.pan.toUpperCase())) e.pan = "Invalid PAN (e.g. ABCDE1234F)";
     if (!form.panName.trim()) e.panName = "Required";
+    // The bank account holder and the PAN holder must be the same person.
+    const norm = s => (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (form.beneficiary.trim() && form.panName.trim() && norm(form.beneficiary) !== norm(form.panName))
+      e.panName = "Name on PAN must match the beneficiary (bank account) name";
     setErrors(e);
     return Object.keys(e).length === 0;
   };

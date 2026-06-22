@@ -87,6 +87,10 @@ export async function POST(req) {
     if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) return bad('Invalid IFSC format');
     if (body.confirmAccount && String(body.account).trim() !== String(body.confirmAccount).trim())
       return bad("Account numbers don't match");
+    // Bank account holder name and PAN holder name must match (same legal person).
+    const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (norm(body.beneficiary) !== norm(body.panName))
+      return bad('Beneficiary (bank account) name and Name on PAN must match');
 
     const ts = new Date().toISOString();
     const details = {

@@ -184,7 +184,7 @@ const ROLE_CFG = {
 // ─── REUSABLE COMPONENTS ───
 const Badge = ({s,sm}) => { const x=STATUS_CFG[s]||{l:s,c:T.sub,bg:T.goldSoft,i:"?"}; return <span style={{display:"inline-flex",alignItems:"center",gap:"4px",padding:sm?"3px 8px":"4px 12px",borderRadius:"4px",fontSize:sm?"10px":"11px",fontWeight:600,color:x.c,background:x.bg,whiteSpace:"nowrap",letterSpacing:".5px",textTransform:"uppercase",border:"none",fontFamily:"Barlow,sans-serif"}}>{x.i} {x.l}</span>; };
 const ensureUrl = (url) => url && !url.match(/^https?:\/\//) ? "https://"+url : url;
-const DBadge = ({s}) => { const m={pending:{l:"Pending",c:T.warn,bg:T.warnBg},submitted:{l:"Submitted",c:T.info,bg:T.infoBg},under_review:{l:"Under Review",c:T.purple,bg:T.purpleBg},revision_requested:{l:"Revision Needed",c:T.err,bg:T.errBg},approved:{l:"Approved",c:T.ok,bg:T.okBg},live:{l:"Live",c:T.ok,bg:T.okBg}}; const x=m[s]||m.pending; return <span style={{padding:"2px 8px",borderRadius:"8px",fontSize:"11px",fontWeight:700,color:x.c,background:x.bg}}>{x.l}</span>; };
+const DBadge = ({s}) => { const m={pending:{l:"Pending",c:T.warn,bg:T.warnBg},submitted:{l:"Submitted",c:T.info,bg:T.infoBg},revision_requested:{l:"Revision Needed",c:T.err,bg:T.errBg},approved:{l:"Approved",c:T.ok,bg:T.okBg},live:{l:"Live",c:T.ok,bg:T.okBg}}; const x=m[s]||m.pending; return <span style={{padding:"2px 8px",borderRadius:"8px",fontSize:"11px",fontWeight:700,color:x.c,background:x.bg}}>{x.l}</span>; };
 
 const Btn = ({children,onClick,v="primary",sm,disabled,sx})=>{
   const vs={
@@ -3940,7 +3940,7 @@ return (
               {(inf.bankHolder||inf.bankAccount||inf.panNumber||inf.upiId)&&<div style={{padding:"10px 12px",background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:"7px",marginBottom:"14px"}}>
                 <div style={{fontSize:"11px",fontWeight:700,color:"#0284c7",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px"}}>💳 Bank & Payment Details</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
-                  {[["Account Holder",inf.bankHolder],["Account Number",inf.bankAccount],["IFSC",inf.bankIfsc],["PAN",inf.panNumber],["UPI ID",inf.upiId],["Default Terms",{next_15th:"15th of Next Month",45_days:"45 Days",60_days:"60 Days",advance:"Advance",immediate:"Immediate",custom:"Custom"}[inf.defaultPaymentTerms]||inf.defaultPaymentTerms]].filter(([,v])=>v).map(([l,v])=><div key={l} style={{padding:"4px 8px",background:"#fff",borderRadius:"4px",fontSize:"12px"}}><span style={{fontWeight:700,color:T.sub,fontSize:"10px"}}>{l}:</span> {v}</div>)}
+                  {[["Account Holder",inf.bankHolder],["Account Number",inf.bankAccount],["IFSC",inf.bankIfsc],["PAN",inf.panNumber],["UPI ID",inf.upiId],["Default Terms",{next_15th:"15th of Next Month","45_days":"45 Days","60_days":"60 Days",advance:"Advance",immediate:"Immediate",custom:"Custom"}[inf.defaultPaymentTerms]||inf.defaultPaymentTerms]].filter(([,v])=>v).map(([l,v])=><div key={l} style={{padding:"4px 8px",background:"#fff",borderRadius:"4px",fontSize:"12px"}}><span style={{fontWeight:700,color:T.sub,fontSize:"10px"}}>{l}:</span> {v}</div>)}
                 </div>
               </div>}
               {!(inf.bankHolder||inf.bankAccount||inf.panNumber||inf.upiId)&&(role==="finance"||role==="admin")&&<div style={{padding:"10px 12px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderRadius:"7px",marginBottom:"14px",fontSize:"12px",color:T.warn}}>

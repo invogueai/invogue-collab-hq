@@ -100,6 +100,8 @@ export async function POST(req) {
 
     // Canonical file name
     const finalFileName = buildFileName({
+      campaignName,
+      influencerName,
       collabId,
       deliverableType,
       version,

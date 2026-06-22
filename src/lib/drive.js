@@ -312,6 +312,29 @@ export async function createResumableUploadSession({
   return { uploadUrl };
 }
 
+// Grant a team member access to the shared Drive (so every new user can see/upload
+// collaboration files). Creates a permission on the Shared Drive itself.
+export async function grantDriveAccess({ email, role = 'writer' }) {
+  if (!email) throw new Error('No email provided');
+  const { sharedDriveId } = getOAuthConfig();
+  const token = await getAccessToken();
+  const params = new URLSearchParams({
+    supportsAllDrives: 'true',
+    sendNotificationEmail: 'true',
+    fields: 'id,emailAddress,role',
+  });
+  const resp = await fetch(`${DRIVE_API}/files/${sharedDriveId}/permissions?${params.toString()}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'user', role, emailAddress: email }),
+  });
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`Grant Drive access failed: ${resp.status} ${err}`);
+  }
+  return resp.json();
+}
+
 export async function getFileMetadata(fileId) {
   const params = new URLSearchParams({
     supportsAllDrives: 'true',
@@ -328,15 +351,17 @@ export function nextVersionFor(rows) {
   return maxV + 1;
 }
 
-export function buildFileName({ collabId, deliverableType, version, isRaw, rawIndex, originalExt }) {
+export function buildFileName({ campaignName, influencerName, collabId, deliverableType, version, isRaw, rawIndex, originalExt }) {
   const ext = (originalExt || '').replace(/^\./, '').toLowerCase() || 'bin';
-  const id = sanitizeName(collabId || 'NEW').replace(/\s+/g, '-');
+  // Human-readable nomenclature: Campaign-InfluencerName-V{version}
+  const camp = sanitizeName(campaignName || 'Campaign').replace(/\s+/g, '-');
+  const inf = sanitizeName(influencerName || 'Influencer').replace(/\s+/g, '-');
+  const base = `${camp}-${inf}`;
   if (isRaw) {
     const idx = String(rawIndex || 1).padStart(2, '0');
-    return `${id}_raw_clip_${idx}.${ext}`;
+    return `${base}-RAW-${idx}.${ext}`;
   }
-  const type = sanitizeName(deliverableType || 'deliverable').replace(/\s+/g, '-');
-  return `${id}_${type}_v${version || 1}.${ext}`;
+  return `${base}-V${version || 1}.${ext}`;
 }
 
 // ── CSRF state token helper (used by the OAuth start/callback routes) ──

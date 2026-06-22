@@ -310,6 +310,7 @@ export default function InvogueCollabHQ() {
   const submittingDealRef = useRef(false); // synchronous guard against double-submit
   const [submittingDeal, setSubmittingDeal] = useState(false); // drives button disabled state
   const [editingDealId, setEditingDealId] = useState(null); // non-null = New Deal modal is editing an existing (pre-approval) deal
+  const [resendF, setResendF] = useState({dealId:null, email:""}); // resend-confirmation modal (editable recipient)
   const [nCamp, setNCamp] = useState(null);
   const [shipF, setShipF] = useState({track:"",carrier:"DTDC",orderId:""});
   const [payF, setPayF] = useState({type:"advance",amount:"",note:""});
@@ -1367,11 +1368,16 @@ export default function InvogueCollabHQ() {
   };
 
   const confirmAndResendEmail = d => {
-    setConfirmAction({
-      title:"Resend Confirmation Email",
-      msg:`Resend the collaboration confirmation to ${d.inf} at ${d.email||"—"}? The email will reflect the latest deal details.`,
-      onConfirm:()=>{sendEmail(d, true);setConfirmAction(null);}
-    });
+    setResendF({dealId:d.id, email:d.email||""});
+    setSel(d);
+    setModal("resendEmail");
+  };
+
+  const submitResend = () => {
+    if(!sel) return;
+    const email = (resendF.email||"").trim();
+    if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return notify("Enter a valid email address","err");
+    sendEmail(sel, true, email);
   };
 
   const [renegF, setRenegF] = useState(null); // {amount,note,dels} for renegotiation
@@ -1475,6 +1481,10 @@ export default function InvogueCollabHQ() {
     // Try to find the POC assigned to this influencer (from the influencers table)
     const infRecord = influencers.find(x=>x.name===d.inf);
     const pocName = infRecord?.poc || "your collab manager";
+    // Resolve payment terms to a friendly, explicit label (default: Next 15th after going live)
+    const ptRaw = d.paymentTerms || d.payment_terms || infRecord?.defaultPaymentTerms || "next_15th";
+    const PT_LABELS = {next_15th:"Next 15th after going live","45_days":"45 days after going live","60_days":"60 days after going live",advance:"Advance (before going live)",immediate:"Immediate (on going live)",custom:"As agreed"};
+    const paymentTermsLabel = PT_LABELS[ptRaw] || (/15/.test(String(ptRaw)) ? "Next 15th after going live" : ptRaw);
     return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Collaboration Confirmation</title></head>
 <body style="margin:0;padding:0;background:#F6F4F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1A1A1A;">
@@ -1494,9 +1504,30 @@ export default function InvogueCollabHQ() {
       <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Commercials</td><td style="padding:9px 0;font-size:16px;font-weight:700;color:#770A1C;border-bottom:1px solid #f1ece3;">${f(d.amount)}</td></tr>
       <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Content Deadline</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${d.deadline||"—"}</td></tr>
       <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Usage Rights</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${d.usage||"—"}</td></tr>
-      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Payment Terms</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${d.paymentTerms||"Net 15 days"}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Payment Terms</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${paymentTermsLabel}</td></tr>
       <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;vertical-align:top;">Shipping Address</td><td style="padding:9px 0;font-size:14px;line-height:1.55;">${d.address||"—"}</td></tr>
     </table>
+
+    <div style="margin:22px 0 10px;font-size:13px;font-weight:700;color:#770A1C;text-transform:uppercase;letter-spacing:1px;">Posting Timeline</div>
+    <table style="width:100%;border-collapse:collapse;margin:8px 0 18px;">
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;width:150px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">1st Draft</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">2–3 days after the delivery of the product</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;vertical-align:top;">2nd Draft</td><td style="padding:9px 0;font-size:14px;">2 days (after editing, if any)</td></tr>
+    </table>
+
+    <div style="margin:22px 0 10px;font-size:13px;font-weight:700;color:#770A1C;text-transform:uppercase;letter-spacing:1px;">Usage Rights</div>
+    <p style="font-size:14px;line-height:1.65;color:#444;margin:0 0 18px;">Invogue retains full rights to use the content across marketing channels.</p>
+
+    <div style="margin:22px 0 10px;font-size:13px;font-weight:700;color:#770A1C;text-transform:uppercase;letter-spacing:1px;">Brand Guidelines</div>
+    <p style="font-size:14px;line-height:1.65;color:#444;margin:0 0 10px;">To maintain brand consistency and quality, please follow the below-mentioned guidelines while shooting:</p>
+    <ul style="margin:0 0 18px;padding-left:20px;font-size:13px;color:#444;line-height:1.8;">
+      <li>Share a test shot before you begin to shoot to finalize lighting, angles &amp; tone.</li>
+      <li>If the video includes a voice-over, please share the script for approval.</li>
+      <li>Ensure the content aligns with the approved concept and brief shared.</li>
+      <li>Avoid any competitor product mentions in the frame or caption.</li>
+      <li>Provide both raw and final edited videos in high resolution.</li>
+      <li>Reshoots may be requested if the content does not align with the brand brief.</li>
+      <li>All final videos must be approved before going live.</li>
+    </ul>
 
     <div style="margin:28px 0;text-align:center;">
       <p style="font-size:14px;color:#444;margin:0 0 14px;">If the above details look correct, please confirm by clicking the button below:</p>
@@ -1519,9 +1550,15 @@ export default function InvogueCollabHQ() {
 </body></html>`;
   };
 
-  const sendEmail = async (d, isResend=false) => {
-    if(!d.email) return notify("Influencer email is missing. Add it to the deal first.","err");
+  const sendEmail = async (d, isResend=false, overrideEmail=null) => {
+    const toEmail = (overrideEmail || d.email || "").trim();
+    if(!toEmail) return notify("Influencer email is missing. Add it to the deal first.","err");
     const userName = loggedIn?.name||"Negotiator";
+    // If the recipient was edited at resend time, persist it to the deal so future emails use it too.
+    if(overrideEmail && overrideEmail !== d.email){
+      supabase.from('deals').update({email:toEmail}).eq('id',d.id).then(({error})=>{if(error) console.error("Email update failed:",error);});
+      upDeal(d.id,{email:toEmail});
+    }
 
     // Generate a unique acknowledge token (or reuse existing one on resend)
     const ackToken = d.ackToken || uid();
@@ -1534,7 +1571,7 @@ export default function InvogueCollabHQ() {
       const resp = await apiFetch('/api/send-email', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ to:d.email, subject, html })
+        body:JSON.stringify({ to:toEmail, subject, html })
       });
       const data = await resp.json();
       if(!resp.ok || !data.ok) {
@@ -1553,10 +1590,10 @@ export default function InvogueCollabHQ() {
         supabase.from('deals').update({email_sent_at:ts,acknowledge_token:ackToken}).eq('id',d.id).then(({error})=>{if(error) console.error("Email resend timestamp save failed:",error);});
         if(!d.ackToken) upDeal(d.id,{ackToken});
       }
-      addLog(d.id, userName, isResend ? "Confirmation email resent" : "Confirmation email sent", `Sent to ${d.email} · Resend ID: ${data.id||"—"}`);
+      addLog(d.id, userName, isResend ? "Confirmation email resent" : "Confirmation email sent", `Sent to ${toEmail} · Resend ID: ${data.id||"—"}`);
       setSel(null);
       setModal(null);
-      notify(isResend ? `Email resent to ${d.email}!` : `Email sent to ${d.email}!`);
+      notify(isResend ? `Email resent to ${toEmail}!` : `Email sent to ${toEmail}!`);
     } catch(e) {
       console.error("Email network error:",e);
       notify("Network error while sending email","err");
@@ -1574,6 +1611,7 @@ export default function InvogueCollabHQ() {
     supabase.from('deals').update({status:'shipped'}).eq('id',sel.id).then(({error})=>{if(error) console.error("Dispatch save failed:",error);});
     upDeal(sel.id,{status:"shipped",ship:{track:shipF.track,carrier:shipF.carrier,orderId:shipF.orderId||"",st:"in_transit",dispAt:ts,dispBy:userName,delAt:null}});
     addLog(sel.id,userName,"Shipment dispatched",`${shipF.carrier}: ${shipF.track}`);
+    sendDispatchEmail(sel, {carrier:shipF.carrier, track:shipF.track, orderId:shipF.orderId||""});
     setSel(null);
     setModal(null);
     notify("Dispatched!");
@@ -1650,6 +1688,63 @@ export default function InvogueCollabHQ() {
     } catch(e) {
       console.error("Delivery email network error:",e);
     }
+  };
+
+  const buildDispatchEmailHTML = (d, ship) => {
+    const LOGO_URL = process.env.NEXT_PUBLIC_EMAIL_LOGO_URL || "https://raw.githubusercontent.com/invogueai/invogue-collab-hq/main/public/invogue-logo.png";
+    const productList = d.products && d.products.length > 0
+      ? d.products.map(p=>`${p.name}${p.size?` (${p.size})`:""}${p.qty>1?` × ${p.qty}`:""}`).join(", ")
+      : (d.product||"—");
+    const infRecord = influencers.find(x=>x.name===d.inf);
+    const pocName = infRecord?.poc || "your collab manager";
+    return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Your Invogue Package is on the Way</title></head>
+<body style="margin:0;padding:0;background:#F6F4F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1A1A1A;">
+<div style="max-width:620px;margin:0 auto;background:#fff;">
+  <div style="background:#770A1C;padding:32px 32px;text-align:center;">
+    <img src="${LOGO_URL}" alt="Invogue" style="max-height:48px;max-width:220px;display:inline-block;margin-bottom:10px;" />
+    <div style="color:#fff;font-size:18px;font-weight:600;margin-top:4px;">Your Package is on the Way</div>
+  </div>
+  <div style="padding:32px;">
+    <p style="font-size:15px;line-height:1.6;margin:0 0 16px;">Hi <b>${d.inf}</b>,</p>
+    <p style="font-size:14px;line-height:1.65;color:#444;margin:0 0 18px;">Good news — your product for the collaboration with <b>Invogue</b> has been dispatched and is on its way to you! 🚚</p>
+
+    <div style="margin:22px 0 10px;font-size:13px;font-weight:700;color:#770A1C;text-transform:uppercase;letter-spacing:1px;">Shipment Details</div>
+    <table style="width:100%;border-collapse:collapse;margin:8px 0 18px;">
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;width:150px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Collab ID</td><td style="padding:9px 0;font-size:14px;font-weight:700;color:#770A1C;border-bottom:1px solid #f1ece3;">${d.collabId||"—"}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Product</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${productList}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Carrier</td><td style="padding:9px 0;font-size:14px;font-weight:700;border-bottom:1px solid #f1ece3;">${ship?.carrier||"—"}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Tracking ID</td><td style="padding:9px 0;font-size:14px;font-weight:700;color:#770A1C;border-bottom:1px solid #f1ece3;">${ship?.track||"—"}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;vertical-align:top;">Shipping To</td><td style="padding:9px 0;font-size:14px;line-height:1.55;">${d.address||"—"}</td></tr>
+    </table>
+
+    <p style="font-size:14px;line-height:1.65;color:#444;margin:0 0 12px;">Please keep an eye out for the delivery. Once it arrives, we'll be excited for you to start creating!</p>
+
+    <div style="margin-top:28px;padding:14px 16px;background:#F6F4F0;border-left:3px solid #B08D42;border-radius:4px;font-size:12px;color:#6B5B3A;line-height:1.6;">
+      <b style="color:#770A1C;">Note:</b> This is an auto-generated email. For any questions about your shipment, reach out to your POC, <b>${pocName}</b>, directly.
+    </div>
+
+    <p style="font-size:14px;line-height:1.6;margin:24px 0 4px;color:#444;">Can't wait to collaborate!</p>
+    <p style="font-size:14px;line-height:1.6;margin:0;"><b>Team Invogue</b></p>
+  </div>
+  <div style="background:#770A1C;padding:22px 32px;text-align:center;">
+    <div style="color:#F6DFC1;font-size:13px;font-weight:600;letter-spacing:1.5px;margin-bottom:6px;">Invogue · Own your Inner Bold</div>
+    <div style="color:#F6DFC1;opacity:.75;font-size:11px;"><a href="https://invogue.shop" style="color:#F6DFC1;text-decoration:none;">invogue.shop</a></div>
+  </div>
+</div>
+</body></html>`;
+  };
+
+  const sendDispatchEmail = async (d, ship) => {
+    if(!d.email) { console.log("No email for dispatch confirmation — skipping"); return; }
+    const subject = `Your Invogue Package is on the Way — ${d.collabId||"Deal"}`;
+    const html = buildDispatchEmailHTML(d, ship);
+    try {
+      const resp = await apiFetch('/api/send-email', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ to:d.email, subject, html }) });
+      const data = await resp.json();
+      if(!resp.ok || !data.ok) { console.error("Dispatch email failed:", data); return; }
+      addLog(d.id, loggedIn?.name||"System", "Dispatch notification email sent", `Sent to ${d.email}`);
+    } catch(e) { console.error("Dispatch email network error:",e); }
   };
 
   const markDelivered = (d, deliveryDate, deliveryNote) => {
@@ -2845,8 +2940,13 @@ return (
           if(users.some(u=>u.email.toLowerCase()===userF.email.toLowerCase().trim())) { notify("Email already exists","err"); return; }
           const initials = userF.name.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2);
           const newId = uid();
-          supabase.from('users').insert({id:newId,name:userF.name,email:userF.email,role:userF.role,status:'active',avatar:initials}).then(({error})=>{if(error){console.error("User insert failed:",error);notify("Failed to create user: "+error.message,"err");}});
-          setUsers(prev=>[...prev,{id:newId,name:userF.name,email:userF.email,role:userF.role,status:"active",created:new Date().toISOString().slice(0,10),avatar:initials}]);
+          const newEmail = userF.email.trim();
+          supabase.from('users').insert({id:newId,name:userF.name,email:newEmail,role:userF.role,status:'active',avatar:initials}).then(({error})=>{if(error){console.error("User insert failed:",error);notify("Failed to create user: "+error.message,"err");}});
+          setUsers(prev=>[...prev,{id:newId,name:userF.name,email:newEmail,role:userF.role,status:"active",created:new Date().toISOString().slice(0,10),avatar:initials}]);
+          // Auto-grant shared Drive access to the new team member (non-fatal if Drive isn't connected)
+          apiFetch('/api/drive/grant-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:newEmail})})
+            .then(r=>r.json()).then(d=>{ if(d.ok) notify(`Drive access granted to ${newEmail}`); else console.warn("Drive access not granted:",d.error); })
+            .catch(e=>console.warn("Drive grant-access call failed:",e));
           setUserF({name:"",email:"",role:"negotiator"});
           setModal(null);
           notify(`${userF.name} added as ${ROLE_CFG[userF.role]?.l||userF.role}!`);
@@ -3471,7 +3571,7 @@ return (
             {upcomingDates.map(dateKey=><Section key={dateKey} title={`📅 ${new Date(dateKey).toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short",year:"numeric"})}`} icon="" action={<span style={{fontSize:"11px",color:T.sub,fontWeight:700}}>{byDueDate[dateKey].length} deal{byDueDate[dateKey].length>1?"s":""} · {f(byDueDate[dateKey].reduce((s,d)=>s+remaining(d),0))}</span>}>
               {byDueDate[dateKey].map(d=>{const inf=influencers.find(x=>x.name===d.inf);return <div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>{setSel(d);setModal("detail")}}>
                 <div style={{display:"flex",alignItems:"center",gap:"6px"}}>{batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{cursor:"pointer"}}/>}<div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.product} · {PAYMENT_TERMS_LABELS[d.payment_terms||inf?.defaultPaymentTerms||"next_15th"]||""}</span></div></div>
-                <div><span style={{fontWeight:700}}>{f(remaining(d))}</span>{isTDSApplicable(d.inf,remaining(d))&&<span style={{marginLeft:"6px",padding:"1px 5px",borderRadius:"3px",fontSize:"9px",fontWeight:700,background:"#f5f3ff",color:"#7c3aed"}}>TDS</span>}</div>
+                <div style={{display:"flex",alignItems:"center",gap:"6px"}}><span style={{fontWeight:700}}>{f(remaining(d))}</span>{isTDSApplicable(d.inf,remaining(d))&&<span style={{padding:"1px 5px",borderRadius:"3px",fontSize:"9px",fontWeight:700,background:"#f5f3ff",color:"#7c3aed"}}>TDS</span>}{["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&<Btn v="ok" sm onClick={e=>{e.stopPropagation();setSel(d);setPayF({type:"final",amount:String(remaining(d)),note:"Paid ahead of due date"});setModal("payment")}}>Pay now</Btn>}</div>
               </div>;})}
             </Section>)}
             {/* Unscheduled */}
@@ -5426,6 +5526,19 @@ return (
       })()}
 
       {/* REQUEST RE-SHIPMENT MODAL — Negotiator requests new product shipment */}
+      <Modal open={modal==="resendEmail"} onClose={()=>setModal("detail")} title={`Resend Confirmation — ${sel?.inf}`} w={460}>
+        {sel&&<>
+          <div style={{padding:"10px 12px",background:T.infoBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px",color:T.info}}>
+            Resend the collaboration confirmation. You can correct the recipient's email below — the new address is saved to the deal for future emails.
+          </div>
+          <Field label="Recipient Email"><Inp value={resendF.email} onChange={e=>setResendF({...resendF,email:e.target.value})} placeholder="influencer@email.com"/></Field>
+          <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}>
+            <Btn v="outline" onClick={()=>setModal("detail")}>Cancel</Btn>
+            <Btn v="gold" onClick={submitResend}>🔁 Resend Email</Btn>
+          </div>
+        </>}
+      </Modal>
+
       <Modal open={modal==="reshipRequest"} onClose={()=>setModal("detail")} title={`Request New Shipment — ${sel?.inf}`} w={520}>
         {sel&&<>
           <div style={{padding:"10px",background:T.purpleBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px",color:T.purple}}>

@@ -46,6 +46,7 @@ const STATUS_CFG = {
   delivered_prod: { l:"Product Delivered", c:T.teal,  bg:T.tealBg,   i:"📦" },
   partial_live:   { l:"Partially Live",   c:T.warn,   bg:T.warnBg,   i:"⏳" },
   live:           { l:"All Content Live",  c:T.ok,    bg:T.okBg,     i:"🟢" },
+  payment_details_received: { l:"Payment Details Received", c:T.info, bg:T.infoBg, i:"🧾" },
   invoice_pending_approval: { l:"Invoice Pending Approval", c:T.warn, bg:T.warnBg, i:"⏳" },
   invoice_ok:     { l:"Invoice Matched",  c:T.info,   bg:T.infoBg,   i:"✔️" },
   disputed:       { l:"Disputed",         c:T.err,    bg:T.errBg,    i:"⚠️" },
@@ -147,6 +148,7 @@ async function loadFromSupabase() {
     paymentDueDate:d.payment_due_date||null, tdsRate:d.tds_rate??10, tdsAmount:d.tds_amount||0,
     products:d.products||(d.products_json?JSON.parse(d.products_json):[])||[],
     paymentFormSent:d.payment_form_sent||false, paymentFormSentAt:d.payment_form_sent_at||null,
+    payment_token:d.payment_token||null, paymentDetails:d.payment_details||null, paymentDetailsAt:d.payment_details_submitted_at||null,
     invoiceGenerated:d.invoice_generated||false, invoiceNumber:d.invoice_number||null, invoiceDate:d.invoice_date||null,
     inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
     shipHistory:d.ship_history||[],
@@ -492,6 +494,8 @@ export default function InvogueCollabHQ() {
             email:d.email||"", payment_terms:d.payment_terms||"", pan_number:d.pan_number||"", pan_name:d.pan_name||"",
             paymentDueDate:d.payment_due_date||null, tdsRate:d.tds_rate??10, tdsAmount:d.tds_amount||0,
             products:d.products||(d.products_json?JSON.parse(d.products_json):[])||[],
+            paymentFormSent:d.payment_form_sent||false, paymentFormSentAt:d.payment_form_sent_at||null,
+            payment_token:d.payment_token||null, paymentDetails:d.payment_details||null, paymentDetailsAt:d.payment_details_submitted_at||null,
             inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
             shipHistory:d.ship_history||[],
             renegotiationNote:d.renegotiation_note||"",
@@ -2213,60 +2217,73 @@ export default function InvogueCollabHQ() {
     notify("Payment request denied","warn");
   };
 
-  // ─── PAYMENT DETAILS COLLECTION & INVOICE ───
-  const sendPaymentForm = (deal, method) => {
-    const invoiceUrl = getInvoiceCreatorUrl(deal);
-    if(method==="copy") {
-      navigator.clipboard.writeText(invoiceUrl).then(()=>notify("Invoice creator link copied!")).catch(()=>notify("Failed to copy link","err"));
-    } else if(method==="email") {
-      const subject = encodeURIComponent(`Invogue x ${deal.inf} — Please Generate Your Invoice [${deal.collabId||""}]`);
-      const body = encodeURIComponent(
-`Hi ${deal.inf},
-
-Thank you for the amazing collaboration with Invogue!
-
-Your content is now live and we'd like to process your payment of ₹${deal.amount.toLocaleString("en-IN")}.
-
-Please generate your invoice using the link below — it's pre-filled with your collaboration details:
-
-${invoiceUrl}
-
-Your Collaboration ID: ${deal.collabId||"N/A"}
-
-On the invoice creator page, you'll need to fill in:
-• Your name & contact details
-• Bank account, IFSC code & UPI ID
-• PAN card details
-• Mailing address
-
-Your bank details are processed entirely in your browser and are never stored on any server.
-
-Once generated, please save the invoice as PDF and share it with us.
-
-Warm regards,
-${loggedIn?.name || "Team Invogue"}
-Invogue · invogue.shop`
-      );
-      window.open(`mailto:${deal.email}?subject=${subject}&body=${body}`,"_blank");
-    }
+  // ─── SECURE PAYMENT-DETAILS FORM ───
+  // The influencer submits bank/PAN/UPI details against an unguessable token —
+  // no deal IDs in the URL, so the link can't be edited to reach another collab.
+  const ensurePaymentToken = async (deal) => {
+    if(deal.payment_token) return deal.payment_token;
+    const token = uid();
     const ts = new Date().toISOString();
-    supabase.from('deals').update({payment_form_sent:true,payment_form_sent_at:ts}).eq('id',deal.id).then(({error})=>{if(error) console.error("Invoice link sent save failed:",error);});
-    upDeal(deal.id,{paymentFormSent:true,paymentFormSentAt:ts});
-    addLog(deal.id,loggedIn?.name||"You","Invoice creator link sent",`${method==="email"?"Via email":"Link copied"} · ${deal.collabId||""}`);
-    setSel(prev=>prev?{...prev,paymentFormSent:true,paymentFormSentAt:ts}:null);
-    if(method==="email") notify("Email client opened with invoice creator link!");
+    const {error} = await supabase.from('deals').update({payment_token:token, payment_token_at:ts}).eq('id',deal.id);
+    if(error) console.error("Payment token save failed:",error);
+    upDeal(deal.id,{payment_token:token});
+    setSel(prev=>prev&&prev.id===deal.id?{...prev,payment_token:token}:prev);
+    return token;
   };
 
-  const getInvoiceCreatorUrl = (deal) => {
-    const base = window.location.origin + "/invoice-creator";
-    const params = new URLSearchParams();
-    if(deal.collabId) params.set("collab", deal.collabId);
-    if(deal.inf) params.set("name", deal.inf);
-    if(deal.email) params.set("email", deal.email);
-    if(deal.amount) params.set("amount", deal.amount);
-    const dels = deal.dels.map(d=>d.type).join(", ");
-    if(dels) params.set("deliverables", dels);
-    return base + "?" + params.toString();
+  const buildPaymentFormEmailHTML = (d, url) => {
+    const LOGO_URL = process.env.NEXT_PUBLIC_EMAIL_LOGO_URL || "https://raw.githubusercontent.com/invogueai/invogue-collab-hq/main/public/invogue-logo.png";
+    const infRecord = influencers.find(x=>x.name===d.inf);
+    const pocName = infRecord?.poc || "your collab manager";
+    return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Submit Your Payment Details</title></head>
+<body style="margin:0;padding:0;background:#F6F4F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1A1A1A;">
+<div style="max-width:620px;margin:0 auto;background:#fff;">
+  <div style="background:#770A1C;padding:32px 32px;text-align:center;">
+    <img src="${LOGO_URL}" alt="Invogue" style="max-height:48px;max-width:220px;display:inline-block;margin-bottom:10px;" />
+    <div style="color:#fff;font-size:18px;font-weight:600;margin-top:4px;">Submit Your Payment Details</div>
+  </div>
+  <div style="padding:32px;">
+    <p style="font-size:15px;line-height:1.6;margin:0 0 16px;">Hi <b>${d.inf}</b>,</p>
+    <p style="font-size:14px;line-height:1.65;color:#444;margin:0 0 18px;">Your content for collaboration <b>${d.collabId||""}</b> is live — thank you! To process your payment of <b style="color:#770A1C;">${f(d.amount)}</b>, please submit your bank and PAN details securely using the button below.</p>
+    <div style="margin:26px 0;text-align:center;">
+      <a href="${url}" target="_blank" style="display:inline-block;background:#770A1C;color:#fff;font-size:15px;font-weight:700;text-decoration:none;padding:14px 36px;border-radius:6px;letter-spacing:.3px;">Submit Payment Details</a>
+      <p style="font-size:11px;color:#999;margin:10px 0 0;">This is a private, secure link unique to your collaboration. Please don't share it.</p>
+    </div>
+    <div style="margin-top:24px;padding:14px 16px;background:#F6F4F0;border-left:3px solid #B08D42;border-radius:4px;font-size:12px;color:#6B5B3A;line-height:1.6;">
+      <b style="color:#770A1C;">Note:</b> Your deliverables and amount are pre-filled — you only need to add your bank account, IFSC, UPI and PAN. For any questions, reach out to your POC, <b>${pocName}</b>.
+    </div>
+    <p style="font-size:14px;line-height:1.6;margin:24px 0 4px;color:#444;">Thank you!</p>
+    <p style="font-size:14px;line-height:1.6;margin:0;"><b>Team Invogue</b></p>
+  </div>
+  <div style="background:#770A1C;padding:22px 32px;text-align:center;">
+    <div style="color:#F6DFC1;font-size:13px;font-weight:600;letter-spacing:1.5px;margin-bottom:6px;">Invogue · Own your Inner Bold</div>
+    <div style="color:#F6DFC1;opacity:.75;font-size:11px;"><a href="https://invogue.shop" style="color:#F6DFC1;text-decoration:none;">invogue.shop</a></div>
+  </div>
+</div>
+</body></html>`;
+  };
+
+  const sendPaymentForm = async (deal, method) => {
+    const token = await ensurePaymentToken(deal);
+    const url = `${window.location.origin}/payment-form?token=${token}`;
+    if(method==="copy") {
+      navigator.clipboard.writeText(url).then(()=>notify("Secure payment-form link copied!")).catch(()=>notify("Failed to copy link","err"));
+    } else if(method==="email") {
+      if(!deal.email) return notify("Influencer email is missing. Add it to the deal first.","err");
+      notify("Sending payment form…","info");
+      try {
+        const resp = await apiFetch('/api/send-email', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:deal.email,subject:`Invogue × ${deal.inf} — Submit Your Payment Details (${deal.collabId||""})`,html:buildPaymentFormEmailHTML(deal,url)})});
+        const data = await resp.json();
+        if(!resp.ok || !data.ok) { console.error("Payment form email failed:", data); return notify("Email failed: "+(data.error||"Unknown error"),"err"); }
+      } catch(e) { console.error("Payment form email error:",e); return notify("Network error while sending email","err"); }
+    }
+    const ts = new Date().toISOString();
+    supabase.from('deals').update({payment_form_sent:true,payment_form_sent_at:ts}).eq('id',deal.id).then(({error})=>{if(error) console.error("Payment form sent save failed:",error);});
+    upDeal(deal.id,{paymentFormSent:true,paymentFormSentAt:ts});
+    addLog(deal.id,loggedIn?.name||"You","Payment details form sent",`${method==="email"?"Via email":"Link copied"} · ${deal.collabId||""}`);
+    setSel(prev=>prev?{...prev,paymentFormSent:true,paymentFormSentAt:ts}:null);
+    if(method==="email") notify(`Payment form emailed to ${deal.email}!`);
   };
 
   // generateInvoicePDF kept for admin fallback — generates invoice in a new window
@@ -3406,7 +3423,7 @@ return (
           FINANCE DASHBOARD — Payment Center
          ═══════════════════════════════════════════════════════ */}
       {((view==="dashboard"&&role==="finance")||(view==="payments"&&role==="admin"))&&(()=>{
-        const pendingPayments = deals.filter(d=>["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0);
+        const pendingPayments = deals.filter(d=>["invoice_ok","payment_details_received","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0);
         const disputed = deals.filter(d=>d.status==="disputed");
         const advanceDue = deals.filter(d=>["approved","email_sent","acknowledged","shipped","delivered_prod"].includes(d.status)&&totalPaid(d)===0);
         const recentPaid = deals.filter(d=>d.status==="paid").slice(0,5);
@@ -5405,13 +5422,9 @@ return (
               {(role==="negotiator"||role==="admin")&&["pending","renegotiate","approved","manager_approved","email_sent","acknowledged","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
               {(role==="logistics"||role==="admin")&&sel.status==="acknowledged"&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>}
               {(role==="logistics"||role==="admin")&&sel.status==="email_sent"&&!sel.ship&&<div style={{padding:"8px 12px",background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"6px",fontSize:"12px",color:"#92400e"}}>⏳ Awaiting influencer acknowledgement before dispatch</div>}
-              {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&<Btn v="primary" onClick={()=>setModal("collectPayment")}>{sel.paymentFormSent?"✅ Link Sent — Resend":"📩 Send Invoice Creator"}</Btn>}
-              {(role==="negotiator"||role==="admin")&&["live","partial_live"].includes(sel.status)&&!sel.inv&&<Btn v="gold" onClick={()=>{setInvoiceF({beneficiary:"",bank:"",account:"",ifsc:"",upi:"",pan:"",panName:"",address:"",phone:"",gstNumber:"",notes:"",amount:"",panNumber:""});setModal("uploadInvoice")}}>📄 Upload Invoice & Send to Finance</Btn>}
-              {sel.inv&&sel.status==="invoice_pending_approval"&&(role==="negotiator"||role==="admin")&&<div style={{fontSize:"12px",color:T.warn,fontWeight:700,padding:"6px 10px",background:T.warnBg,borderRadius:"4px"}}>⏳ Invoice pending manager approval</div>}
-              {sel.status==="invoice_pending_approval"&&(role==="approver"||role==="admin")&&<div style={{display:"flex",gap:"6px"}}><Btn v="ok" sm onClick={()=>approveInvoice(sel)}>✓ Approve Invoice</Btn><Btn v="danger" sm onClick={()=>rejectInvoice(sel)}>✕ Reject</Btn></div>}
+              {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&!sel.paymentDetailsAt&&<Btn v="primary" onClick={()=>setModal("collectPayment")}>{sel.paymentFormSent?"✅ Form Sent — Resend":"📩 Send Payment Details Form"}</Btn>}
+              {sel.paymentDetailsAt&&sel.status!=="paid"&&(role==="negotiator"||role==="admin"||role==="approver")&&<div style={{fontSize:"12px",color:T.ok,fontWeight:700,padding:"6px 10px",background:T.okBg,borderRadius:"4px"}}>🧾 Payment details received — ready for Finance to pay</div>}
               {sel.status==="manager_approved"&&<div style={{fontSize:"12px",color:T.info,fontWeight:700,padding:"6px 10px",background:T.infoBg,borderRadius:"4px"}}>✅ Manager approved — awaiting admin final approval (₹50K+ deal)</div>}
-              {sel.inv&&sel.status==="invoice_ok"&&(role==="negotiator"||role==="admin")&&<div style={{fontSize:"12px",color:T.ok,fontWeight:700,padding:"6px 10px",background:T.okBg,borderRadius:"4px"}}>✓ Invoice sent to Finance — awaiting payment</div>}
-              {sel.inv&&sel.status==="disputed"&&(role==="negotiator"||role==="admin")&&<div style={{fontSize:"12px",color:T.err,fontWeight:700,padding:"6px 10px",background:T.errBg,borderRadius:"4px"}}>⚠ Dispute — awaiting manager resolution</div>}
               {sel.status==="drop_requested"&&(role==="approver"||role==="admin")&&<div style={{display:"flex",gap:"6px"}}><Btn v="ok" sm onClick={()=>approveDropRequest(sel)}>✓ Approve Drop</Btn><Btn v="outline" sm onClick={()=>rejectDropRequest(sel)}>✕ Reject Drop</Btn></div>}
               {sel.status==="drop_requested"&&role==="negotiator"&&<div style={{fontSize:"12px",color:T.warn,fontWeight:700,padding:"6px 10px",background:T.warnBg,borderRadius:"4px"}}>⏳ Drop request pending manager approval</div>}
               {(role==="finance"||role==="admin")&&!["pending","renegotiate","rejected","dropped"].includes(sel.status)&&rem>0&&<Btn v="ok" onClick={()=>{setPayF({type:paid===0?"advance":"partial",amount:"",note:""});setModal("payment")}}>💰 Record Payment</Btn>}
@@ -5600,7 +5613,7 @@ return (
 
       {/* SEND FOR PAYMENT MODAL */}
       {/* COLLECT PAYMENT DETAILS MODAL */}
-      <Modal open={modal==="collectPayment"} onClose={()=>setModal("detail")} title={`Send Invoice Creator — ${sel?.inf}`} w={520}>
+      <Modal open={modal==="collectPayment"} onClose={()=>setModal("detail")} title={`Send Payment Details Form — ${sel?.inf}`} w={520}>
         {sel&&<>
           <div style={{padding:"12px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -5610,32 +5623,32 @@ return (
             <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product} · {sel.dels.filter(d=>d.st==="live").length}/{sel.dels.length} live</div>
           </div>
           <div style={{padding:"10px",background:T.infoBg,borderRadius:"6px",marginBottom:"14px",fontSize:"12px",color:T.info}}>
-            <b>🔒 Secure Process:</b> The influencer generates their own invoice with bank details using our Invoice Creator tool. Their details are processed entirely in their browser and are <b>never stored</b> on any server. They send the PDF back to you.
+            <b>🔒 Secure form:</b> The influencer opens a private, token-protected link (no one else can access their collab) and submits their bank, PAN and UPI details. The details come straight back into the deal — no PDF to chase, no amount to match.
           </div>
 
           {sel.paymentFormSent&&<div style={{padding:"8px 10px",background:T.okBg,borderRadius:"5px",marginBottom:"10px",fontSize:"12px",color:T.ok}}>
-            ✅ Link already sent on {sel.paymentFormSentAt?new Date(sel.paymentFormSentAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}
+            ✅ Form already sent on {sel.paymentFormSentAt?new Date(sel.paymentFormSentAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}
           </div>}
 
           {/* How it works */}
           <div style={{padding:"10px 12px",background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"6px",marginBottom:"14px",fontSize:"12px"}}>
             <div style={{fontWeight:700,marginBottom:"6px",fontSize:"10px",color:T.sub,textTransform:"uppercase",letterSpacing:".5px"}}>How it works</div>
-            <div style={{display:"flex",gap:"8px",alignItems:"flex-start",marginBottom:"4px"}}><span style={{fontSize:"14px"}}>1️⃣</span><span>You send the Invoice Creator link to the influencer (pre-filled with their collab details)</span></div>
-            <div style={{display:"flex",gap:"8px",alignItems:"flex-start",marginBottom:"4px"}}><span style={{fontSize:"14px"}}>2️⃣</span><span>Influencer fills in their bank details, PAN, and address — generates a PDF invoice</span></div>
-            <div style={{display:"flex",gap:"8px",alignItems:"flex-start"}}><span style={{fontSize:"14px"}}>3️⃣</span><span>Influencer sends you the invoice PDF — you upload it and submit to finance</span></div>
+            <div style={{display:"flex",gap:"8px",alignItems:"flex-start",marginBottom:"4px"}}><span style={{fontSize:"14px"}}>1️⃣</span><span>You send the secure payment-details link (deliverables &amp; amount are pre-filled, read-only)</span></div>
+            <div style={{display:"flex",gap:"8px",alignItems:"flex-start",marginBottom:"4px"}}><span style={{fontSize:"14px"}}>2️⃣</span><span>Influencer fills in bank account, IFSC, UPI &amp; PAN and submits</span></div>
+            <div style={{display:"flex",gap:"8px",alignItems:"flex-start"}}><span style={{fontSize:"14px"}}>3️⃣</span><span>Details land on the deal — Finance pays the locked amount and bulk-generates the invoice</span></div>
           </div>
 
           {/* Email Preview */}
           <div style={{padding:"10px 12px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",marginBottom:"14px",fontSize:"11px"}}>
             <div style={{fontWeight:700,marginBottom:"4px",fontSize:"10px",color:T.sub,textTransform:"uppercase",letterSpacing:".5px"}}>Email Preview</div>
             <div><b>To:</b> {sel.email||"—"}</div>
-            <div><b>Subject:</b> Invogue x {sel.inf} — Please Generate Your Invoice [{sel.collabId||""}]</div>
-            <div style={{marginTop:"4px",color:T.sub}}>Includes: invoice creator link (pre-filled), collab ID, amount, deliverables list</div>
+            <div><b>Subject:</b> Invogue × {sel.inf} — Submit Your Payment Details ({sel.collabId||""})</div>
+            <div style={{marginTop:"4px",color:T.sub}}>A branded email with a secure button to the payment-details form.</div>
           </div>
 
           <div style={{display:"flex",gap:"8px",justifyContent:"flex-end",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>
             <Btn v="outline" onClick={()=>setModal("detail")}>Back</Btn>
-            <Btn v="outline" onClick={()=>sendPaymentForm(sel,"copy")}>📋 Copy Link</Btn>
+            <Btn v="outline" onClick={()=>sendPaymentForm(sel,"copy")}>📋 Copy Secure Link</Btn>
             <Btn v="gold" onClick={()=>sendPaymentForm(sel,"email")}>✉ Send Email</Btn>
           </div>
         </>}

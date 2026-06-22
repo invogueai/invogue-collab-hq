@@ -5331,24 +5331,23 @@ return (
             </Section>}
 
             {/* Payment Workflow Tracker */}
-            {["live","partial_live","invoice_pending_approval","invoice_ok","payment_requested","payment_approved","partial_paid","paid"].includes(sel.status)&&(role==="negotiator"||role==="admin"||role==="approver"||role==="finance")&&<Section title="Payment Workflow" icon="💸">
+            {["live","partial_live","payment_details_received","invoice_pending_approval","invoice_ok","disputed","payment_requested","payment_approved","partial_paid","paid"].includes(sel.status)&&(role==="negotiator"||role==="admin"||role==="approver"||role==="finance")&&<Section title="Payment Workflow" icon="💸">
               <div style={{display:"flex",gap:"4px",alignItems:"center",marginBottom:"4px"}}>
                 {[
-                  {label:"Link Sent",done:!!sel.paymentFormSent,icon:"📩"},
-                  {label:"Invoice Received",done:!!sel.invoiceGenerated,icon:"📄"},
-                  {label:"Amount Verified",done:!!sel.inv,icon:"🧾"},
-                  {label:"Manager Approved",done:["invoice_ok","payment_requested","payment_approved","partial_paid","paid"].includes(sel.status),icon:"👔"},
-                  {label:"Sent to Finance",done:["payment_requested","payment_approved","partial_paid","paid"].includes(sel.status),icon:"💸"},
-                  {label:"Paid",done:sel.status==="paid",icon:"✅"},
+                  {label:"Content Live",done:isPaymentEligible(sel)},
+                  {label:sel.agencyManaged?"Agency Invoice":"Form Sent",done:sel.agencyManaged?!!sel.agencyInvoiceUrl:!!sel.paymentFormSent},
+                  {label:"Details Received",done:!!sel.paymentDetailsAt},
+                  {label:"Paid",done:sel.status==="paid"},
                 ].map((step,si)=><div key={si} style={{display:"contents"}}>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",flex:1}}>
                     <div style={{width:"28px",height:"28px",borderRadius:"50%",background:step.done?T.ok:T.border,color:step.done?"#fff":T.sub,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",fontWeight:700}}>{step.done?"✓":si+1}</div>
                     <div style={{fontSize:"9px",fontWeight:700,color:step.done?T.ok:T.sub,textAlign:"center",marginTop:"3px",textTransform:"uppercase",letterSpacing:".3px"}}>{step.label}</div>
                   </div>
-                  {si<5&&<div style={{flex:0,width:"20px",height:"2px",background:step.done?T.ok:T.border,marginBottom:"16px"}}/>}
+                  {si<3&&<div style={{flex:0,width:"20px",height:"2px",background:step.done?T.ok:T.border,marginBottom:"16px"}}/>}
                 </div>)}
               </div>
-              {sel.invoiceNumber&&<div style={{fontSize:"11px",color:T.sub,marginTop:"6px"}}>Invoice: <b style={{color:T.text}}>{sel.invoiceNumber}</b> · {sel.invoiceDate}</div>}
+              {sel.agencyManaged&&<div style={{fontSize:"11px",color:T.sub,marginTop:"6px"}}>🏢 Agency-managed{sel.agencyName?` · ${sel.agencyName}`:""}{sel.agencyInvoiceUrl?<> · <a href={sel.agencyInvoiceUrl} target="_blank" rel="noopener noreferrer" style={{color:T.info,fontWeight:700}}>View invoice ↗</a></>:""}</div>}
+              {totalPaid(sel)>0&&sel.status!=="paid"&&<div style={{fontSize:"11px",color:T.sub,marginTop:"6px"}}>Paid {f(totalPaid(sel))} of {f(sel.amount)} · {f(remaining(sel))} remaining</div>}
             </Section>}
 
             {/* Deliverables — Content Approval Workflow */}

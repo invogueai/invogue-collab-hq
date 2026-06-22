@@ -149,6 +149,7 @@ async function loadFromSupabase() {
     products:d.products||(d.products_json?JSON.parse(d.products_json):[])||[],
     paymentFormSent:d.payment_form_sent||false, paymentFormSentAt:d.payment_form_sent_at||null,
     payment_token:d.payment_token||null, paymentDetails:d.payment_details||null, paymentDetailsAt:d.payment_details_submitted_at||null,
+    agencyManaged:d.agency_managed||false, agencyName:d.agency_name||"", agencyGst:d.agency_gst||"", agencyInvoiceUrl:d.agency_invoice_url||"",
     invoiceGenerated:d.invoice_generated||false, invoiceNumber:d.invoice_number||null, invoiceDate:d.invoice_date||null,
     inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
     shipHistory:d.ship_history||[],
@@ -313,6 +314,9 @@ export default function InvogueCollabHQ() {
   const [submittingDeal, setSubmittingDeal] = useState(false); // drives button disabled state
   const [editingDealId, setEditingDealId] = useState(null); // non-null = New Deal modal is editing an existing (pre-approval) deal
   const [resendF, setResendF] = useState({dealId:null, email:""}); // resend-confirmation modal (editable recipient)
+  const [agencyF, setAgencyF] = useState({name:"",gst:"",beneficiary:"",account:"",ifsc:"",upi:"",pan:"",panName:"",invoiceLink:""}); // agency-managed payout details
+  const [agencyFile, setAgencyFile] = useState(null);
+  const [agencyUploading, setAgencyUploading] = useState(false);
   const [nCamp, setNCamp] = useState(null);
   const [shipF, setShipF] = useState({track:"",carrier:"DTDC",orderId:""});
   const [payF, setPayF] = useState({type:"advance",amount:"",note:""});
@@ -496,6 +500,7 @@ export default function InvogueCollabHQ() {
             products:d.products||(d.products_json?JSON.parse(d.products_json):[])||[],
             paymentFormSent:d.payment_form_sent||false, paymentFormSentAt:d.payment_form_sent_at||null,
             payment_token:d.payment_token||null, paymentDetails:d.payment_details||null, paymentDetailsAt:d.payment_details_submitted_at||null,
+    agencyManaged:d.agency_managed||false, agencyName:d.agency_name||"", agencyGst:d.agency_gst||"", agencyInvoiceUrl:d.agency_invoice_url||"",
             inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
             shipHistory:d.ship_history||[],
             renegotiationNote:d.renegotiation_note||"",
@@ -779,6 +784,16 @@ export default function InvogueCollabHQ() {
 
   const totalPaid = d => (d.pays||[]).reduce((s,p)=>s+p.amount,0);
   const remaining = d => d.amount - totalPaid(d);
+  // Payment eligibility: required deliverable types (Reels/Videos/etc.) must be live.
+  // Stories are optional and don't block payment. If a deal is stories-only, all must be live.
+  const STORY_RE = /story|stories/i;
+  const isPaymentEligible = (deal) => {
+    const dels = deal?.dels || [];
+    if(dels.length===0) return false;
+    const required = dels.filter(d=>!STORY_RE.test(d.type||""));
+    const check = required.length>0 ? required : dels;
+    return check.every(d=>d.st==="live");
+  };
   const getCamp = id => campaigns.find(c=>c.id===id);
   const campCommitted = cid => deals.filter(d=>d.cid===cid&&!["rejected","pending","renegotiate","dropped"].includes(d.status)).reduce((s,d)=>s+d.amount,0);
   const campPaid = cid => deals.filter(d=>d.cid===cid).reduce((s,d)=>s+totalPaid(d),0);
@@ -2286,6 +2301,59 @@ export default function InvogueCollabHQ() {
     if(method==="email") notify(`Payment form emailed to ${deal.email}!`);
   };
 
+  // ─── AGENCY-MANAGED COLLABS ───
+  // Some creators are represented by an agency that raises its own GST invoice.
+  // These deals skip the self-service form: we attach the agency invoice + pay the agency.
+  const toggleAgencyManaged = async (deal) => {
+    const next = !deal.agencyManaged;
+    const {error} = await supabase.from('deals').update({agency_managed:next}).eq('id',deal.id);
+    if(error) { console.error("Agency toggle failed:",error); return notify("Couldn't update: "+error.message,"err"); }
+    upDeal(deal.id,{agencyManaged:next});
+    setSel(prev=>prev&&prev.id===deal.id?{...prev,agencyManaged:next}:prev);
+    notify(next?"Marked as agency-managed":"Agency flag removed");
+  };
+
+  const openAgencyModal = (deal) => {
+    const pd = deal.paymentDetails || {};
+    setAgencyF({name:deal.agencyName||"", gst:deal.agencyGst||"", beneficiary:pd.beneficiary||"", account:pd.account||"", ifsc:pd.ifsc||"", upi:pd.upi||"", pan:pd.pan||"", panName:pd.panName||"", invoiceLink:deal.agencyInvoiceUrl||""});
+    setAgencyFile(null);
+    setSel(deal);
+    setModal("agencyInvoice");
+  };
+
+  const submitAgencyDetails = async (deal) => {
+    if(!agencyF.name.trim()) return notify("Agency name is required","err");
+    if(!agencyF.beneficiary.trim()||!agencyF.account.trim()||!agencyF.ifsc.trim()) return notify("Agency bank details (beneficiary, account, IFSC) are required","err");
+    if(!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(agencyF.ifsc.toUpperCase())) return notify("Invalid IFSC format","err");
+    if(agencyF.pan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(agencyF.pan.toUpperCase())) return notify("Invalid PAN format (e.g. ABCDE1234F)","err");
+    if(!agencyFile && !agencyF.invoiceLink.trim()) return notify("Attach the agency GST invoice (upload a file or paste a link)","err");
+
+    let invoiceUrl = agencyF.invoiceLink.trim();
+    if(agencyFile){
+      setAgencyUploading(true);
+      try {
+        const monthLabel = new Date().toLocaleString('en-IN',{month:'long',year:'numeric'});
+        const initResp = await apiFetch('/api/drive/create-upload-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dealId:deal.id,invoiceMode:true,monthLabel,fileName:`AGENCY_INV_${(agencyF.name||deal.inf).replace(/\s+/g,'_')}_${deal.collabId||deal.id.slice(0,6)}_${agencyFile.name}`,mimeType:agencyFile.type||'application/octet-stream',sizeBytes:agencyFile.size})});
+        const initData = await initResp.json();
+        if(!initResp.ok||!initData.ok) throw new Error(initData.error||'Could not start upload');
+        const driveFileId = await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('PUT',initData.uploadUrl,true);xhr.setRequestHeader('Content-Type',agencyFile.type||'application/octet-stream');xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300){try{resolve(JSON.parse(xhr.responseText).id)}catch(e){reject(new Error('Upload ok but bad response'))}}else reject(new Error('Upload failed: HTTP '+xhr.status))};xhr.onerror=()=>reject(new Error('Network error'));xhr.send(agencyFile);});
+        invoiceUrl = `https://drive.google.com/file/d/${driveFileId}/view`;
+      } catch(e){ setAgencyUploading(false); return notify('Agency invoice upload failed: '+e.message,'err'); }
+      setAgencyUploading(false);
+    }
+
+    const ts = new Date().toISOString();
+    const pan = agencyF.pan.toUpperCase().trim();
+    const details = {beneficiary:agencyF.beneficiary.trim(),bank:"",account:agencyF.account.trim(),ifsc:agencyF.ifsc.toUpperCase().trim(),upi:agencyF.upi.trim(),pan,panName:agencyF.panName.trim()||agencyF.name.trim(),gstNumber:agencyF.gst.trim().toUpperCase(),agency:true,submittedAt:ts};
+    const advance = ["live","partial_live","payment_details_received"].includes(deal.status);
+    const {error} = await supabase.from('deals').update({agency_managed:true,agency_name:agencyF.name.trim(),agency_gst:agencyF.gst.trim().toUpperCase(),agency_invoice_url:invoiceUrl,payment_details:details,payment_details_submitted_at:ts,pan_number:pan,pan_name:details.panName,...(advance?{status:'payment_details_received'}:{})}).eq('id',deal.id);
+    if(error){ console.error("Agency details save failed:",error); return notify("Couldn't save: "+error.message,"err"); }
+    upDeal(deal.id,{agencyManaged:true,agencyName:agencyF.name.trim(),agencyGst:agencyF.gst.trim(),agencyInvoiceUrl:invoiceUrl,paymentDetails:details,paymentDetailsAt:ts,...(advance?{status:'payment_details_received'}:{})});
+    addLog(deal.id,loggedIn?.name||"You","Agency invoice attached",`${agencyF.name} · GST: ${agencyF.gst||"—"}`);
+    setSel(null); setModal(null);
+    notify("Agency invoice & details saved — ready for Finance");
+  };
+
   // generateInvoicePDF kept for admin fallback — generates invoice in a new window
   const generateInvoicePDF = (deal) => {
     const inv = invoiceF;
@@ -2414,6 +2482,74 @@ invogue.shop · contact@invogue.shop
     supabase.from('deals').update({invoice_generated:true,invoice_number:invNumber,invoice_date:invDate}).eq('id',deal.id).then(({error})=>{if(error) console.error("Invoice log failed:",error);});
     setSel(prev=>prev?{...prev,invoiceGenerated:true,invoiceNumber:invNumber,invoiceDate:invDate}:null);
     notify("Invoice generated! Use Print/Save as PDF.");
+  };
+
+  // ─── BULK INVOICE GENERATION (Finance) ───
+  // Generates Invogue invoices for the selected deals from the details the
+  // influencer submitted via the secure form. Agency-managed deals are skipped
+  // (the agency supplies its own GST invoice).
+  const buildOneInvoice = (deal, seq) => {
+    const pd = deal.paymentDetails || {};
+    const camp = campaigns.find(c=>c.id===deal.cid);
+    const invNumber = `INV-${(deal.collabId||deal.id.slice(0,6)).toUpperCase()}-${String(seq+1).padStart(2,'0')}`;
+    const invDate = new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
+    const tdsApply = isTDSApplicable(deal.inf, deal.amount);
+    const tdsAmt = tdsApply ? calcTDSAmount(deal.amount, deal.tdsRate||10) : 0;
+    const net = deal.amount - tdsAmt;
+    return `<div class="invoice">
+      <div class="header">
+        <div><div class="brand">INVOGUE</div><div class="brand-sub">SHAPEWEAR & LIFESTYLE</div><div style="font-size:11px;color:#7D766A;margin-top:8px">invogue.shop · contact@invogue.shop</div></div>
+        <div><div class="invoice-title">INVOICE</div><div class="invoice-meta"><b>${invNumber}</b><br>Date: ${invDate}<br>${deal.collabId||""}</div></div>
+      </div>
+      <div class="two-col">
+        <div class="section"><div class="section-title">Pay To</div><div class="info-block"><b>${pd.beneficiary||deal.inf}</b>${pd.address?pd.address+"<br>":""}${pd.pan?"PAN: "+pd.pan+(pd.panName?" ("+pd.panName+")":"")+"<br>":""}${pd.gstNumber?"GST: "+pd.gstNumber:""}</div></div>
+        <div class="section"><div class="section-title">Campaign</div><div class="info-block"><b>${camp?.name||"—"}</b>Platform: ${deal.platform}<br>Usage: ${deal.usage||"—"}</div></div>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>Deliverable</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
+        <tbody>
+        ${(deal.dels||[]).map((dl,i)=>`<tr><td>${i+1}</td><td>${dl.type}</td><td>${dl.desc||"—"}</td><td style="text-align:right">${i===0?"₹"+deal.amount.toLocaleString("en-IN"):"—"}</td></tr>`).join("")}
+        <tr class="total-row"><td colspan="3" style="text-align:right">Subtotal</td><td style="text-align:right">₹${deal.amount.toLocaleString("en-IN")}</td></tr>
+        ${tdsApply?`<tr><td colspan="3" style="text-align:right">TDS (${deal.tdsRate||10}%)</td><td style="text-align:right;color:#B42318">-₹${tdsAmt.toLocaleString("en-IN")}</td></tr>`:""}
+        <tr class="grand-total"><td colspan="3" style="text-align:right">NET PAYABLE</td><td style="text-align:right">₹${net.toLocaleString("en-IN")}</td></tr>
+        </tbody>
+      </table>
+      <div class="section"><div class="section-title">Payment Details</div><div class="payment-box">
+        ${pd.beneficiary?`<div class="row"><span>Beneficiary</span><b>${pd.beneficiary}</b></div>`:""}
+        ${pd.bank?`<div class="row"><span>Bank</span><b>${pd.bank}</b></div>`:""}
+        ${pd.account?`<div class="row"><span>Account Number</span><b>${pd.account}</b></div>`:""}
+        ${pd.ifsc?`<div class="row"><span>IFSC</span><b>${pd.ifsc}</b></div>`:""}
+        ${pd.upi?`<div class="row"><span>UPI ID</span><b>${pd.upi}</b></div>`:""}
+      </div></div>
+      <div class="footer"><div style="font-family:Barlow,sans-serif;font-weight:700;color:#770A1C;letter-spacing:2px;margin-bottom:4px">INVOGUE</div>System-generated invoice · invogue.shop</div>
+    </div>`;
+  };
+
+  const bulkGenerateInvoices = () => {
+    const ids = Object.keys(batchSelected).filter(id=>batchSelected[id]);
+    const chosen = deals.filter(d=>ids.includes(d.id));
+    const eligible = chosen.filter(d=>d.paymentDetails && !d.agencyManaged);
+    const skipped = chosen.length - eligible.length;
+    if(eligible.length===0) return notify("None of the selected deals have submitted (non-agency) payment details yet","err");
+    const w = window.open("","_blank","width=900,height=1100");
+    if(!w) return notify("Pop-up blocked — please allow pop-ups","err");
+    const bodies = eligible.map((d,i)=>buildOneInvoice(d,i)).join('<div style="page-break-after:always"></div>');
+    w.document.write(`<!DOCTYPE html><html><head><title>Invoices (${eligible.length})</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@600;700;800&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Archivo,sans-serif;color:#1A1A1A;font-size:13px;line-height:1.6}
+.invoice{padding:40px;max-width:800px;margin:0 auto}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #770A1C}
+.brand{font-family:Barlow,sans-serif;font-size:22px;font-weight:800;color:#770A1C;letter-spacing:3px}.brand-sub{font-size:10px;color:#7D766A;letter-spacing:1px;font-weight:600}
+.invoice-title{font-family:Barlow,sans-serif;font-size:26px;font-weight:800;color:#770A1C;text-align:right}.invoice-meta{text-align:right;font-size:12px;color:#7D766A;margin-top:4px}.invoice-meta b{color:#1A1A1A}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:22px}.section-title{font-family:Barlow,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#770A1C;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #eee}.info-block{font-size:12px;line-height:1.7}.info-block b{font-size:13px;display:block;margin-bottom:2px}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}th{background:#770A1C;color:#F6DFC1;padding:8px 12px;text-align:left;font-family:Barlow,sans-serif;font-size:11px;text-transform:uppercase}td{padding:8px 12px;border-bottom:1px solid #eee;font-size:12px}.total-row td{font-weight:700;background:#F6F4F0}.grand-total td{background:#770A1C;color:#F6DFC1;font-size:15px;font-weight:800;font-family:Barlow,sans-serif}
+.payment-box{background:#F6F4F0;border:1px solid #ddd;border-radius:6px;padding:16px;margin-bottom:20px}.payment-box .row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px}
+.footer{margin-top:28px;padding-top:16px;border-top:2px solid #770A1C;text-align:center;font-size:11px;color:#7D766A}
+@media print{.no-print{display:none!important}.invoice{padding:24px}}</style></head><body>
+<div class="no-print" style="text-align:center;padding:16px;background:#F6F4F0"><button onclick="window.print()" style="background:#770A1C;color:#F6DFC1;border:none;padding:10px 24px;border-radius:4px;font-family:Barlow,sans-serif;font-weight:700;cursor:pointer;letter-spacing:1px;text-transform:uppercase">Print / Save all as PDF</button>${skipped?`<div style="font-size:12px;color:#7D766A;margin-top:8px">${skipped} selected deal${skipped>1?"s":""} skipped (agency-managed or no details submitted)</div>`:""}</div>
+${bodies}</body></html>`);
+    w.document.close();
+    notify(`Generated ${eligible.length} invoice${eligible.length>1?"s":""}${skipped?` · ${skipped} skipped`:""}`);
   };
 
   const dropCollab = (d, reason) => {
@@ -3493,6 +3629,7 @@ return (
             <div><span style={{fontSize:"20px",fontWeight:800}}>💰 Payment Center</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Payment scheduling, TDS tracking & batch exports</span></div>
             <div style={{display:"flex",gap:"6px"}}>
               {batchMode&&<Btn v="ok" sm onClick={exportBatchCSV}>📥 Export {Object.values(batchSelected).filter(Boolean).length} Selected</Btn>}
+              {batchMode&&<Btn v="primary" sm onClick={bulkGenerateInvoices}>🧾 Generate Invoices ({Object.values(batchSelected).filter(Boolean).length})</Btn>}
               <Btn v={batchMode?"danger":"gold"} sm onClick={()=>{setBatchMode(!batchMode);if(batchMode)setBatchSelected({})}}>{batchMode?"✕ Exit Batch":"📋 Batch Export"}</Btn>
             </div>
           </div>
@@ -3546,9 +3683,13 @@ return (
                   <div style={{background:T.warnBg,padding:"5px 7px",borderRadius:"5px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Due</div><div style={{fontSize:"12px",fontWeight:800,color:T.warn}}>{f(rem)}</div></div>
                   <div style={{background:tdsApply?"#f5f3ff":"#f0fdf4",padding:"5px 7px",borderRadius:"5px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>TDS</div><div style={{fontSize:"12px",fontWeight:800,color:tdsApply?"#7c3aed":T.ok}}>{tdsApply?`${f(tdsAmt)} (${d.tdsRate||10}%)`:"N/A"}</div></div>
                 </div>
+                {d.agencyManaged&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",padding:"6px 8px",background:T.goldSoft,border:`1px solid ${T.gold}55`,borderRadius:"5px",marginBottom:"6px",fontSize:"11px"}}>
+                  <span>🏢 <b>Agency-managed</b> · pay <b>{d.paymentDetails?.beneficiary||d.agencyName||"agency"}</b>{d.agencyGst?` · GST ${d.agencyGst}`:""}</span>
+                  {d.agencyInvoiceUrl&&<a href={d.agencyInvoiceUrl} target="_blank" rel="noopener noreferrer" style={{color:T.brand,fontWeight:700,textDecoration:"none"}}>View invoice ↗</a>}
+                </div>}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 12px",fontSize:"11px",color:T.sub}}>
-                  <div>PAN: <b style={{fontFamily:"monospace"}}>{inf?.panNumber||d.pan_number||"—"}</b></div>
-                  <div>Bank: <b>{inf?.bankHolder||"—"}</b>{inf?.bankIfsc?` · ${inf.bankIfsc}`:""}</div>
+                  <div>PAN: <b style={{fontFamily:"monospace"}}>{(d.agencyManaged?d.paymentDetails?.pan:null)||inf?.panNumber||d.pan_number||"—"}</b></div>
+                  <div>Bank: <b>{(d.agencyManaged?d.paymentDetails?.beneficiary:null)||inf?.bankHolder||"—"}</b>{(d.agencyManaged?d.paymentDetails?.ifsc:inf?.bankIfsc)?` · ${d.agencyManaged?d.paymentDetails?.ifsc:inf?.bankIfsc}`:""}</div>
                   <div>FY Total Paid: <b style={{color:fyTotal>50000?"#7c3aed":T.text}}>{f(fyTotal)}</b></div>
                   <div>Terms: <b>{PAYMENT_TERMS_LABELS[d.payment_terms||inf?.defaultPaymentTerms||"next_15th"]||"—"}</b></div>
                 </div>
@@ -4615,6 +4756,39 @@ return (
             })}
           </div>
 
+          {/* By Deliverable Type — the "bank" grouped by type (all pending Stories, all pending Reels, etc.) */}
+          <div style={{fontSize:"13px",fontWeight:800,marginBottom:"10px"}}>By Deliverable Type</div>
+          {(()=>{
+            const byType={};
+            pendingDels.forEach(d=>{(byType[d.type]=byType[d.type]||[]).push(d);});
+            const types=Object.keys(byType).sort();
+            if(types.length===0) return <div style={{color:T.sub,fontSize:"12px",marginBottom:"20px"}}>No active deliverables.</div>;
+            const chip=(n,label,c,bg)=>n>0&&<span style={{padding:"2px 7px",borderRadius:"10px",fontSize:"10px",fontWeight:700,color:c,background:bg}}>{n} {label}</span>;
+            return <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:"10px",marginBottom:"22px"}}>
+              {types.map(type=>{
+                const list=byType[type]; const cnt=st=>list.filter(d=>d.st===st).length;
+                return <div key={type} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",padding:"12px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
+                    <span style={{fontWeight:800,fontSize:"14px"}}>{type}</span>
+                    <span style={{fontSize:"12px",fontWeight:800,color:T.purple}}>{list.length}</span>
+                  </div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:"4px",marginBottom:"8px"}}>
+                    {chip(cnt("pending"),"pending",T.warn,T.warnBg)}
+                    {chip(cnt("submitted"),"submitted",T.info,T.infoBg)}
+                    {chip(cnt("revision_requested"),"revision",T.err,T.errBg)}
+                    {chip(cnt("approved"),"approved",T.ok,T.okBg)}
+                  </div>
+                  <div style={{maxHeight:"170px",overflow:"auto"}}>
+                    {list.map((d,i)=><div key={i} onClick={()=>{const deal=deals.find(x=>x.id===d.dealId);if(deal){setSel(deal);setModal("detail")}}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"6px",padding:"5px 0",borderBottom:`1px dashed ${T.border}`,fontSize:"12px",cursor:"pointer"}}>
+                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><b>{d.inf}</b> <span style={{color:T.sub}}>· {getCamp(d.cid)?.name||"—"}</span></span>
+                      <DBadge s={d.st}/>
+                    </div>)}
+                  </div>
+                </div>;
+              })}
+            </div>;
+          })()}
+
           <div style={{fontSize:"13px",fontWeight:800,marginBottom:"10px"}}>By Influencer</div>
           {deals.filter(d=>!["rejected"].includes(d.status)&&d.dels.length>0).map(d=>{
             const done=d.dels.filter(x=>x.st==="live").length;
@@ -5422,8 +5596,11 @@ return (
               {(role==="negotiator"||role==="admin")&&["pending","renegotiate","approved","manager_approved","email_sent","acknowledged","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
               {(role==="logistics"||role==="admin")&&sel.status==="acknowledged"&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>}
               {(role==="logistics"||role==="admin")&&sel.status==="email_sent"&&!sel.ship&&<div style={{padding:"8px 12px",background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"6px",fontSize:"12px",color:"#92400e"}}>⏳ Awaiting influencer acknowledgement before dispatch</div>}
-              {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&!sel.paymentDetailsAt&&<Btn v="primary" onClick={()=>setModal("collectPayment")}>{sel.paymentFormSent?"✅ Form Sent — Resend":"📩 Send Payment Details Form"}</Btn>}
-              {sel.paymentDetailsAt&&sel.status!=="paid"&&(role==="negotiator"||role==="admin"||role==="approver")&&<div style={{fontSize:"12px",color:T.ok,fontWeight:700,padding:"6px 10px",background:T.okBg,borderRadius:"4px"}}>🧾 Payment details received — ready for Finance to pay</div>}
+              {(role==="negotiator"||role==="admin")&&["partial_live","live"].includes(sel.status)&&!isPaymentEligible(sel)&&!sel.paymentDetailsAt&&<div style={{fontSize:"12px",color:T.warn,fontWeight:600,padding:"6px 10px",background:T.warnBg,borderRadius:"4px"}}>⏳ Payment opens once all required (non-Story) content is live. Stories are optional.</div>}
+              {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&isPaymentEligible(sel)&&!sel.paymentDetailsAt&&<label style={{display:"inline-flex",alignItems:"center",gap:"6px",fontSize:"12px",color:T.sub,cursor:"pointer",padding:"6px 10px",background:sel.agencyManaged?T.goldSoft:"transparent",border:`1px solid ${sel.agencyManaged?T.gold:T.border}`,borderRadius:"6px"}}><input type="checkbox" checked={!!sel.agencyManaged} onChange={()=>toggleAgencyManaged(sel)} style={{cursor:"pointer"}}/>🏢 Agency-managed (agency raises GST invoice)</label>}
+              {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&isPaymentEligible(sel)&&!sel.paymentDetailsAt&&!sel.agencyManaged&&<Btn v="primary" onClick={()=>setModal("collectPayment")}>{sel.paymentFormSent?"✅ Form Sent — Resend":"📩 Send Payment Details Form"}</Btn>}
+              {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&isPaymentEligible(sel)&&!sel.paymentDetailsAt&&sel.agencyManaged&&<Btn v="gold" onClick={()=>openAgencyModal(sel)}>🏢 Attach Agency Invoice &amp; Details</Btn>}
+              {sel.paymentDetailsAt&&sel.status!=="paid"&&(role==="negotiator"||role==="admin"||role==="approver")&&<div style={{fontSize:"12px",color:T.ok,fontWeight:700,padding:"6px 10px",background:T.okBg,borderRadius:"4px"}}>{sel.agencyManaged?`🏢 Agency invoice attached (${sel.agencyName||"agency"}) — ready for Finance`:"🧾 Payment details received — ready for Finance to pay"}</div>}
               {sel.status==="manager_approved"&&<div style={{fontSize:"12px",color:T.info,fontWeight:700,padding:"6px 10px",background:T.infoBg,borderRadius:"4px"}}>✅ Manager approved — awaiting admin final approval (₹50K+ deal)</div>}
               {sel.status==="drop_requested"&&(role==="approver"||role==="admin")&&<div style={{display:"flex",gap:"6px"}}><Btn v="ok" sm onClick={()=>approveDropRequest(sel)}>✓ Approve Drop</Btn><Btn v="outline" sm onClick={()=>rejectDropRequest(sel)}>✕ Reject Drop</Btn></div>}
               {sel.status==="drop_requested"&&role==="negotiator"&&<div style={{fontSize:"12px",color:T.warn,fontWeight:700,padding:"6px 10px",background:T.warnBg,borderRadius:"4px"}}>⏳ Drop request pending manager approval</div>}
@@ -5613,6 +5790,42 @@ return (
 
       {/* SEND FOR PAYMENT MODAL */}
       {/* COLLECT PAYMENT DETAILS MODAL */}
+      <Modal open={modal==="agencyInvoice"} onClose={()=>setModal("detail")} title={`Agency Invoice & Details — ${sel?.inf}`} w={540}>
+        {sel&&<>
+          <div style={{padding:"10px 12px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>Locked Amount: <b style={{fontSize:"18px",color:T.gold}}>{f(sel.amount)}</b></div>
+              <span style={{fontSize:"12px",fontWeight:700,color:T.brand,background:"#fff",padding:"3px 10px",borderRadius:"4px"}}>{sel.collabId||"—"}</span>
+            </div>
+            <div style={{fontSize:"11px",color:T.sub,marginTop:"3px"}}>This creator is agency-managed — attach the agency's GST invoice and payout details. Finance pays the agency the locked amount.</div>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px"}}>
+            <Field label="Agency Name" required><Inp value={agencyF.name} onChange={e=>setAgencyF({...agencyF,name:e.target.value})} placeholder="e.g. Creator Co. Talent"/></Field>
+            <Field label="Agency GST Number"><Inp value={agencyF.gst} onChange={e=>setAgencyF({...agencyF,gst:e.target.value.toUpperCase()})} placeholder="GSTIN (optional)"/></Field>
+            <Field label="Beneficiary Name" required><Inp value={agencyF.beneficiary} onChange={e=>setAgencyF({...agencyF,beneficiary:e.target.value})} placeholder="Name on agency bank account"/></Field>
+            <Field label="Account Number" required><Inp value={agencyF.account} onChange={e=>setAgencyF({...agencyF,account:e.target.value})} placeholder="Account number"/></Field>
+            <Field label="IFSC Code" required><Inp value={agencyF.ifsc} onChange={e=>setAgencyF({...agencyF,ifsc:e.target.value.toUpperCase()})} placeholder="HDFC0001234"/></Field>
+            <Field label="UPI ID"><Inp value={agencyF.upi} onChange={e=>setAgencyF({...agencyF,upi:e.target.value})} placeholder="Optional"/></Field>
+            <Field label="Agency PAN"><Inp value={agencyF.pan} onChange={e=>setAgencyF({...agencyF,pan:e.target.value.toUpperCase()})} placeholder="ABCDE1234F (optional)"/></Field>
+            <Field label="Name on PAN"><Inp value={agencyF.panName} onChange={e=>setAgencyF({...agencyF,panName:e.target.value})} placeholder="Defaults to agency name"/></Field>
+          </div>
+
+          <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",margin:"10px 0 6px",fontFamily:"Barlow,sans-serif"}}>📄 Agency GST Invoice</div>
+          <div style={{border:`2px dashed ${agencyFile?T.ok:T.border}`,borderRadius:"8px",padding:"14px",textAlign:"center",marginBottom:"8px",background:agencyFile?T.okBg:"transparent",cursor:"pointer"}} onClick={()=>document.getElementById('agencyFileInput')?.click()}>
+            <input id="agencyFileInput" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style={{display:"none"}} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)setAgencyFile(file);}}/>
+            {agencyFile?<div style={{fontSize:"13px",fontWeight:700,color:T.ok}}>📄 {agencyFile.name} <span style={{fontSize:"11px",color:T.sub,fontWeight:400}}>· click to change</span></div>:<div><div style={{fontSize:"22px",marginBottom:"2px"}}>📤</div><div style={{fontSize:"12px",color:T.sub}}>Click to upload the agency's GST invoice (PDF/JPG/PNG)</div></div>}
+          </div>
+          <Field label="…or paste an invoice link"><Inp value={agencyF.invoiceLink} onChange={e=>setAgencyF({...agencyF,invoiceLink:e.target.value})} placeholder="https://drive.google.com/…"/></Field>
+          {agencyUploading&&<div style={{padding:"8px",background:T.infoBg,borderRadius:"6px",marginBottom:"8px",fontSize:"12px",color:T.info,fontWeight:600}}>⏳ Uploading invoice to Drive…</div>}
+
+          <div style={{display:"flex",gap:"8px",justifyContent:"flex-end",marginTop:"12px",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>
+            <Btn v="outline" onClick={()=>setModal("detail")}>Cancel</Btn>
+            <Btn v="gold" disabled={agencyUploading} onClick={()=>submitAgencyDetails(sel)}>{agencyUploading?"Uploading…":"💸 Save & Send to Finance"}</Btn>
+          </div>
+        </>}
+      </Modal>
+
       <Modal open={modal==="collectPayment"} onClose={()=>setModal("detail")} title={`Send Payment Details Form — ${sel?.inf}`} w={520}>
         {sel&&<>
           <div style={{padding:"12px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>

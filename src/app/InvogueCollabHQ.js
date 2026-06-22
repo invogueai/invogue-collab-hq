@@ -307,6 +307,9 @@ export default function InvogueCollabHQ() {
 
   // Form states
   const [nDeal, setNDeal] = useState(null);
+  const submittingDealRef = useRef(false); // synchronous guard against double-submit
+  const [submittingDeal, setSubmittingDeal] = useState(false); // drives button disabled state
+  const [editingDealId, setEditingDealId] = useState(null); // non-null = New Deal modal is editing an existing (pre-approval) deal
   const [nCamp, setNCamp] = useState(null);
   const [shipF, setShipF] = useState({track:"",carrier:"DTDC",orderId:""});
   const [payF, setPayF] = useState({type:"advance",amount:"",note:""});
@@ -819,7 +822,7 @@ export default function InvogueCollabHQ() {
     const arr=[];
     deals.forEach(d=>{
       (d.shipHistory||[]).forEach((h,i)=>{
-        if(h.type==="reship"&&h.status==="reship_pending") arr.push({...h,histIdx:i,dealId:d.id,inf:d.inf,address:h.newAddress||d.address,phone:d.phone});
+        if(h.type==="reship"&&h.status==="reship_pending") arr.push({...h,histIdx:i,dealId:d.id,inf:d.inf,address:h.newAddress||d.address,phone:h.phone||d.phone});
       });
     });
     return arr;
@@ -1035,6 +1038,9 @@ export default function InvogueCollabHQ() {
 
   // ── Actions ──
   const createDeal = async () => {
+    // Guard against double submission (e.g. a fast double-click creating two deals).
+    // Ref is checked synchronously so two clicks in the same tick can't both pass.
+    if(submittingDealRef.current) return;
     // Validation
     setFormErrors({});
     const errors = {};
@@ -1064,6 +1070,10 @@ export default function InvogueCollabHQ() {
       setFormErrors(errors);
       return notify("Please fix validation errors","err");
     }
+
+    // Validation passed — lock submission until this attempt finishes.
+    submittingDealRef.current = true;
+    setSubmittingDeal(true);
 
     const dealId = uid();
     const collabId = genCollabId();
@@ -1161,6 +1171,87 @@ export default function InvogueCollabHQ() {
     setFormErrors({});
     notify("Deal submitted for approval!");
     } catch(e) { console.error("Deal creation error:",e); notify("Error saving deal. Please try again.","err"); }
+    finally { submittingDealRef.current = false; setSubmittingDeal(false); }
+  };
+
+  // ─── EDIT A DEAL (only before manager approval) ───
+  const openEditDeal = (deal) => {
+    if(!(role==="negotiator"||role==="admin")) return notify("Only the negotiator or admin can edit a deal","err");
+    if(!["pending","renegotiate"].includes(deal.status)) return notify("Deals can only be edited before manager approval","err");
+    const addr = deal.address;
+    const parts = typeof addr==='string' ? addr.split(', ') : [];
+    setNDeal({
+      inf:deal.inf, email:deal.email||"", platform:deal.platform, followers:deal.followers||"",
+      products:(deal.products&&deal.products.length?deal.products:[{name:deal.product||"",color:"",size:"",qty:"1"}]),
+      usage:deal.usage||"6 months", deadline:toDateOnly(deal.deadline), profile:deal.profile||"",
+      phone:deal.phone||"", amount:String(deal.amount||""),
+      address: (typeof addr==='object'&&addr) ? addr : {street:parts[0]||(typeof addr==='string'?addr:"")||"", city:parts[1]||"", state:parts[2]||"", pincode:parts[3]||""},
+      paymentTerms:deal.paymentTerms||"Net 15 days",
+      cid:deal.cid||campaigns[0]?.id||"",
+      dels:(deal.dels||[]).map(dl=>({id:dl.id||uid(),type:dl.type,desc:dl.desc,st:dl.st||'pending',link:dl.link||""})),
+    });
+    setEditingDealId(deal.id);
+    setFormErrors({});
+    setModal("newDeal");
+  };
+
+  const saveDealEdits = async () => {
+    if(submittingDealRef.current) return;
+    setFormErrors({});
+    const errors = {};
+    if(!nDeal.profile) errors.profile = "Influencer profile is mandatory";
+    const hasProduct = (nDeal.products && nDeal.products.some(p=>p.name)) || nDeal.product;
+    if(!nDeal.inf||!nDeal.amount||!nDeal.deadline) errors.general = "Fill all required fields";
+    if(!hasProduct) errors.products = "At least one product is required";
+    if(!nDeal.email) errors.email = "Email is required";
+    if(!nDeal.dels||nDeal.dels.length===0) errors.dels = "Add at least one deliverable";
+    if((nDeal.dels||[]).some(d=>!d.desc)) errors.dels = "All deliverables must have descriptions";
+    if(nDeal.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nDeal.email)) errors.email = "Invalid email format";
+    if(nDeal.phone && !validPhone(nDeal.phone)) errors.phone = "Phone must be 10 digits";
+    if(nDeal.profile && !validUrl(nDeal.profile)) errors.profile = "Invalid profile URL";
+    if(Object.keys(errors).length > 0) { setFormErrors(errors); return notify("Please fix validation errors","err"); }
+
+    submittingDealRef.current = true; setSubmittingDeal(true);
+    try {
+      const ts = new Date().toISOString();
+      const userName = loggedIn?.name||"You";
+      const productStr = nDeal.products?.filter(p=>p.name).map(p=>p.name).join(", ") || nDeal.product;
+      const addressStr = typeof nDeal.address === 'object' ? [nDeal.address.street, nDeal.address.city, nDeal.address.state, nDeal.address.pincode].filter(Boolean).join(', ') : (nDeal.address || '');
+
+      const {error:updErr} = await supabase.from('deals').update({
+        influencer_name:nDeal.inf, platform:nDeal.platform, followers:nDeal.followers,
+        product:productStr, amount:+nDeal.amount, campaign_id:nDeal.cid||null,
+        usage_rights:nDeal.usage, deadline:nDeal.deadline, profile_link:nDeal.profile,
+        phone:nDeal.phone, address:addressStr, email:nDeal.email,
+        products_json:JSON.stringify(nDeal.products||[]), payment_terms:nDeal.paymentTerms||"Net 15 days",
+      }).eq('id',editingDealId);
+      if(updErr){ console.error("Deal update failed:",updErr); return notify("Failed to update deal: "+updErr.message,"err"); }
+
+      // Diff deliverables: update existing, insert new, delete removed
+      const existing = (deals.find(d=>d.id===editingDealId)?.dels)||[];
+      const keptIds = (nDeal.dels||[]).map(d=>d.id).filter(Boolean);
+      const removed = existing.filter(d=>!keptIds.includes(d.id)).map(d=>d.id);
+      if(removed.length) { const {error}=await supabase.from('deliverables').delete().in('id',removed); if(error) console.error("Deliverable delete failed:",error); }
+      const newDels = [];
+      for(const dl of (nDeal.dels||[])){
+        const id = dl.id || uid();
+        if(existing.find(e=>e.id===dl.id)){
+          await supabase.from('deliverables').update({type:dl.type,description:dl.desc}).eq('id',id);
+        } else {
+          await supabase.from('deliverables').insert({id,deal_id:editingDealId,type:dl.type,description:dl.desc,status:'pending',live_link:null});
+        }
+        newDels.push({id,type:dl.type,desc:dl.desc,st:dl.st||'pending',link:dl.link||""});
+      }
+
+      await supabase.from('audit_log').insert({deal_id:editingDealId,user_name:userName,action:'Deal edited',detail:`${f(nDeal.amount)} | ${newDels.length} deliverables`,created_at:ts});
+
+      const patch = {inf:nDeal.inf,email:nDeal.email,platform:nDeal.platform,followers:nDeal.followers,products:nDeal.products,product:productStr,amount:+nDeal.amount,cid:nDeal.cid,usage:nDeal.usage,deadline:nDeal.deadline,profile:nDeal.profile,phone:nDeal.phone,address:addressStr,paymentTerms:nDeal.paymentTerms,dels:newDels};
+      setDeals(prev=>prev.map(d=>d.id===editingDealId?{...d,...patch}:d));
+      setSel(prev=>prev&&prev.id===editingDealId?{...prev,...patch}:prev);
+      setModal(null); setNDeal(null); setEditingDealId(null); setFormErrors({});
+      notify("Deal updated!");
+    } catch(e){ console.error("Deal edit error:",e); notify("Error updating deal. Please try again.","err"); }
+    finally { submittingDealRef.current = false; setSubmittingDeal(false); }
   };
 
   const createCampaign = async () => {
@@ -1627,11 +1718,12 @@ export default function InvogueCollabHQ() {
     notify("Pickup marked as not needed");
   };
 
-  const requestReshipment = (deal, products, note, newAddress) => {
+  const requestReshipment = (deal, products, note, newAddress, phone) => {
     if(!products||products.length===0||products.every(p=>!p.name)) return notify("Add at least one product","err");
+    if(phone && !validPhone(phone)) return notify("Phone must be 10 digits","err");
     const userName = loggedIn?.name||"You";
     const ts = new Date().toISOString();
-    const entry = {type:"reship",products,note:note||"",newAddress:newAddress||"",status:"reship_pending",requestedBy:userName,requestedAt:ts};
+    const entry = {type:"reship",products,note:note||"",newAddress:newAddress||"",phone:phone||"",status:"reship_pending",requestedBy:userName,requestedAt:ts};
     const shipHistory = [...(deal.shipHistory||[]), entry];
     supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error) console.error("Reship request save failed:",error);});
     upDeal(deal.id,{shipHistory});
@@ -1742,13 +1834,17 @@ export default function InvogueCollabHQ() {
     notify("Content submitted for manager review!");
   };
 
-  const approveContent = (deal, delIdx) => {
+  const approveContent = async (deal, delIdx) => {
     const dl0 = deal.dels[delIdx];
     const delId = dl0.id;
     const ts = new Date().toISOString();
     const newHistory = [...(dl0.history||[]),{action:"approved",by:loggedIn?.name||"You",at:ts}];
+    // Persist FIRST and surface any error — previously this update was fire-and-forget,
+    // so a failed write (e.g. RLS/permission) silently reverted on refresh and looked
+    // like "approval doesn't stick", especially for revised→resubmitted deliverables.
+    const {error} = await supabase.from('deliverables').update({status:'approved',approved_at:ts,history:newHistory}).eq('id',delId);
+    if(error){ console.error("Approve content failed:",error); return notify("Couldn't approve content: "+error.message,"err"); }
     const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"approved",history:newHistory}:dl);
-    supabase.from('deliverables').update({status:'approved',approved_at:ts,history:newHistory}).eq('id',delId).then(({error})=>{if(error) console.error("Approve content failed:",error);});
     upDeal(deal.id,{dels:newDels});
     addLog(deal.id,loggedIn?.name||"You","Content approved",`${deal.dels[delIdx].type}: ${deal.dels[delIdx].desc}`);
     setSel(prev=>prev?{...prev,dels:newDels}:null);
@@ -2640,12 +2736,12 @@ return (
 
           {/* APPROVAL QUEUE — Admin can approve */}
           {pendingApproval.length>0&&<Section title={`Approval Queue (${pendingApproval.length})`} icon="⚡" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Action Required</span>}>
-            {pendingApproval.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${d.status==="manager_approved"?T.info:T.warn}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            {pendingApproval.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${d.status==="manager_approved"?T.info:T.warn}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
               <div>
                 <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"13px"}}>· {d.platform} · {d.followers}</span></div>
                 <div style={{fontSize:"11px",color:T.sub}}>{d.product} · {d.dels.length} deliverables · by {d.by} · {getCamp(d.cid)?.name||""}</div>
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+              <div onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:"6px"}}>
                 <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{f(d.amount)}</span>
                 {d.status==="manager_approved"&&<span style={{fontSize:"10px",padding:"2px 6px",borderRadius:"4px",background:T.infoBg,color:T.info,fontWeight:700}}>Manager ✓ — Admin Needed</span>}
                 <Btn v="ok" sm onClick={()=>setConfirmAction({title:"Approve Deal",msg:"Approve and lock "+f(d.amount)+" for "+d.inf+"?",onConfirm:()=>{approveDeal(d);setConfirmAction(null)}})}>✓</Btn>
@@ -2931,7 +3027,7 @@ return (
         return <>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
             <div><span style={{fontSize:"20px",fontWeight:800}}>👤 My Dashboard</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Your collaborations at a glance</span></div>
-            <Btn v="gold" sm onClick={()=>{setNDeal({inf:"",platform:"Instagram",followers:"",product:"",amount:"",usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>+ New Deal</Btn>
+            <Btn v="gold" sm onClick={()=>{setEditingDealId(null);setNDeal({inf:"",platform:"Instagram",followers:"",product:"",amount:"",usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>+ New Deal</Btn>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"8px",marginBottom:"16px"}}>
             <StatBox l="Needs My Action" v={myNeedAction.length} c={myNeedAction.length>0?T.warn:T.ok} sub="Do these now"/>
@@ -4245,7 +4341,7 @@ return (
               ))}
             </div>
             <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
-              {(role==="negotiator"||role==="admin")&&<Btn v="gold" sm onClick={()=>{setNDeal({inf:"",email:"",platform:"Instagram",followers:"",products:[],usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},paymentTerms:"Net 15 days",cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>+ New Deal</Btn>}
+              {(role==="negotiator"||role==="admin")&&<Btn v="gold" sm onClick={()=>{setEditingDealId(null);setNDeal({inf:"",email:"",platform:"Instagram",followers:"",products:[],usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},paymentTerms:"Net 15 days",cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>+ New Deal</Btn>}
               {bulkSelected.size>0&&<>
                 {(role==="approver"||role==="admin")&&<Btn v="ok" sm onClick={bulkApprove}>✓ Approve ({bulkSelected.size})</Btn>}
                 {(role==="approver"||role==="admin")&&<Btn v="danger" sm onClick={bulkReject}>✕ Reject ({bulkSelected.size})</Btn>}
@@ -4270,13 +4366,13 @@ return (
                   const camp=getCamp(d.cid);
                   const paid=totalPaid(d);
                   const done=d.dels.filter(x=>x.st==="live").length;
-                  return <div key={d.id} style={{background:T.surface,border:bulkSelected.has(d.id)?`2px solid ${T.gold}`:(`1px solid ${T.border}`),borderRadius:"9px",padding:"13px",cursor:"pointer",transition:"all .12s",animation:"fadeUp .3s ease"}}
+                  return <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:bulkSelected.has(d.id)?`2px solid ${T.gold}`:(`1px solid ${T.border}`),borderRadius:"9px",padding:"13px",cursor:"pointer",transition:"all .12s",animation:"fadeUp .3s ease"}}
                     onMouseEnter={e=>{if(!bulkSelected.has(d.id)){e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow=T.cardShadowHover}}}
                     onMouseLeave={e=>{if(!bulkSelected.has(d.id)){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"5px"}}>
                       <div style={{display:"flex",alignItems:"flex-start",gap:"6px"}}>
-                        <input type="checkbox" checked={bulkSelected.has(d.id)} onChange={e=>{e.stopPropagation();toggleBulkSelect(d.id)}} style={{cursor:"pointer",marginTop:"2px"}}/>
-                        <div onClick={()=>{setSel(d);setModal("detail")}} style={{cursor:"pointer"}}>
+                        <input type="checkbox" checked={bulkSelected.has(d.id)} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();toggleBulkSelect(d.id)}} style={{cursor:"pointer",marginTop:"2px"}}/>
+                        <div>
                           <div style={{fontWeight:800,fontSize:"14px"}}>{d.inf}</div>
                           <div style={{fontSize:"11px",color:T.sub}}>{d.platform} · {d.followers}</div>
                         </div>
@@ -4498,7 +4594,7 @@ return (
       {/* ═══════════════ MODALS ═══════════════ */}
 
       {/* NEW DEAL */}
-      <Modal open={modal==="newDeal"&&nDeal} onClose={()=>setModal(null)} title="New Collaboration" w={580}>
+      <Modal open={modal==="newDeal"&&nDeal} onClose={()=>{setModal(null);setEditingDealId(null)}} title={editingDealId?"Edit Collaboration":"New Collaboration"} w={580}>
         {nDeal&&<>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 10px"}}>
             <Field label="Campaign *"><Sel value={nDeal.cid} onChange={e=>setNDeal({...nDeal,cid:e.target.value})} options={campaigns.map(c=>({v:c.id,l:c.name}))}/></Field>
@@ -4571,8 +4667,8 @@ return (
           </div>
 
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"14px",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>
-            <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
-            <Btn v="gold" onClick={createDeal}>Submit for Approval</Btn>
+            <Btn v="outline" onClick={()=>{setModal(null);setEditingDealId(null)}}>Cancel</Btn>
+            <Btn v="gold" disabled={submittingDeal} onClick={editingDealId?saveDealEdits:createDeal}>{submittingDeal?(editingDealId?"Saving…":"Submitting…"):(editingDealId?"Save Changes":"Submit for Approval")}</Btn>
           </div>
           <div style={{marginTop:"7px",padding:"6px 10px",background:T.infoBg,borderRadius:"5px",fontSize:"11px",color:T.info}}>🔒 Amount and deliverable list lock after manager approval. Email auto-generates from locked data.</div>
         </>}
@@ -5149,7 +5245,7 @@ return (
               {/* Negotiator actions: Request Pickup / Request Re-shipment */}
               {(role==="negotiator"||role==="admin")&&sel.ship?.st==="delivered"&&<div style={{display:"flex",gap:"6px",marginTop:"8px"}}>
                 <Btn v="gold" sm onClick={()=>{setPickupF({reason:"Product Change",note:""});setModal("pickupRequest")}}>🔄 Request Pickup</Btn>
-                <Btn v="purple" sm onClick={()=>{setReshipF({products:[{name:"",color:"",size:"",qty:"1"}],note:"",newAddress:""});setModal("reshipRequest")}}>📦 Request New Shipment</Btn>
+                <Btn v="purple" sm onClick={()=>{setReshipF({products:[{name:"",color:"",size:"",qty:"1"}],note:"",newAddress:"",phone:""});setModal("reshipRequest")}}>📦 Request New Shipment</Btn>
               </div>}
             </Section>}
 
@@ -5195,6 +5291,7 @@ return (
 
             {/* Actions */}
             <div style={{display:"flex",gap:"5px",flexWrap:"wrap",paddingTop:"10px",borderTop:`1px solid ${T.border}`}}>
+              {(role==="negotiator"||role==="admin")&&["pending","renegotiate"].includes(sel.status)&&<Btn v="outline" sm onClick={()=>openEditDeal(sel)}>✎ Edit Details</Btn>}
               {(role==="approver"||role==="admin")&&(sel.status==="pending"||sel.status==="renegotiate"||(sel.status==="manager_approved"&&role==="admin"))&&<>
                 <Btn v="ok" onClick={()=>approveDeal(sel)}>✓ Approve & Lock</Btn>
                 <Btn v="outline" onClick={()=>renegDeal(sel)}>↩ Renegotiate</Btn>
@@ -5340,19 +5437,27 @@ return (
               <span style={{fontSize:"11px",fontWeight:800,color:T.brand,textTransform:"uppercase",letterSpacing:".5px"}}>📦 New Products ({reshipF.products?.length||0})</span>
               <Btn v="outline" sm onClick={()=>setReshipF({...reshipF,products:[...(reshipF.products||[]),{name:"",color:"",size:"",qty:"1"}]})}>+ Add</Btn>
             </div>
-            {(reshipF.products||[]).map((p,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 60px 24px",gap:"5px",marginBottom:"4px",alignItems:"center"}}>
-              <Inp value={p.name} onChange={e=>{const ps=[...(reshipF.products||[])];ps[i]={...ps[i],name:e.target.value};setReshipF({...reshipF,products:ps})}} placeholder="Product name *"/>
-              <Inp value={p.color} onChange={e=>{const ps=[...(reshipF.products||[])];ps[i]={...ps[i],color:e.target.value};setReshipF({...reshipF,products:ps})}} placeholder="Color"/>
-              <Inp value={p.size} onChange={e=>{const ps=[...(reshipF.products||[])];ps[i]={...ps[i],size:e.target.value};setReshipF({...reshipF,products:ps})}} placeholder="Size"/>
-              <Inp value={p.qty} onChange={e=>{const ps=[...(reshipF.products||[])];ps[i]={...ps[i],qty:e.target.value};setReshipF({...reshipF,products:ps})}} placeholder="Qty" type="number"/>
+            {(reshipF.products||[]).map((p,i)=>{
+              const cat = productCatalog.find(pc=>pc.name===p.name);
+              const upd = patch=>{const ps=[...(reshipF.products||[])];ps[i]={...ps[i],...patch};setReshipF({...reshipF,products:ps})};
+              return <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 60px 24px",gap:"5px",marginBottom:"4px",alignItems:"center"}}>
+              <Sel value={p.name} onChange={e=>upd({name:e.target.value,color:"",size:""})} options={[{v:"",l:"Select product…"},...productCatalog.map(pc=>({v:pc.name,l:pc.name}))]}/>
+              {cat&&cat.colors&&cat.colors.length>0
+                ? <Sel value={p.color} onChange={e=>upd({color:e.target.value})} options={[{v:"",l:"Color"},...cat.colors.map(c=>({v:c,l:c}))]}/>
+                : <Inp value={p.color} onChange={e=>upd({color:e.target.value})} placeholder="Color"/>}
+              {cat&&cat.sizes&&cat.sizes.length>0
+                ? <Sel value={p.size} onChange={e=>upd({size:e.target.value})} options={[{v:"",l:"Size"},...cat.sizes.map(s=>({v:s,l:s}))]}/>
+                : <Inp value={p.size} onChange={e=>upd({size:e.target.value})} placeholder="Size"/>}
+              <Inp value={p.qty} onChange={e=>upd({qty:e.target.value})} placeholder="Qty" type="number"/>
               {(reshipF.products||[]).length>1&&<button onClick={()=>setReshipF({...reshipF,products:(reshipF.products||[]).filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:T.err,cursor:"pointer",fontSize:"13px",padding:0}}>✕</button>}
-            </div>)}
+            </div>;})}
           </div>
           <Field label="Updated Shipping Address (if changed)"><Inp value={reshipF.newAddress} onChange={e=>setReshipF({...reshipF,newAddress:e.target.value})} placeholder={sel.address||"Same as original address"}/></Field>
+          <Field label="Updated Phone (if changed)"><Inp value={reshipF.phone} onChange={e=>setReshipF({...reshipF,phone:e.target.value})} placeholder={sel.phone||"Same as original phone"}/></Field>
           <Field label="Note for Logistics"><Textarea value={reshipF.note} onChange={e=>setReshipF({...reshipF,note:e.target.value})} placeholder="Reason for new shipment, special instructions..." rows={2}/></Field>
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}>
             <Btn v="outline" onClick={()=>setModal("detail")}>Cancel</Btn>
-            <Btn v="purple" onClick={()=>requestReshipment(sel,reshipF.products,reshipF.note,reshipF.newAddress)}>📦 Send to Logistics</Btn>
+            <Btn v="purple" onClick={()=>requestReshipment(sel,reshipF.products,reshipF.note,reshipF.newAddress,reshipF.phone)}>📦 Send to Logistics</Btn>
           </div>
         </>}
       </Modal>
@@ -5368,7 +5473,7 @@ return (
           </div>
           <div style={{padding:"8px 10px",background:T.surfaceAlt,borderRadius:"5px",marginBottom:"10px",fontSize:"12px"}}>
             <div>📍 <b>Ship to:</b> {h?.newAddress||sel.address||"—"}</div>
-            <div>📱 <b>Phone:</b> {sel.phone||"—"}</div>
+            <div>📱 <b>Phone:</b> {h?.phone||sel.phone||"—"}</div>
           </div>
           <Field label="Carrier"><Sel value={reshipShipF.carrier} onChange={e=>setReshipShipF({...reshipShipF,carrier:e.target.value})} options={[{v:"DTDC",l:"DTDC"},{v:"Delhivery",l:"Delhivery"},{v:"Shiprocket",l:"Shiprocket"},{v:"BlueDart",l:"BlueDart"},{v:"India Post",l:"India Post"}]}/></Field>
           <Field label="Order ID"><Inp value={reshipShipF.orderId} onChange={e=>setReshipShipF({...reshipShipF,orderId:e.target.value})} placeholder="e.g. ORD-12345"/></Field>

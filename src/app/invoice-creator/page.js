@@ -9,6 +9,28 @@ const T = {
   err: "#B42318", errBg: "#FDE8E8", info: "#0F5BA7", infoBg: "#E0EDFA",
 };
 
+// NOTE: Field and Inp MUST live at module scope. If they are declared inside
+// InvoiceCreator, every keystroke re-creates the component identity, so React
+// unmounts/remounts the <input> and focus is lost after a single character.
+const Field = ({label, required, error, children, span}) => (
+  <div style={{marginBottom:"10px", gridColumn: span ? "1/-1" : undefined}}>
+    <label style={{display:"block",fontSize:"11px",fontWeight:700,color:T.sub,marginBottom:"4px",textTransform:"uppercase",letterSpacing:".3px",fontFamily:"'Barlow',sans-serif"}}>
+      {label} {required && <span style={{color:T.err}}>*</span>}
+    </label>
+    {children}
+    {error && <div style={{fontSize:"11px",color:T.err,marginTop:"2px"}}>{error}</div>}
+  </div>
+);
+
+const Inp = ({value, onChange, placeholder, type, disabled}) => (
+  <input value={value} onChange={onChange} placeholder={placeholder} type={type||"text"} disabled={disabled}
+    style={{width:"100%",padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"14px",
+      fontFamily:"Archivo,sans-serif",color:T.text,background:disabled?"#f0f0f0":T.surface,outline:"none"}}
+    onFocus={e=>e.target.style.borderColor=T.brand}
+    onBlur={e=>e.target.style.borderColor="rgba(26,26,26,.12)"}
+  />
+);
+
 export default function InvoiceCreator() {
   const [form, setForm] = useState({
     collabId: "", influencerName: "", email: "", phone: "", address: "",
@@ -165,25 +187,6 @@ ${form.collabId ? `Collaboration ID: ${form.collabId} · ` : ""}invogue.shop
     w.document.close();
     setGenerated(true);
   };
-
-  const Field = ({label, required, error, children, span}) => (
-    <div style={{marginBottom:"10px", gridColumn: span ? "1/-1" : undefined}}>
-      <label style={{display:"block",fontSize:"11px",fontWeight:700,color:T.sub,marginBottom:"4px",textTransform:"uppercase",letterSpacing:".3px",fontFamily:"'Barlow',sans-serif"}}>
-        {label} {required && <span style={{color:T.err}}>*</span>}
-      </label>
-      {children}
-      {error && <div style={{fontSize:"11px",color:T.err,marginTop:"2px"}}>{error}</div>}
-    </div>
-  );
-
-  const Inp = ({value, onChange, placeholder, type, disabled}) => (
-    <input value={value} onChange={onChange} placeholder={placeholder} type={type||"text"} disabled={disabled}
-      style={{width:"100%",padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"14px",
-        fontFamily:"Archivo,sans-serif",color:T.text,background:disabled?"#f0f0f0":T.surface,outline:"none"}}
-      onFocus={e=>e.target.style.borderColor=T.brand}
-      onBlur={e=>e.target.style.borderColor="rgba(26,26,26,.12)"}
-    />
-  );
 
   return (
     <div style={{minHeight:"100vh",background:T.bg,fontFamily:"'Archivo',sans-serif"}}>

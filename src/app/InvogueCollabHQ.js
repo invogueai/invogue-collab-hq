@@ -21,16 +21,23 @@ const apiFetch = async (url, options = {}) => {
 };
 
 // ─── DESIGN SYSTEM ───
+// ─── MAISON design tokens (editorial · Bodoni Moda + Archivo · flat 2px) ───
+// Key names are preserved so all existing references keep working; values retuned.
 const T = {
-  bg: "#F6F4F0", surface: "#FFFFFF", surfaceAlt: "#FAF9F7", brand: "#770A1C", gold: "#B08D42",
-  goldSoft: "#EDE7D6", goldMid: "#D4C49A", border: "rgba(26,26,26,.12)",
-  text: "#1A1A1A", sub: "#7D766A", faint: "#B5AFA4",
+  bg: "#F8F6F1", surface: "#FFFFFF", surfaceAlt: "#FBFAF7", brand: "#770A1C", brandDeep: "#5E0815", gold: "#B08D42",
+  goldSoft: "#EDE7D6", goldMid: "#D4C49A", champagneSoft: "#F6DFC1",
+  border: "#E6E0D4", borderSoft: "#F0EBE0", borderHead: "#ECE6DA", inputBorder: "#D8D1C2",
+  text: "#1A1A1A", sub: "#7D766A", faint: "#A39C8F",
   ok: "#1B7A3D", okBg: "#E2F3E8", warn: "#C27A08", warnBg: "#FEF4DD",
   err: "#B42318", errBg: "#FDE8E8", info: "#0F5BA7", infoBg: "#E0EDFA",
-  purple: "#6527BE", purpleBg: "#EFE4FF", teal: "#0E7A71", tealBg: "#E0F5F3",
-  cardShadow: "0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04)",
-  cardShadowHover: "0 4px 12px rgba(0,0,0,.08)",
+  purple: "#6527BE", purpleBg: "#F0E9FB", teal: "#0E7A71", tealBg: "#DDF1EE",
+  cardShadow: "0 1px 3px rgba(0,0,0,.08)",
+  cardShadowHover: "0 1px 3px rgba(0,0,0,.08)",
+  display: "'Bodoni Moda',Georgia,serif", ui: "'Archivo',-apple-system,sans-serif",
+  radius: "2px",
 };
+// Display serif (Bodoni Moda) for headings/figures; Archivo for text/UI.
+const DISPLAY = "'Bodoni Moda',Georgia,serif";
 
 const STATUS_CFG = {
   pending:        { l:"Pending Approval", c:T.warn,   bg:T.warnBg,   i:"⏳" },
@@ -184,64 +191,65 @@ const ROLE_CFG = {
   viewer:     { l:"Viewer",      c:T.sub,    bg:"#f0ede8",  i:"👁" },
 };
 
-// ─── REUSABLE COMPONENTS ───
-const Badge = ({s,sm}) => { const x=STATUS_CFG[s]||{l:s,c:T.sub,bg:T.goldSoft,i:"?"}; return <span style={{display:"inline-flex",alignItems:"center",gap:"4px",padding:sm?"3px 8px":"4px 12px",borderRadius:"4px",fontSize:sm?"10px":"11px",fontWeight:600,color:x.c,background:x.bg,whiteSpace:"nowrap",letterSpacing:".5px",textTransform:"uppercase",border:"none",fontFamily:"Barlow,sans-serif"}}>{x.i} {x.l}</span>; };
+// ─── REUSABLE COMPONENTS (Maison editorial) ───
+const Badge = ({s,sm}) => { const x=STATUS_CFG[s]||{l:s,c:T.sub,bg:T.goldSoft}; return <span style={{display:"inline-flex",alignItems:"center",padding:"4px 9px",borderRadius:"2px",fontSize:"9px",fontWeight:700,color:x.c,background:x.bg,whiteSpace:"nowrap",letterSpacing:"1px",textTransform:"uppercase",border:"none",fontFamily:T.ui}}>{x.l}</span>; };
 const ensureUrl = (url) => url && !url.match(/^https?:\/\//) ? "https://"+url : url;
-const DBadge = ({s}) => { const m={pending:{l:"Pending",c:T.warn,bg:T.warnBg},submitted:{l:"Submitted",c:T.info,bg:T.infoBg},revision_requested:{l:"Revision Needed",c:T.err,bg:T.errBg},approved:{l:"Approved",c:T.ok,bg:T.okBg},live:{l:"Live",c:T.ok,bg:T.okBg}}; const x=m[s]||m.pending; return <span style={{padding:"2px 8px",borderRadius:"8px",fontSize:"11px",fontWeight:700,color:x.c,background:x.bg}}>{x.l}</span>; };
+const DBadge = ({s}) => { const m={pending:{l:"Pending",c:T.sub,bg:"#F2EEE4"},submitted:{l:"Submitted",c:T.info,bg:T.infoBg},revision_requested:{l:"Revision",c:T.warn,bg:T.warnBg},approved:{l:"Approved",c:T.purple,bg:T.purpleBg},live:{l:"Live",c:T.ok,bg:T.okBg}}; const x=m[s]||m.pending; return <span style={{padding:"4px 9px",borderRadius:"2px",fontSize:"9px",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",color:x.c,background:x.bg,fontFamily:T.ui}}>{x.l}</span>; };
 
 const Btn = ({children,onClick,v="primary",sm,disabled,sx})=>{
   const vs={
-    primary:{bg:T.brand,c:"#F6DFC1",border:"none"},
+    primary:{bg:T.brand,c:"#fff",border:"none"},
     gold:{bg:T.gold,c:"#fff",border:"none"},
-    outline:{bg:"transparent",c:T.text,border:`1px solid ${T.border}`},
-    danger:{bg:T.err,c:"#fff",border:"none"},
+    outline:{bg:"transparent",c:T.text,border:"1px solid #C9C1B2"},
+    danger:{bg:"transparent",c:T.err,border:"1px solid #E8C9C6"},
     ok:{bg:T.ok,c:"#fff",border:"none"},
     purple:{bg:T.purple,c:"#fff",border:"none"},
     ghost:{bg:"transparent",c:T.sub,border:"none"}
   };
   const vv=vs[v]||vs.primary;
-  return <button onClick={onClick} disabled={disabled} style={{border:vv.border,borderRadius:"4px",padding:sm?"7px 14px":"10px 20px",fontSize:sm?"11px":"12px",fontWeight:600,cursor:disabled?"not-allowed":"pointer",fontFamily:"Barlow,sans-serif",textTransform:"uppercase",letterSpacing:"0.5px",opacity:disabled?.5:1,background:vv.bg,color:vv.c,display:"inline-flex",alignItems:"center",gap:"5px",whiteSpace:"nowrap",transition:"all .2s ease",...sx}}>{children}</button>;
+  return <button onClick={onClick} disabled={disabled} style={{border:disabled?"none":vv.border,borderRadius:"2px",padding:sm?"7px 13px":"10px 18px",fontSize:sm?"10px":"11px",fontWeight:700,cursor:disabled?"not-allowed":"pointer",fontFamily:T.ui,textTransform:"uppercase",letterSpacing:"1.5px",background:disabled?"#C9C1B2":vv.bg,color:disabled?"#fff":vv.c,display:"inline-flex",alignItems:"center",gap:"6px",whiteSpace:"nowrap",transition:"all .15s ease",...sx}}>{children}</button>;
 };
 
+const inputStyle = (error,disabled,prefix)=>({width:"100%",padding:"11px 13px",border:`1px solid ${error?T.err:T.inputBorder}`,borderRadius:prefix?"0 2px 2px 0":"2px",fontSize:"13px",fontFamily:T.ui,color:T.text,background:disabled?T.surfaceAlt:T.surface,outline:"none",boxSizing:"border-box",transition:"border-color .15s"});
 const Inp = ({value,onChange,type="text",disabled,placeholder,prefix,error})=>(
   <div style={{display:"flex"}}>
-    {prefix&&<span style={{padding:"9px 10px",background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRight:"none",borderRadius:"4px 0 0 4px",fontSize:"13px",color:T.sub,lineHeight:"1.3",fontFamily:"Archivo,sans-serif"}}>{prefix}</span>}
-    <input type={type} value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} style={{width:"100%",padding:"10px 14px",border:`1px solid ${error?T.err:T.border}`,borderRadius:prefix?"0 4px 4px 0":"4px",fontSize:"13px",fontFamily:"Archivo,sans-serif",color:T.text,background:disabled?T.surfaceAlt:T.surface,outline:"none",boxSizing:"border-box",transition:"all .2s"}}/>
+    {prefix&&<span style={{padding:"11px 12px",background:T.surfaceAlt,border:`1px solid ${T.inputBorder}`,borderRight:"none",borderRadius:"2px 0 0 2px",fontSize:"13px",color:T.sub,lineHeight:"1.3",fontFamily:T.display}}>{prefix}</span>}
+    <input type={type} value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} onFocus={e=>e.target.style.borderColor=T.brand} onBlur={e=>e.target.style.borderColor=error?T.err:T.inputBorder} style={inputStyle(error,disabled,prefix)}/>
   </div>
 );
 
 const Textarea = ({value,onChange,disabled,placeholder,rows=3,error})=>(
-  <textarea value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} rows={rows} style={{width:"100%",padding:"9px 12px",border:`1px solid ${error?T.err:T.border}`,borderRadius:"4px",fontSize:"12px",fontFamily:"Archivo,sans-serif",color:T.text,background:disabled?T.surfaceAlt:T.surface,outline:"none",boxSizing:"border-box",resize:"vertical",transition:"all .2s"}}/>
+  <textarea value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} rows={rows} onFocus={e=>e.target.style.borderColor=T.brand} onBlur={e=>e.target.style.borderColor=error?T.err:T.inputBorder} style={{...inputStyle(error,disabled,false),resize:"vertical"}}/>
 );
 
 const Sel = ({value,onChange,options})=>(
-  <select value={value} onChange={onChange} style={{width:"100%",padding:"9px 12px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"12px",fontFamily:"Archivo,sans-serif",color:T.text,background:T.surface,outline:"none",boxSizing:"border-box",cursor:"pointer",transition:"all .2s"}}>
+  <select value={value} onChange={onChange} style={{...inputStyle(false,false,false),cursor:"pointer"}}>
     {options.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
   </select>
 );
 
-const Field = ({label,children,span,error,required})=>(<div style={{gridColumn:span?`span ${span}`:undefined,marginBottom:"6px"}}><div style={{fontSize:"11px",fontWeight:700,color:error?T.err:T.sub,textTransform:"uppercase",letterSpacing:".8px",marginBottom:"5px"}}>{label}{required&&<span style={{color:T.err}}> *</span>}{error&&<span style={{color:T.err,fontSize:"10px",marginLeft:"4px",textTransform:"none",fontWeight:600}}>{error}</span>}</div>{children}</div>);
+const Field = ({label,children,span,error,required})=>(<div style={{gridColumn:span?`span ${span}`:undefined,marginBottom:"14px"}}><div style={{fontSize:"10px",fontWeight:700,color:error?T.err:T.sub,textTransform:"uppercase",letterSpacing:"1.5px",marginBottom:"6px"}}>{label}{required&&<span style={{color:T.err}}> *</span>}{error&&<span style={{color:T.err,fontSize:"10px",marginLeft:"6px",textTransform:"none",fontWeight:600,letterSpacing:0}}>{error}</span>}</div>{children}</div>);
 
 const Modal = ({open,onClose,title,children,w=540})=>{
   if(!open) return null;
-  return <div role="presentation" style={{position:"fixed",inset:0,background:"rgba(0,0,0,.25)",backdropFilter:"none",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"12px",animation:"fadeIn .2s ease"}} onClick={onClose}>
-    <div role="dialog" aria-modal="true" aria-label={title} onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:"8px",width:`${w}px`,maxWidth:"96vw",minWidth:"280px",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 25px 50px rgba(0,0,0,.12)",border:`1px solid ${T.border}`,animation:"fadeUp .25s ease"}}>
-      <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-        <span style={{fontWeight:700,fontSize:"18px",color:T.text,letterSpacing:".5px",fontFamily:"Barlow,sans-serif",textTransform:"uppercase"}}>{title}</span>
-        <button onClick={onClose} style={{background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"14px",cursor:"pointer",color:T.sub,padding:"4px 8px",lineHeight:1,transition:"all .15s"}}>✕</button>
+  return <div role="presentation" style={{position:"fixed",inset:0,background:"rgba(26,20,14,.32)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"16px",animation:"fadeIn .2s ease"}} onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label={title} onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:"2px",width:`${w}px`,maxWidth:"96vw",minWidth:"280px",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 10px 40px rgba(0,0,0,.20)",animation:"fadeUp .22s ease"}}>
+      <div style={{padding:"20px 24px",borderBottom:`1px solid ${T.borderHead}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        <span style={{fontWeight:600,fontSize:"20px",color:T.text,fontFamily:T.display}}>{title}</span>
+        <button onClick={onClose} style={{background:"transparent",border:"none",fontSize:"20px",cursor:"pointer",color:T.faint,padding:"2px 4px",lineHeight:1}}>×</button>
       </div>
-      <div style={{padding:"20px",overflowY:"auto",flex:1}}>{children}</div>
+      <div style={{padding:"22px 24px",overflowY:"auto",flex:1}}>{children}</div>
     </div>
   </div>;
 };
 
-const StatBox = ({l,v,c,sub,gradient})=>(<div className="stat-hover" style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"18px 20px",position:"relative",overflow:"hidden",transition:"all .25s ease",cursor:"default",borderLeft:`3px solid ${c||T.brand}`}}>
-  <div style={{fontSize:"13px",fontWeight:600,color:T.sub,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"8px",fontFamily:"Barlow,sans-serif"}}>{l}</div>
-  <div style={{fontSize:"24px",fontWeight:700,color:c||T.text,lineHeight:1.1,fontFamily:"Barlow,sans-serif"}}>{v}</div>
-  {sub&&<div style={{fontSize:"12px",color:T.sub,marginTop:"6px",fontFamily:"Archivo,sans-serif"}}>{sub}</div>}
+const StatBox = ({l,v,c,sub,gradient})=>(<div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"18px 22px"}}>
+  <div style={{fontSize:"10px",fontWeight:600,color:T.sub,textTransform:"uppercase",letterSpacing:"2px",marginBottom:"10px",fontFamily:T.ui}}>{l}</div>
+  <div style={{fontSize:"34px",fontWeight:500,color:c||T.text,lineHeight:1,fontFamily:T.display}}>{v}</div>
+  {sub&&<div style={{fontSize:"11px",color:c||T.sub,marginTop:"8px",fontFamily:T.ui}}>{sub}</div>}
 </div>);
 
-const Section = ({title,icon,children,action})=>(<div style={{marginBottom:"20px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",paddingBottom:"10px",borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:"13px",fontWeight:700,color:T.text,textTransform:"uppercase",letterSpacing:"1px",fontFamily:"Barlow,sans-serif"}}>{icon} {title}</span>{action}</div>{children}</div>);
+const Section = ({title,icon,children,action})=>(<div style={{marginBottom:"24px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px",paddingBottom:"12px",borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:"12px",fontWeight:700,color:T.text,textTransform:"uppercase",letterSpacing:"2px",fontFamily:T.ui}}>{title}</span>{action}</div>{children}</div>);
 
 const CONTENT_STAGES = [
   {key:"pending",label:"Not Submitted",c:T.sub,bg:T.goldSoft,i:"⏳"},
@@ -2365,37 +2373,37 @@ export default function InvogueCollabHQ() {
     const w = window.open("","_blank","width=800,height=1000");
     if(!w) return notify("Pop-up blocked — please allow pop-ups","err");
     w.document.write(`<!DOCTYPE html><html><head><title>Invoice ${invNumber}</title>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@600;700;800&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Archivo,sans-serif;color:#1A1A1A;padding:40px;max-width:800px;margin:0 auto;font-size:13px;line-height:1.6}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #770A1C}
-.brand{font-family:Barlow,sans-serif;font-size:22px;font-weight:800;color:#770A1C;letter-spacing:3px;text-transform:uppercase}
+.brand{font-family:Bodoni Moda,serif;font-size:22px;font-weight:800;color:#770A1C;letter-spacing:3px;text-transform:uppercase}
 .brand-sub{font-size:10px;color:#7D766A;letter-spacing:1px;font-weight:600}
-.invoice-title{font-family:Barlow,sans-serif;font-size:28px;font-weight:800;color:#770A1C;text-align:right}
+.invoice-title{font-family:Bodoni Moda,serif;font-size:28px;font-weight:800;color:#770A1C;text-align:right}
 .invoice-meta{text-align:right;font-size:12px;color:#7D766A;margin-top:4px}
 .invoice-meta b{color:#1A1A1A}
 .section{margin-bottom:20px}
-.section-title{font-family:Barlow,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#770A1C;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #eee}
+.section-title{font-family:Bodoni Moda,serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#770A1C;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #eee}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px}
 .info-block{font-size:12px;line-height:1.7}
 .info-block b{font-size:13px;display:block;margin-bottom:2px}
 table{width:100%;border-collapse:collapse;margin-bottom:20px}
-th{background:#770A1C;color:#F6DFC1;padding:8px 12px;text-align:left;font-family:Barlow,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+th{background:#770A1C;color:#F6DFC1;padding:8px 12px;text-align:left;font-family:Bodoni Moda,serif;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
 td{padding:8px 12px;border-bottom:1px solid #eee;font-size:12px}
 .total-row{background:#F6F4F0}
 .total-row td{font-weight:700;font-size:13px}
-.grand-total td{background:#770A1C;color:#F6DFC1;font-size:15px;font-weight:800;font-family:Barlow,sans-serif}
+.grand-total td{background:#770A1C;color:#F6DFC1;font-size:15px;font-weight:800;font-family:Bodoni Moda,serif}
 .payment-box{background:#F6F4F0;border:1px solid #ddd;border-radius:6px;padding:16px;margin-bottom:20px}
 .payment-box .row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px}
 .payment-box .row b{color:#1A1A1A}
 .footer{margin-top:32px;padding-top:16px;border-top:2px solid #770A1C;text-align:center;font-size:11px;color:#7D766A}
-.stamp{display:inline-block;padding:6px 20px;border:2px solid #770A1C;color:#770A1C;font-family:Barlow,sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:2px;transform:rotate(-5deg);margin-top:16px}
+.stamp{display:inline-block;padding:6px 20px;border:2px solid #770A1C;color:#770A1C;font-family:Bodoni Moda,serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:2px;transform:rotate(-5deg);margin-top:16px}
 .note{background:#FEF4DD;border:1px solid #E8D5A3;border-radius:4px;padding:10px;font-size:11px;color:#7D766A;margin-bottom:16px}
 @media print{body{padding:20px}button{display:none!important}.no-print{display:none!important}}
 </style></head><body>
 <div class="no-print" style="text-align:center;margin-bottom:20px">
-<button onclick="window.print()" style="background:#770A1C;color:#F6DFC1;border:none;padding:10px 24px;border-radius:4px;font-family:Barlow,sans-serif;font-weight:700;font-size:14px;cursor:pointer;letter-spacing:1px;text-transform:uppercase">Download / Print Invoice</button>
+<button onclick="window.print()" style="background:#770A1C;color:#F6DFC1;border:none;padding:10px 24px;border-radius:4px;font-family:Bodoni Moda,serif;font-weight:700;font-size:14px;cursor:pointer;letter-spacing:1px;text-transform:uppercase">Download / Print Invoice</button>
 </div>
 
 <div class="header">
@@ -2470,7 +2478,7 @@ ${inv.notes ? `<div class="note"><b>Notes:</b> ${inv.notes}</div>` : ""}
 </div>
 
 <div class="footer">
-<div style="font-family:Barlow,sans-serif;font-weight:700;color:#770A1C;letter-spacing:2px;margin-bottom:4px">INVOGUE</div>
+<div style="font-family:Bodoni Moda,serif;font-weight:700;color:#770A1C;letter-spacing:2px;margin-bottom:4px">INVOGUE</div>
 This is a system-generated invoice from Invogue Collab HQ<br>
 invogue.shop · contact@invogue.shop
 </div>
@@ -2521,7 +2529,7 @@ invogue.shop · contact@invogue.shop
         ${pd.ifsc?`<div class="row"><span>IFSC</span><b>${pd.ifsc}</b></div>`:""}
         ${pd.upi?`<div class="row"><span>UPI ID</span><b>${pd.upi}</b></div>`:""}
       </div></div>
-      <div class="footer"><div style="font-family:Barlow,sans-serif;font-weight:700;color:#770A1C;letter-spacing:2px;margin-bottom:4px">INVOGUE</div>System-generated invoice · invogue.shop</div>
+      <div class="footer"><div style="font-family:Bodoni Moda,serif;font-weight:700;color:#770A1C;letter-spacing:2px;margin-bottom:4px">INVOGUE</div>System-generated invoice · invogue.shop</div>
     </div>`;
   };
 
@@ -2535,18 +2543,18 @@ invogue.shop · contact@invogue.shop
     if(!w) return notify("Pop-up blocked — please allow pop-ups","err");
     const bodies = eligible.map((d,i)=>buildOneInvoice(d,i)).join('<div style="page-break-after:always"></div>');
     w.document.write(`<!DOCTYPE html><html><head><title>Invoices (${eligible.length})</title>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@600;700;800&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Archivo,sans-serif;color:#1A1A1A;font-size:13px;line-height:1.6}
 .invoice{padding:40px;max-width:800px;margin:0 auto}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #770A1C}
-.brand{font-family:Barlow,sans-serif;font-size:22px;font-weight:800;color:#770A1C;letter-spacing:3px}.brand-sub{font-size:10px;color:#7D766A;letter-spacing:1px;font-weight:600}
-.invoice-title{font-family:Barlow,sans-serif;font-size:26px;font-weight:800;color:#770A1C;text-align:right}.invoice-meta{text-align:right;font-size:12px;color:#7D766A;margin-top:4px}.invoice-meta b{color:#1A1A1A}
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:22px}.section-title{font-family:Barlow,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#770A1C;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #eee}.info-block{font-size:12px;line-height:1.7}.info-block b{font-size:13px;display:block;margin-bottom:2px}
-table{width:100%;border-collapse:collapse;margin-bottom:20px}th{background:#770A1C;color:#F6DFC1;padding:8px 12px;text-align:left;font-family:Barlow,sans-serif;font-size:11px;text-transform:uppercase}td{padding:8px 12px;border-bottom:1px solid #eee;font-size:12px}.total-row td{font-weight:700;background:#F6F4F0}.grand-total td{background:#770A1C;color:#F6DFC1;font-size:15px;font-weight:800;font-family:Barlow,sans-serif}
+.brand{font-family:Bodoni Moda,serif;font-size:22px;font-weight:800;color:#770A1C;letter-spacing:3px}.brand-sub{font-size:10px;color:#7D766A;letter-spacing:1px;font-weight:600}
+.invoice-title{font-family:Bodoni Moda,serif;font-size:26px;font-weight:800;color:#770A1C;text-align:right}.invoice-meta{text-align:right;font-size:12px;color:#7D766A;margin-top:4px}.invoice-meta b{color:#1A1A1A}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:22px}.section-title{font-family:Bodoni Moda,serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#770A1C;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #eee}.info-block{font-size:12px;line-height:1.7}.info-block b{font-size:13px;display:block;margin-bottom:2px}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}th{background:#770A1C;color:#F6DFC1;padding:8px 12px;text-align:left;font-family:Bodoni Moda,serif;font-size:11px;text-transform:uppercase}td{padding:8px 12px;border-bottom:1px solid #eee;font-size:12px}.total-row td{font-weight:700;background:#F6F4F0}.grand-total td{background:#770A1C;color:#F6DFC1;font-size:15px;font-weight:800;font-family:Bodoni Moda,serif}
 .payment-box{background:#F6F4F0;border:1px solid #ddd;border-radius:6px;padding:16px;margin-bottom:20px}.payment-box .row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px}
 .footer{margin-top:28px;padding-top:16px;border-top:2px solid #770A1C;text-align:center;font-size:11px;color:#7D766A}
 @media print{.no-print{display:none!important}.invoice{padding:24px}}</style></head><body>
-<div class="no-print" style="text-align:center;padding:16px;background:#F6F4F0"><button onclick="window.print()" style="background:#770A1C;color:#F6DFC1;border:none;padding:10px 24px;border-radius:4px;font-family:Barlow,sans-serif;font-weight:700;cursor:pointer;letter-spacing:1px;text-transform:uppercase">Print / Save all as PDF</button>${skipped?`<div style="font-size:12px;color:#7D766A;margin-top:8px">${skipped} selected deal${skipped>1?"s":""} skipped (agency-managed or no details submitted)</div>`:""}</div>
+<div class="no-print" style="text-align:center;padding:16px;background:#F6F4F0"><button onclick="window.print()" style="background:#770A1C;color:#F6DFC1;border:none;padding:10px 24px;border-radius:4px;font-family:Bodoni Moda,serif;font-weight:700;cursor:pointer;letter-spacing:1px;text-transform:uppercase">Print / Save all as PDF</button>${skipped?`<div style="font-size:12px;color:#7D766A;margin-top:8px">${skipped} selected deal${skipped>1?"s":""} skipped (agency-managed or no details submitted)</div>`:""}</div>
 ${bodies}</body></html>`);
     w.document.close();
     notify(`Generated ${eligible.length} invoice${eligible.length>1?"s":""}${skipped?` · ${skipped} skipped`:""}`);
@@ -2740,9 +2748,9 @@ if(!loggedIn) {
   const rc = (r) => ROLE_CFG[r]||ROLE_CFG.viewer;
   return (
     <div style={{fontFamily:"'Archivo',sans-serif",background:"#F6F4F0",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",position:"relative",overflow:"hidden"}}>
-      <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@600;700;800&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet"/>
+      <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..700&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet"/>
       <style>{`
-@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@600;700;800&family=Archivo:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..700&family=Archivo:wght@400;500;600&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:#F6F4F0;color:#1A1A1A;font-family:'Archivo',sans-serif}
 ::-webkit-scrollbar{width:6px}
@@ -2767,14 +2775,14 @@ input:focus,select:focus,textarea:focus{border-color:#770A1C!important;outline:n
       <div style={{width:"100%",maxWidth:"380px",animation:"fadeUp .5s ease"}}>
         {/* Brand Header */}
         <div style={{textAlign:"center",marginBottom:"48px"}}>
-          <div style={{fontFamily:"'Barlow',sans-serif",fontSize:"32px",fontWeight:800,color:"#1A1A1A",letterSpacing:"8px",marginBottom:"4px",textTransform:"uppercase"}}>INVOGUE</div>
-          <div style={{fontFamily:"'Barlow',sans-serif",fontSize:"12px",fontWeight:700,color:"#770A1C",letterSpacing:"4px",marginBottom:"12px",textTransform:"uppercase"}}>COLLAB HQ</div>
+          <div style={{fontFamily:"'Bodoni Moda',serif",fontSize:"32px",fontWeight:800,color:"#1A1A1A",letterSpacing:"8px",marginBottom:"4px",textTransform:"uppercase"}}>INVOGUE</div>
+          <div style={{fontFamily:"'Bodoni Moda',serif",fontSize:"12px",fontWeight:700,color:"#770A1C",letterSpacing:"4px",marginBottom:"12px",textTransform:"uppercase"}}>COLLAB HQ</div>
           <div style={{width:"30px",height:"2px",background:"#B08D42",margin:"0 auto"}}/>
         </div>
 
         {/* Login Card */}
         <div style={{background:"#FFFFFF",borderRadius:"8px",padding:"32px",boxShadow:"0 4px 24px rgba(0,0,0,.06)",border:"1px solid rgba(26,26,26,.08)"}}>
-          <div style={{fontFamily:"'Barlow',sans-serif",fontSize:"18px",fontWeight:700,color:"#1A1A1A",marginBottom:"8px",textTransform:"uppercase"}}>Welcome back</div>
+          <div style={{fontFamily:"'Bodoni Moda',serif",fontSize:"18px",fontWeight:700,color:"#1A1A1A",marginBottom:"8px",textTransform:"uppercase"}}>Welcome back</div>
           <div style={{fontFamily:"'Archivo',sans-serif",fontSize:"12px",color:"#7D766A",marginBottom:"28px"}}>Sign in with your Invogue Google account</div>
 
           {/* Checking session spinner */}
@@ -2833,23 +2841,24 @@ const recentNotifs = getRecentNotifications();
 const unreads = recentNotifs.filter(n => new Date(n.time) > new Date(lastSeenTime)).length;
 return (
   <div role="application" aria-label="Invogue Collab HQ" style={{fontFamily:"'Archivo',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
-    <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@600;700;800&family=Archivo:wght@400;500;600&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#F6F4F0}::-webkit-scrollbar-thumb{background:#D4C49A;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#B08D42}@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}@media(max-width:768px){.mobile-grid-1{grid-template-columns:1fr!important}.mobile-hide{display:none!important}.mobile-stack{flex-direction:column!important}.mobile-full{width:100%!important;max-width:100%!important}.mobile-small-text{font-size:10px!important}.mobile-pad{padding:10px!important}}@media(max-width:480px){.mobile-xs-hide{display:none!important}}`}</style>
+    <style>{`@import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..700&family=Archivo:wght@400;500;600&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#F6F4F0}::-webkit-scrollbar-thumb{background:#D4C49A;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#B08D42}@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}@media(max-width:768px){.mobile-grid-1{grid-template-columns:1fr!important}.mobile-hide{display:none!important}.mobile-stack{flex-direction:column!important}.mobile-full{width:100%!important;max-width:100%!important}.mobile-small-text{font-size:10px!important}.mobile-pad{padding:10px!important}}@media(max-width:480px){.mobile-xs-hide{display:none!important}}`}</style>
 
     {/* TOAST */}
     {toast&&<div role="alert" aria-live="assertive" style={{position:"fixed",top:16,right:16,zIndex:2e3,padding:"14px 24px",borderRadius:"6px",fontSize:"13px",fontWeight:600,fontFamily:"Archivo,sans-serif",color:toast.type==="err"?T.err:toast.type==="warn"?T.warn:T.ok,background:toast.type==="err"?T.errBg:toast.type==="warn"?T.warnBg:T.okBg,boxShadow:"0 4px 16px rgba(0,0,0,.08)",animation:"fadeUp .3s ease",borderLeft:`4px solid ${toast.type==="err"?T.err:toast.type==="warn"?T.warn:T.ok}`}}>{toast.msg}</div>}
 
     {/* ── HEADER ── */}
-    <div role="banner" style={{background:"#FFFFFF",borderBottom:"1px solid rgba(26,26,26,.08)",padding:"16px 28px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"12px"}}>
-      <div style={{display:"flex",alignItems:"baseline",gap:"6px"}}>
-        <span style={{fontFamily:"'Barlow',sans-serif",fontSize:"20px",fontWeight:800,color:"#1A1A1A",letterSpacing:"4px",textTransform:"uppercase"}}>INVOGUE</span>
-        <span style={{fontFamily:"'Barlow',sans-serif",fontSize:"12px",fontWeight:700,color:"#770A1C",letterSpacing:"2px",textTransform:"uppercase",marginLeft:"6px"}}>COLLAB HQ</span>
+    <div role="banner" style={{background:"#FFFFFF",borderBottom:`1px solid ${T.borderHead}`,padding:"13px 32px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"12px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:"14px"}}>
+        <span style={{fontFamily:T.display,fontSize:"20px",fontWeight:600,color:"#1A1A1A",letterSpacing:"4px",textTransform:"uppercase"}}>INVOGUE</span>
+        <span style={{width:"1px",height:"22px",background:T.border}}></span>
+        <span style={{fontFamily:T.ui,fontSize:"10px",fontWeight:600,color:T.sub,letterSpacing:"2.5px",textTransform:"uppercase"}}>Collab HQ</span>
       </div>
 
       {/* Feature 4: Global Search */}
       <div style={{flex:1,maxWidth:"400px",margin:"0 10px",minWidth:"150px",position:"relative"}}>
         <input type="text" aria-label="Search deals, influencers, and campaigns" value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);if(e.target.value.trim())setSearchResults(performSearch(e.target.value));else setSearchResults(null)}}
           placeholder="Search deals, influencers, campaigns..."
-          style={{width:"100%",padding:"10px 16px",borderRadius:"4px",border:"1px solid rgba(26,26,26,.12)",background:"#FFFFFF",color:"#1A1A1A",fontSize:"13px",fontFamily:"'Archivo',sans-serif",outline:"none"}}/>
+          style={{width:"100%",padding:"10px 14px",borderRadius:"2px",border:`1px solid ${T.border}`,background:"#FFFFFF",color:"#1A1A1A",fontSize:"13px",fontFamily:"'Archivo',sans-serif",outline:"none"}}/>
         {searchResults&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:"#FFFFFF",borderRadius:"4px",border:"1px solid rgba(26,26,26,.12)",marginTop:"4px",maxHeight:"300px",overflowY:"auto",zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,.06)"}}>
           {(searchResults.dealMatches?.length||0)>0&&<>
             <div style={{fontSize:"10px",fontWeight:700,color:"#7D766A",padding:"8px 12px",textTransform:"uppercase"}}>Deals</div>
@@ -2889,10 +2898,10 @@ return (
         </div>
 
         <div style={{display:"flex",alignItems:"center",gap:"8px",padding:"6px 10px"}}>
-          <div style={{width:"30px",height:"30px",borderRadius:"50%",background:"#F6DFC1",color:"#770A1C",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",fontWeight:800}}>{loggedIn.avatar}</div>
+          <div style={{width:"30px",height:"30px",borderRadius:"50%",background:T.brand,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",fontWeight:600,fontFamily:T.display}}>{loggedIn.avatar}</div>
           <div>
-            <div style={{fontSize:"12px",fontFamily:"'Barlow',sans-serif",fontWeight:700,color:"#1A1A1A",lineHeight:1.2}}>{loggedIn.name}</div>
-            <div style={{fontSize:"13px",fontFamily:"'Archivo',sans-serif",color:"#7D766A",fontWeight:400}}>{loggedRC.i} {loggedRC.l}</div>
+            <div style={{fontSize:"12px",fontFamily:T.ui,fontWeight:600,color:"#1A1A1A",lineHeight:1.3}}>{loggedIn.name}</div>
+            <div style={{fontSize:"9px",fontFamily:T.ui,color:T.gold,fontWeight:600,letterSpacing:"1.5px",textTransform:"uppercase"}}>{loggedRC.l}</div>
           </div>
         </div>
         <button aria-label="Sign out" onClick={handleLogout} style={{background:"none",border:"none",color:"#7D766A",fontSize:"11px",padding:"5px 10px",cursor:"pointer",fontFamily:"'Archivo',sans-serif",fontWeight:400}}>Sign Out</button>
@@ -2914,11 +2923,11 @@ return (
         performance_marketer: [{k:"dashboard",l:"Creative Hub",i:"📈"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"influencers",l:"Influencer DB",i:"⭐"}],
       };
       const items = navItems[role]||navItems.negotiator;
-      return <div role="navigation" aria-label="Main navigation" style={{background:"#FFFFFF",borderBottom:"1px solid rgba(26,26,26,.08)",padding:"0 28px",display:"flex",gap:"8px",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+      return <div role="navigation" aria-label="Main navigation" style={{background:T.surfaceAlt,borderBottom:`1px solid ${T.borderHead}`,padding:"0 32px",display:"flex",gap:"28px",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
         {items.map(n=>(
-          <button key={n.k} onClick={()=>setView(n.k)} style={{padding:"14px 8px",border:"none",borderBottom:view===n.k?"2px solid #770A1C":"2px solid transparent",background:"transparent",color:view===n.k?"#770A1C":"#7D766A",fontWeight:view===n.k?700:600,fontSize:"13px",cursor:"pointer",fontFamily:"'Barlow',sans-serif",display:"flex",alignItems:"center",gap:"5px",letterSpacing:"0.8px",textTransform:"uppercase",transition:"all .2s"}}>
-            {n.i} {n.l}
-            {n.n>0&&<span style={{background:"#770A1C",color:"#FFFFFF",borderRadius:"50%",width:"16px",height:"16px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"8px",fontWeight:800,lineHeight:"16px"}}>{n.n}</span>}
+          <button key={n.k} onClick={()=>setView(n.k)} style={{padding:"16px 0",border:"none",borderBottom:view===n.k?`2px solid ${T.brand}`:"2px solid transparent",background:"transparent",color:view===n.k?T.brand:T.sub,fontWeight:700,fontSize:"11px",cursor:"pointer",fontFamily:T.ui,display:"flex",alignItems:"center",gap:"6px",letterSpacing:"1.5px",textTransform:"uppercase",whiteSpace:"nowrap",transition:"color .2s"}}>
+            {n.l}
+            {n.n>0&&<span style={{color:T.gold,fontSize:"10px",fontWeight:700,fontFamily:T.display}}>{n.n}</span>}
           </button>
         ))}
       </div>;
@@ -2960,7 +2969,7 @@ return (
           {/* Admin header band */}
           <div style={{background:T.brand,borderRadius:"6px",padding:"16px 20px",marginBottom:"16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
-              <div style={{fontSize:"20px",fontWeight:800,color:"#F6DFC1",fontFamily:"Barlow,sans-serif",textTransform:"uppercase",letterSpacing:"1.5px"}}>⚙️ Admin Control Panel</div>
+              <div style={{fontSize:"20px",fontWeight:800,color:"#F6DFC1",fontFamily:"Bodoni Moda,serif",textTransform:"uppercase",letterSpacing:"1.5px"}}>⚙️ Admin Control Panel</div>
               <div style={{fontSize:"13px",color:"rgba(246,223,193,.6)",marginTop:"2px"}}>Super access — all roles, all data, all controls</div>
             </div>
             <div style={{display:"flex",gap:"6px"}}>
@@ -3142,7 +3151,7 @@ return (
 
           {/* Users table */}
           <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"40px 1.5fr 1.5fr 1fr 0.8fr 1.2fr",padding:"10px 14px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Barlow,sans-serif",letterSpacing:".5px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"40px 1.5fr 1.5fr 1fr 0.8fr 1.2fr",padding:"10px 14px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>
               <div></div><div>Name</div><div>Email</div><div>Role</div><div>Status</div><div>Actions</div>
             </div>
             {users.map(u=>{
@@ -3175,7 +3184,7 @@ return (
           <div style={{marginTop:"20px"}}>
             <div style={{fontSize:"13px",fontWeight:800,marginBottom:"10px"}}>Role Permissions Reference</div>
             <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",overflow:"hidden"}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr 1fr 1fr",padding:"8px 12px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Barlow,sans-serif",letterSpacing:".4px"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr 1fr 1fr",padding:"8px 12px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Bodoni Moda,serif",letterSpacing:".4px"}}>
                 <div>Permission</div><div>Admin</div><div>Manager</div><div>Finance</div><div>Negotiator</div><div>Logistics</div><div>Viewer</div>
               </div>
               {[
@@ -3232,7 +3241,7 @@ return (
             <span style={{fontSize:"11px",color:T.sub,marginLeft:"auto"}}>{allLogs.length} total entries</span>
           </div>
           <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr 1.5fr 2fr 0.8fr",padding:"9px 14px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Barlow,sans-serif",letterSpacing:".5px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr 1.5fr 2fr 0.8fr",padding:"9px 14px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>
               <div>Timestamp</div><div>User</div><div>Action</div><div>Details</div><div>Influencer</div>
             </div>
             {filteredLogs.slice(auditPage * ITEMS_PER_PAGE, (auditPage+1) * ITEMS_PER_PAGE).map((lg,i)=>{
@@ -4138,7 +4147,7 @@ return (
           {/* Header */}
           <div style={{background:"linear-gradient(135deg,#0e7490,#0891b2)",borderRadius:"6px",padding:"16px 20px",marginBottom:"16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
-              <div style={{fontSize:"20px",fontWeight:800,color:"#ecfeff",fontFamily:"Barlow,sans-serif",textTransform:"uppercase",letterSpacing:"1.5px"}}>📈 Creative Performance Hub</div>
+              <div style={{fontSize:"20px",fontWeight:800,color:"#ecfeff",fontFamily:"Bodoni Moda,serif",textTransform:"uppercase",letterSpacing:"1.5px"}}>📈 Creative Performance Hub</div>
               <div style={{fontSize:"13px",color:"rgba(236,254,255,.6)",marginTop:"2px"}}>Manage influencer creatives for paid ad campaigns</div>
             </div>
           </div>
@@ -4172,7 +4181,7 @@ return (
           {/* Tab navigation */}
           <div style={{display:"flex",gap:"4px",marginBottom:"12px",borderBottom:`1px solid ${T.border}`,paddingBottom:"6px"}}>
             {[{k:"fresh",l:"🆕 Fresh",n:freshCreatives.length},{k:"running",l:"🏃 Running",n:runningCreatives.length},{k:"tested",l:"✅ Tested",n:testedCreatives.length},{k:"expiring",l:"⚠️ Expiring",n:expiringCreatives.length}].map(t=>(
-              <button key={t.k} onClick={()=>setAdTab(t.k)} style={{padding:"8px 14px",border:"none",borderBottom:adTab===t.k?"2px solid #0891b2":"2px solid transparent",background:"transparent",color:adTab===t.k?"#0891b2":T.sub,fontWeight:adTab===t.k?700:600,fontSize:"12px",cursor:"pointer",fontFamily:"Barlow,sans-serif",textTransform:"uppercase",letterSpacing:".5px"}}>
+              <button key={t.k} onClick={()=>setAdTab(t.k)} style={{padding:"8px 14px",border:"none",borderBottom:adTab===t.k?"2px solid #0891b2":"2px solid transparent",background:"transparent",color:adTab===t.k?"#0891b2":T.sub,fontWeight:adTab===t.k?700:600,fontSize:"12px",cursor:"pointer",fontFamily:"Bodoni Moda,serif",textTransform:"uppercase",letterSpacing:".5px"}}>
                 {t.l} <span style={{background:adTab===t.k?"#0891b2":T.border,color:adTab===t.k?"#fff":T.sub,borderRadius:"50%",padding:"1px 5px",fontSize:"9px",fontWeight:800,marginLeft:"4px"}}>{t.n}</span>
               </button>
             ))}
@@ -4739,7 +4748,7 @@ return (
             </div>
           </div>
           <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",overflow:"hidden",marginBottom:"20px"}}>
-            <div style={{display:"grid",gridTemplateColumns:"1.8fr 1.5fr 1.2fr 0.8fr 0.8fr 0.7fr",padding:"8px 12px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Barlow,sans-serif",letterSpacing:".5px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1.8fr 1.5fr 1.2fr 0.8fr 0.8fr 0.7fr",padding:"8px 12px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>
               <div>Influencer</div><div>Deliverable</div><div>Campaign</div><div>Platform</div><div>Deadline</div><div>Status</div>
             </div>
             {pendingDels.length===0&&<div style={{padding:"24px",textAlign:"center",color:T.sub,fontSize:"12px"}}>{deals.some(d=>!["rejected","pending","renegotiate","dropped"].includes(d.status))?"All deliverables fulfilled! 🎉":"No approved deals with pending deliverables yet"}</div>}
@@ -5076,7 +5085,7 @@ return (
         {sel&&<>
           {/* Invoice Details — Prominent for Finance */}
           {sel.inv&&<div style={{padding:"10px 12px",background:sel.inv.match===false?T.errBg:T.okBg,border:`1px solid ${sel.inv.match===false?T.err:T.ok}33`,borderRadius:"6px",marginBottom:"10px",fontSize:"12px"}}>
-            <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Barlow,sans-serif"}}>🧾 Invoice Details</div>
+            <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Bodoni Moda,serif"}}>🧾 Invoice Details</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3px 10px"}}>
               <div><span style={{color:T.sub}}>Invoice #:</span> <b>{sel.invoiceNumber||"—"}</b></div>
               <div><span style={{color:T.sub}}>Date:</span> <b>{sel.invoiceDate||"—"}</b></div>
@@ -5293,7 +5302,7 @@ return (
               <div style={{display:"flex",gap:"5px",alignItems:"center"}}><Badge s={sel.status}/>{camp&&<span style={{fontSize:"11px",color:T.gold,fontWeight:700}}>🎯 {camp.name}</span>}</div>
               <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
                 {(()=>{const inf=influencers.find(x=>x.name===sel.inf); return inf?<Btn v="ghost" sm onClick={()=>{setModal(null);setSel(null);setInfProfile(inf)}}>⭐ View Profile</Btn>:null;})()}
-                <span style={{fontSize:"11px",fontWeight:700,color:T.brand,background:T.goldSoft,padding:"2px 8px",borderRadius:"4px",fontFamily:"Barlow,sans-serif",letterSpacing:".5px"}}>{sel.collabId||"—"}</span>
+                <span style={{fontSize:"11px",fontWeight:700,color:T.brand,background:T.goldSoft,padding:"2px 8px",borderRadius:"4px",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>{sel.collabId||"—"}</span>
                 <span style={{fontSize:"10px",color:T.sub}}>{sel.by} · {sel.at}</span>
               </div>
             </div>
@@ -5373,13 +5382,13 @@ return (
 
                   {/* Revision feedback banner */}
                   {dl.st==="revision_requested"&&dl.feedback&&<div style={{background:T.errBg,border:`1px solid ${T.err}22`,borderRadius:"4px",padding:"10px 12px",marginBottom:"10px",fontSize:"13px"}}>
-                    <div style={{fontWeight:700,color:T.err,fontSize:"11px",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Barlow,sans-serif"}}>Manager Feedback</div>
+                    <div style={{fontWeight:700,color:T.err,fontSize:"11px",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Bodoni Moda,serif"}}>Manager Feedback</div>
                     <div style={{color:T.text}}>{dl.feedback}</div>
                   </div>}
 
                   {/* Feedback & revision trail */}
                   {dl.history&&dl.history.length>0&&<div style={{marginBottom:"10px",borderLeft:`2px solid ${T.border}`,paddingLeft:"10px"}}>
-                    <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>Activity Trail</div>
+                    <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>Activity Trail</div>
                     {dl.history.map((h,hi)=>{
                       const icon = h.action==="submitted"?"📤":h.action==="approved"?"✅":h.action==="revision_requested"?"✏️":"📋";
                       const label = h.action==="submitted"?"Content submitted":h.action==="approved"?"Content approved":h.action==="revision_requested"?"Revision requested":"Action";
@@ -5399,7 +5408,7 @@ return (
 
                   {/* Files & Versions — shows all uploaded versions for this deliverable */}
                   {(delFiles.length>0||activeUploads.length>0)&&<div style={{background:T.surfaceAlt,borderRadius:"4px",padding:"10px 12px",marginBottom:"8px"}}>
-                    <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>Uploaded Files ({delFiles.length} version{delFiles.length===1?"":"s"})</div>
+                    <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>Uploaded Files ({delFiles.length} version{delFiles.length===1?"":"s"})</div>
                     {delFiles.map(ff=><div key={ff.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"12px",borderBottom:`1px dashed ${T.border}`}}>
                       <span style={{background:T.info+"22",color:T.info,fontSize:"10px",fontWeight:800,padding:"2px 6px",borderRadius:"4px"}}>v{ff.version}</span>
                       <span style={{flex:1,fontFamily:"ui-monospace,monospace",color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ff.file_name}</span>
@@ -5414,7 +5423,7 @@ return (
 
                   {/* Negotiator: Submit content for review */}
                   {canSubmit&&<div style={{background:T.surfaceAlt,borderRadius:"4px",padding:"10px 12px"}}>
-                    <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>{dl.st==="revision_requested"?"Resubmit Revised Content":"Submit Content for Review"}</div>
+                    <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>{dl.st==="revision_requested"?"Resubmit Revised Content":"Submit Content for Review"}</div>
                     <div style={{display:"flex",gap:"6px",alignItems:"center",marginBottom:"6px"}}>
                       <div style={{flex:1}}><Inp value={url} onChange={e=>setDeliverableLinkF({...deliverableLinkF,[dl.id]:e.target.value})} placeholder="Content URL (Instagram, Drive link, etc.) *"/></div>
                       <Btn v="primary" sm onClick={()=>submitContentForReview(sel,i,url||latestFile?.web_view_link||"")}>Submit for Review</Btn>
@@ -5433,7 +5442,7 @@ return (
 
                   {/* Manager: Review & approve or request revision */}
                   {canReview&&<div style={{background:T.purpleBg,borderRadius:"4px",padding:"10px 12px"}}>
-                    <div style={{fontSize:"11px",fontWeight:700,color:T.purple,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>Review Content</div>
+                    <div style={{fontSize:"11px",fontWeight:700,color:T.purple,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>Review Content</div>
                     {dl.link&&<div style={{fontSize:"12px",color:T.info,marginBottom:"6px"}}>🔗 <a href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info}}>{dl.link}</a></div>}
                     {latestFile&&<div style={{fontSize:"12px",marginBottom:"8px",padding:"6px 8px",background:T.surface,borderRadius:"4px"}}>📁 Latest upload: <b>{latestFile.file_name}</b>{latestFile.web_view_link&&<a href={latestFile.web_view_link} target="_blank" rel="noopener noreferrer" style={{color:T.info,marginLeft:"8px",fontWeight:700}}>Download ↗</a>}</div>}
                     <div style={{display:"flex",gap:"6px",marginBottom:"8px"}}>
@@ -5445,7 +5454,7 @@ return (
 
                   {/* Negotiator: Mark approved content as live */}
                   {canMarkLive&&<div style={{background:T.okBg,borderRadius:"4px",padding:"10px 12px"}}>
-                    <div style={{fontSize:"11px",fontWeight:700,color:T.ok,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>Content Approved — Ready to Go Live</div>
+                    <div style={{fontSize:"11px",fontWeight:700,color:T.ok,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>Content Approved — Ready to Go Live</div>
                     <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
                       <div style={{flex:1}}><Inp value={url} onChange={e=>setDeliverableLinkF({...deliverableLinkF,[dl.id]:e.target.value})} placeholder="Final live URL (if different)"/></div>
                       <Btn v="ok" sm onClick={()=>markDelLive(sel,i,url||dl.link)}>Mark Live</Btn>
@@ -5487,7 +5496,7 @@ return (
             {(sel.ship||(sel.shipHistory||[]).length>0)&&<Section title="Shipment & Logistics" icon="📦">
               {/* Original shipment */}
               {sel.ship&&<div style={{padding:"8px 10px",background:T.purpleBg,borderRadius:"5px",fontSize:"13px",marginBottom:"8px"}}>
-                <div style={{fontWeight:700,fontSize:"11px",color:T.purple,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Barlow,sans-serif"}}>Original Shipment</div>
+                <div style={{fontWeight:700,fontSize:"11px",color:T.purple,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Bodoni Moda,serif"}}>Original Shipment</div>
                 <div><b>{sel.ship.carrier}:</b> <span style={{color:T.info,fontWeight:700}}>{sel.ship.track}</span></div>
                 <div style={{color:T.sub,marginTop:"1px"}}>Dispatched: {sel.ship.dispAt} by {sel.ship.dispBy}</div>
                 {sel.ship.delAt&&<div style={{color:T.ok,marginTop:"1px"}}>✓ Delivered: {sel.ship.delAt}</div>}
@@ -5495,7 +5504,7 @@ return (
 
               {/* Shipment History Timeline */}
               {(sel.shipHistory||[]).length>0&&<div style={{borderLeft:`2px solid ${T.border}`,paddingLeft:"12px",marginTop:"8px"}}>
-                <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"8px",fontFamily:"Barlow,sans-serif"}}>Logistics History</div>
+                <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"8px",fontFamily:"Bodoni Moda,serif"}}>Logistics History</div>
                 {(sel.shipHistory||[]).map((h,hi)=>{
                   const isPickup = h.type==="pickup";
                   const isReship = h.type==="reship";
@@ -5651,7 +5660,7 @@ return (
           const reDispDate = toDateOnly(reship?.reDispatchedAt);
           return <>
             <div style={{padding:"10px",background:T.purpleBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px"}}>
-              <div style={{fontWeight:700,color:T.purple,fontSize:"11px",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Barlow,sans-serif"}}>📦 Re-shipment Info</div>
+              <div style={{fontWeight:700,color:T.purple,fontSize:"11px",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Bodoni Moda,serif"}}>📦 Re-shipment Info</div>
               <div><b>Carrier:</b> {reship?.reCarrier}: {reship?.reTrack}</div>
               {(reship?.products||[]).length>0&&<div><b>Products:</b> {reship.products.map(p=>p.name).join(", ")}</div>}
               {reship?.newAddress&&<div><b>New Address:</b> {reship.newAddress}</div>}
@@ -5810,7 +5819,7 @@ return (
             <Field label="Name on PAN"><Inp value={agencyF.panName} onChange={e=>setAgencyF({...agencyF,panName:e.target.value})} placeholder="Defaults to agency name"/></Field>
           </div>
 
-          <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",margin:"10px 0 6px",fontFamily:"Barlow,sans-serif"}}>📄 Agency GST Invoice</div>
+          <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",margin:"10px 0 6px",fontFamily:"Bodoni Moda,serif"}}>📄 Agency GST Invoice</div>
           <div style={{border:`2px dashed ${agencyFile?T.ok:T.border}`,borderRadius:"8px",padding:"14px",textAlign:"center",marginBottom:"8px",background:agencyFile?T.okBg:"transparent",cursor:"pointer"}} onClick={()=>document.getElementById('agencyFileInput')?.click()}>
             <input id="agencyFileInput" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style={{display:"none"}} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)setAgencyFile(file);}}/>
             {agencyFile?<div style={{fontSize:"13px",fontWeight:700,color:T.ok}}>📄 {agencyFile.name} <span style={{fontSize:"11px",color:T.sub,fontWeight:400}}>· click to change</span></div>:<div><div style={{fontSize:"22px",marginBottom:"2px"}}>📤</div><div style={{fontSize:"12px",color:T.sub}}>Click to upload the agency's GST invoice (PDF/JPG/PNG)</div></div>}
@@ -5830,7 +5839,7 @@ return (
           <div style={{padding:"12px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>Amount: <b style={{fontSize:"20px",color:T.gold}}>{f(sel.amount)}</b></div>
-              <span style={{fontSize:"12px",fontWeight:700,color:T.brand,background:"#fff",padding:"3px 10px",borderRadius:"4px",fontFamily:"Barlow,sans-serif",letterSpacing:".5px"}}>{sel.collabId||"—"}</span>
+              <span style={{fontSize:"12px",fontWeight:700,color:T.brand,background:"#fff",padding:"3px 10px",borderRadius:"4px",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>{sel.collabId||"—"}</span>
             </div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product} · {sel.dels.filter(d=>d.st==="live").length}/{sel.dels.length} live</div>
           </div>
@@ -5872,7 +5881,7 @@ return (
           <div style={{padding:"12px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>🔒 Locked Amount: <b style={{fontSize:"20px",color:T.gold}}>{f(sel.amount)}</b></div>
-              <span style={{fontSize:"12px",fontWeight:700,color:T.brand,fontFamily:"Barlow,sans-serif"}}>{sel.collabId||"—"}</span>
+              <span style={{fontSize:"12px",fontWeight:700,color:T.brand,fontFamily:"Bodoni Moda,serif"}}>{sel.collabId||"—"}</span>
             </div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product} · {sel.dels.length} deliverables · {sel.paymentTerms||"Net 15 days"}</div>
           </div>
@@ -5881,7 +5890,7 @@ return (
             <b>One-step submission.</b> Fill in all fields below. On submit, the invoice goes directly to Finance for payment. If the amount matches the locked amount, Finance can pay immediately. If it doesn't match, it will be flagged as a dispute for manager review.
           </div>
 
-          <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>📄 Invoice Document</div>
+          <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>📄 Invoice Document</div>
           <div style={{border:`2px dashed ${invoiceFile?T.ok:T.border}`,borderRadius:"8px",padding:"16px",textAlign:"center",marginBottom:"10px",background:invoiceFile?T.okBg:"transparent",cursor:"pointer",transition:"all .2s"}} onClick={()=>document.getElementById('invoiceFileInput')?.click()}>
             <input id="invoiceFileInput" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style={{display:"none"}} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file){setInvoiceFile(file);if(!invoiceF.notes)setInvoiceF(prev=>({...prev,notes:file.name}))}}}/>
             {invoiceFile?<div><div style={{fontSize:"14px",fontWeight:700,color:T.ok}}>📄 {invoiceFile.name}</div><div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>{(invoiceFile.size/1024).toFixed(1)} KB · Click to change</div></div>:<div><div style={{fontSize:"24px",marginBottom:"4px"}}>📤</div><div style={{fontSize:"13px",fontWeight:600,color:T.sub}}>Click to upload invoice</div><div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>PDF, JPG, PNG, DOC accepted</div></div>}
@@ -5891,14 +5900,14 @@ return (
             <Inp value={invoiceF.beneficiary} onChange={e=>setInvoiceF({...invoiceF,beneficiary:e.target.value})} placeholder="e.g. INV-A3F2XK-ABCD (auto-filled if blank)"/>
           </Field>
 
-          <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginTop:"10px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>💰 Amount</div>
+          <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginTop:"10px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>💰 Amount</div>
           <Field label="Invoice Amount *">
             <Inp value={invoiceF.amount} onChange={e=>setInvoiceF({...invoiceF,amount:e.target.value})} type="number" prefix="₹" placeholder={String(sel.amount)}/>
           </Field>
           {invoiceF.amount&&+invoiceF.amount!==sel.amount&&<div style={{padding:"6px 8px",background:T.errBg,borderRadius:"4px",fontSize:"11px",color:T.err,marginTop:"-4px",marginBottom:"8px"}}>⚠ MISMATCH: Invoice {f(invoiceF.amount)} ≠ Locked {f(sel.amount)}. Will be flagged as dispute for manager review.</div>}
           {invoiceF.amount&&+invoiceF.amount===sel.amount&&<div style={{padding:"6px 8px",background:T.okBg,borderRadius:"4px",fontSize:"11px",color:T.ok,marginTop:"-4px",marginBottom:"8px"}}>✓ Matches locked amount — Finance can pay immediately.</div>}
 
-          <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginTop:"10px",marginBottom:"6px",fontFamily:"Barlow,sans-serif"}}>🪪 PAN Details (required for payment)</div>
+          <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginTop:"10px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>🪪 PAN Details (required for payment)</div>
           <Field label="PAN Number *">
             <Inp value={invoiceF.panNumber} onChange={e=>setInvoiceF({...invoiceF,panNumber:e.target.value.toUpperCase()})} placeholder="ABCDE1234F"/>
           </Field>

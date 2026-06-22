@@ -1,7 +1,8 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'DM Sans', sans-serif; background: #F6F4F0; color: #141824; }
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-thumb { background: #E2DDD3; border-radius: 3px; }
+body { font-family: 'Archivo', -apple-system, BlinkMacSystemFont, sans-serif; background: #F8F6F1; color: #1A1A1A; }
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cfc8ba; border-radius: 6px; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
 input, select, textarea, button { font-family: inherit; }

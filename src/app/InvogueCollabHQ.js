@@ -2964,46 +2964,60 @@ return (
         const activeUsers = users.filter(u=>u.status==="active");
         const byCreator = {};
         deals.forEach(d=>{ byCreator[d.by] = (byCreator[d.by]||0)+1; });
+        const activeCount = deals.filter(d=>!["rejected","pending","renegotiate","dropped","drop_requested","paid"].includes(d.status)).length;
+        const liveCount = deals.filter(d=>["live","partial_live"].includes(d.status)).length;
+        const greeting = (()=>{const h=new Date().getHours();return h<12?"morning":h<17?"afternoon":"evening";})();
 
         return <>
-          {/* Admin header band */}
-          <div style={{background:T.brand,borderRadius:"6px",padding:"16px 20px",marginBottom:"16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          {/* Admin header */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:"30px",flexWrap:"wrap",gap:"12px"}}>
             <div>
-              <div style={{fontSize:"20px",fontWeight:800,color:"#F6DFC1",fontFamily:"Bodoni Moda,serif",textTransform:"uppercase",letterSpacing:"1.5px"}}>⚙️ Admin Control Panel</div>
-              <div style={{fontSize:"13px",color:"rgba(246,223,193,.6)",marginTop:"2px"}}>Super access — all roles, all data, all controls</div>
+              <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>Admin · Control Panel</div>
+              <div style={{fontFamily:T.display,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Good {greeting}, {(loggedIn?.name||"there").split(" ")[0]}</div>
             </div>
-            <div style={{display:"flex",gap:"6px"}}>
-              <Btn v="gold" sm onClick={()=>setView("users")}>Manage Team</Btn>
-              <Btn v="outline" sm sx={{borderColor:"rgba(246,223,193,.3)",color:"#F6DFC1"}} onClick={()=>setView("audit")}>Audit Logs</Btn>
+            <div style={{display:"flex",alignItems:"center",gap:"14px"}}>
+              <div style={{textAlign:"right",fontSize:"12px",color:T.sub,fontStyle:"italic",fontFamily:T.display}}>{new Date().toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
+              <Btn v="outline" sm onClick={()=>setView("users")}>Manage Team</Btn>
+              <Btn v="ghost" sm onClick={()=>setView("audit")}>Audit</Btn>
             </div>
           </div>
 
-          {/* Key Metrics */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"8px",marginBottom:"16px"}}>
-            <StatBox l="Total Committed" v={f(stats.committed)} c={T.gold}/>
+          {/* Hero metrics — editorial strip */}
+          <div style={{display:"flex",borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,marginBottom:"18px",flexWrap:"wrap"}}>
+            {[
+              {l:"Active Collabs",v:activeCount,c:T.text,sub:`${deals.length} total`},
+              {l:"Pending Approval",v:pendingApproval.length,c:pendingApproval.length>0?T.brand:T.text,sub:stats.disputed>0?`${stats.disputed} disputes`:"all clear"},
+              {l:"Payments Due",v:f(totalOutstanding),c:T.text,sub:`${needPayment.length} collabs`},
+              {l:"Live This Month",v:liveCount,c:T.text,sub:`${campaigns.length} campaigns`},
+            ].map((m,i,arr)=><div key={i} style={{flex:"1 1 180px",padding:"20px 24px",borderRight:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+              <div style={{fontSize:"10px",letterSpacing:"2px",textTransform:"uppercase",color:T.sub,marginBottom:"10px"}}>{m.l}</div>
+              <div style={{fontFamily:T.display,fontSize:"40px",fontWeight:500,lineHeight:1,color:m.c}}>{m.v}</div>
+              <div style={{fontSize:"11px",color:T.sub,marginTop:"8px"}}>{m.sub}</div>
+            </div>)}
+          </div>
+          {/* Secondary metrics */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"10px",marginBottom:"30px"}}>
+            <StatBox l="Total Committed" v={f(stats.committed)}/>
             <StatBox l="Total Paid" v={f(stats.paid)} c={T.ok}/>
-            <StatBox l="Outstanding" v={f(totalOutstanding)} c={T.err}/>
-            <StatBox l="Pending Approval" v={stats.pendingN} c={stats.pendingN>0?T.warn:T.ok}/>
-            <StatBox l="Active Disputes" v={stats.disputed} c={stats.disputed>0?T.err:T.ok}/>
-            <StatBox l="Active Team" v={activeUsers.length} c={T.info} sub={`${users.length} total`}/>
-            <StatBox l="Total Deals" v={deals.length} c={T.brand}/>
-            <StatBox l="Total Pipeline" v={f(stats.pipeline)} c={T.brand} sub="All deals"/>
-            <StatBox l="Pending Shipments" v={stats.pendingShip} c={stats.pendingShip>0?T.purple:T.ok}/>
+            <StatBox l="Total Pipeline" v={f(stats.pipeline)}/>
+            <StatBox l="Active Team" v={activeUsers.length} sub={`${users.length} total`}/>
+            <StatBox l="Pending Shipments" v={stats.pendingShip}/>
           </div>
 
           {/* APPROVAL QUEUE — Admin can approve */}
-          {pendingApproval.length>0&&<Section title={`Approval Queue (${pendingApproval.length})`} icon="⚡" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Action Required</span>}>
-            {pendingApproval.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${d.status==="manager_approved"?T.info:T.warn}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-              <div>
-                <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"13px"}}>· {d.platform} · {d.followers}</span></div>
-                <div style={{fontSize:"11px",color:T.sub}}>{d.product} · {d.dels.length} deliverables · by {d.by} · {getCamp(d.cid)?.name||""}</div>
+          {pendingApproval.length>0&&<Section title="Approval Queue" action={<span style={{fontSize:"11px",color:T.sub,fontStyle:"italic",fontFamily:T.display}}>{pendingApproval.length} awaiting</span>}>
+            {pendingApproval.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"22px 24px",marginBottom:"16px",cursor:"pointer"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div><div style={{fontFamily:T.display,fontSize:"19px",fontWeight:600}}>{d.inf}</div><div style={{fontSize:"11px",color:T.sub,marginTop:"3px"}}>{d.platform} · {d.followers}</div></div>
+                <div style={{textAlign:"right"}}><div style={{fontFamily:T.display,fontSize:"24px",fontWeight:600}}>{f(d.amount)}</div><div style={{marginTop:"6px"}}><Badge s={d.status} sm/></div></div>
               </div>
-              <div onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:"6px"}}>
-                <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{f(d.amount)}</span>
-                {d.status==="manager_approved"&&<span style={{fontSize:"10px",padding:"2px 6px",borderRadius:"4px",background:T.infoBg,color:T.info,fontWeight:700}}>Manager ✓ — Admin Needed</span>}
-                <Btn v="ok" sm onClick={()=>setConfirmAction({title:"Approve Deal",msg:"Approve and lock "+f(d.amount)+" for "+d.inf+"?",onConfirm:()=>{approveDeal(d);setConfirmAction(null)}})}>✓</Btn>
-                <Btn v="outline" sm onClick={()=>setConfirmAction({title:"Request Renegotiation",msg:"Renegotiate "+d.inf+" deal?",onConfirm:()=>{renegDeal(d);setConfirmAction(null)}})}>↩</Btn>
-                <Btn v="danger" sm onClick={()=>openRejectModal(d)}>✕</Btn>
+              <div style={{fontSize:"12px",color:T.text,margin:"14px 0 12px",borderTop:`1px solid ${T.borderSoft}`,paddingTop:"12px"}}>{getCamp(d.cid)?.name||"—"} · <span style={{color:T.sub}}>{d.product} · {d.dels.length} deliverables · by {d.by}</span></div>
+              {d.amount>50000&&d.status==="pending"&&<div style={{display:"flex",alignItems:"center",background:"#FBF3F2",border:"1px solid #F2DAD7",borderRadius:"2px",padding:"8px 12px",marginBottom:"16px"}}><span style={{fontSize:"11px",color:T.brand,fontWeight:600}}>Dual approval — exceeds ₹50,000, manager sign-off required.</span></div>}
+              {d.status==="manager_approved"&&<div style={{display:"flex",alignItems:"center",background:T.infoBg,borderRadius:"2px",padding:"8px 12px",marginBottom:"16px"}}><span style={{fontSize:"11px",color:T.info,fontWeight:600}}>Manager approved — admin final sign-off needed.</span></div>}
+              <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:"10px"}}>
+                <Btn v="primary" sm onClick={()=>setConfirmAction({title:"Approve Deal",msg:"Approve and lock "+f(d.amount)+" for "+d.inf+"?",onConfirm:()=>{approveDeal(d);setConfirmAction(null)}})}>Approve</Btn>
+                <Btn v="outline" sm onClick={()=>setConfirmAction({title:"Request Renegotiation",msg:"Renegotiate "+d.inf+" deal?",onConfirm:()=>{renegDeal(d);setConfirmAction(null)}})}>Renegotiate</Btn>
+                <Btn v="danger" sm onClick={()=>openRejectModal(d)}>Reject</Btn>
               </div>
             </div>)}
           </Section>}
@@ -3016,30 +3030,30 @@ return (
             </div>)}
           </Section>}
 
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"32px"}}>
             {/* PAYMENTS DUE */}
-            <Section title={`Payments Due (${needPayment.length})`} icon="💰" action={<span style={{fontSize:"11px",color:T.sub}}>{f(totalOutstanding)} total</span>}>
+            <Section title="Payments Due" action={<span style={{fontSize:"11px",color:T.sub,fontStyle:"italic",fontFamily:T.display}}>{f(totalOutstanding)} total</span>}>
               {needPayment.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>All clear</div>}
-              {needPayment.slice(0,6).map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"7px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
-                <span><b>{d.inf}</b></span>
-                <span><span style={{color:T.ok}}>{f(totalPaid(d))}</span>/<b>{f(d.amount)}</b> <span style={{color:T.warn,fontWeight:700}}>Due {f(remaining(d))}</span></span>
-              </div>)}
+              {needPayment.length>0&&<div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
+                {needPayment.slice(0,6).map((d,i,arr)=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",cursor:"pointer"}}>
+                  <div><div style={{fontSize:"13px",fontWeight:600}}>{d.inf}</div><div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{d.agencyManaged?"Agency · invoice":(d.paymentDetailsAt?"Details in · ready":"Awaiting details")}</div></div>
+                  <div style={{textAlign:"right"}}><div style={{fontFamily:T.display,fontSize:"16px",fontWeight:600}}>{f(remaining(d))}</div><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,marginTop:"2px",color:d.paymentDueDate&&new Date(d.paymentDueDate)<new Date()?T.err:T.sub}}>{d.paymentDueDate?(new Date(d.paymentDueDate)<new Date()?"Overdue":"Due "+new Date(d.paymentDueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})):"Unscheduled"}</div></div>
+                </div>)}
+              </div>}
             </Section>
 
             {/* SHIPMENTS */}
-            <Section title={`Shipments`} icon="📦" action={<Btn v="ghost" sm onClick={()=>setView("shipments")}>View all →</Btn>}>
-              {pendingShip.length===0&&inTransit.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>All shipped & delivered</div>}
-              {pendingShip.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.warnBg,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"6px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
-                <span><b>{d.inf}</b> · {d.product}</span><span style={{color:T.warn,fontWeight:700}}>Awaiting dispatch</span>
-              </div>)}
-              {inTransit.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.purpleBg,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"6px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
-                <span><b>{d.inf}</b> · {d.ship.carrier}: {d.ship.track}</span><span style={{color:T.purple,fontWeight:700}}>In transit</span>
-              </div>)}
+            <Section title="Shipments" action={<Btn v="ghost" sm onClick={()=>setView("shipments")}>View all →</Btn>}>
+              {pendingShip.length===0&&inTransit.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>All shipped &amp; delivered</div>}
+              {(pendingShip.length>0||inTransit.length>0)&&<div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
+                {pendingShip.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:`1px solid ${T.borderSoft}`,cursor:"pointer"}}><div><div style={{fontSize:"13px",fontWeight:600}}>{d.inf}</div><div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{d.product}</div></div><span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.warn,fontWeight:700}}>Awaiting dispatch</span></div>)}
+                {inTransit.map((d,i,arr)=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",cursor:"pointer"}}><div><div style={{fontSize:"13px",fontWeight:600}}>{d.inf}</div><div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{d.ship.carrier} · {d.ship.track}</div></div><span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.info,fontWeight:700}}>In transit</span></div>)}
+              </div>}
             </Section>
           </div>
 
           {/* TEAM PERFORMANCE */}
-          <Section title="👥 Team Performance" icon="" action={<Btn v="ghost" sm onClick={()=>setView("users")}>Manage →</Btn>}>
+          <Section title="Team Performance" action={<Btn v="ghost" sm onClick={()=>setView("users")}>Manage →</Btn>}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"8px"}}>
               {activeUsers.map(u=>{
                 const uDeals = deals.filter(d=>d.by===u.name||d.by===u.name.split(" ")[0]);
@@ -3071,7 +3085,7 @@ return (
           </Section>}
 
           {/* CAMPAIGN BUDGETS */}
-          <Section title="🎯 Campaign Budgets" icon="" action={<Btn v="gold" sm onClick={()=>{setNCamp({name:"",budget:"",target:"",deadline:""});setModal("newCamp")}}>+ New Campaign</Btn>}>
+          <Section title="Campaign Budgets" action={<Btn v="gold" sm onClick={()=>{setNCamp({name:"",budget:"",target:"",deadline:""});setModal("newCamp")}}>+ New Campaign</Btn>}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"8px"}}>
               {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"11px",cursor:"pointer",transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}><span style={{fontWeight:700,fontSize:"12px"}}>{c.name}</span><span style={{fontSize:"11px",fontWeight:700,color:pct>90?T.err:T.ok}}>{pct}%</span></div>

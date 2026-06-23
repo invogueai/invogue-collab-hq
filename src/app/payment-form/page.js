@@ -13,7 +13,7 @@ const T = {
 // remounts the input and focus is lost after one character.
 const Field = ({ label, required, error, children, span }) => (
   <div style={{ marginBottom: "10px", gridColumn: span ? "1/-1" : undefined }}>
-    <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: T.sub, marginBottom: "4px", textTransform: "uppercase", letterSpacing: ".3px", fontFamily: "'Barlow',sans-serif" }}>
+    <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: T.sub, marginBottom: "4px", textTransform: "uppercase", letterSpacing: ".3px", fontFamily: "'Bodoni Moda',serif" }}>
       {label} {required && <span style={{ color: T.err }}>*</span>}
     </label>
     {children}
@@ -23,7 +23,7 @@ const Field = ({ label, required, error, children, span }) => (
 
 const Inp = ({ value, onChange, placeholder, type, disabled }) => (
   <input value={value} onChange={onChange} placeholder={placeholder} type={type || "text"} disabled={disabled}
-    style={{ width: "100%", padding: "10px 12px", border: `1px solid ${T.border}`, borderRadius: "4px", fontSize: "14px", fontFamily: "Archivo,sans-serif", color: T.text, background: disabled ? "#f0f0f0" : T.surface, outline: "none" }}
+    style={{ width: "100%", padding: "10px 12px", border: `1px solid ${T.border}`, borderRadius: "2px", fontSize: "14px", fontFamily: "Archivo,sans-serif", color: T.text, background: disabled ? "#f0f0f0" : T.surface, outline: "none" }}
     onFocus={e => e.target.style.borderColor = T.brand}
     onBlur={e => e.target.style.borderColor = "rgba(26,26,26,.12)"} />
 );
@@ -102,8 +102,8 @@ export default function PaymentForm() {
 
   const Header = () => (
     <div style={{ background: T.brand, padding: "20px 0", textAlign: "center" }}>
-      <div style={{ fontFamily: "'Barlow',sans-serif", fontSize: "14px", fontWeight: 700, color: "#F6DFC1", letterSpacing: "3px", textTransform: "uppercase" }}>INVOGUE</div>
-      <div style={{ fontFamily: "'Barlow',sans-serif", fontSize: "24px", fontWeight: 800, color: "#fff", marginTop: "4px", letterSpacing: "1px" }}>Payment Details</div>
+      <div style={{ fontFamily: "'Bodoni Moda',serif", fontSize: "14px", fontWeight: 700, color: "#F6DFC1", letterSpacing: "3px", textTransform: "uppercase" }}>INVOGUE</div>
+      <div style={{ fontFamily: "'Bodoni Moda',serif", fontSize: "24px", fontWeight: 800, color: "#fff", marginTop: "4px", letterSpacing: "1px" }}>Payment Details</div>
       <div style={{ fontSize: "13px", color: "#F6DFC199", marginTop: "4px" }}>Submit your bank details to receive your collaboration payment</div>
     </div>
   );
@@ -114,7 +114,7 @@ export default function PaymentForm() {
     <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'Archivo',sans-serif" }}><Header />
       <div style={{ maxWidth: "520px", margin: "40px auto", padding: "0 20px", textAlign: "center" }}>
         <div style={{ fontSize: "44px", marginBottom: "12px" }}>⚠️</div>
-        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: "10px", padding: "28px", fontSize: "14px", color: T.text }}>{loadErr}</div>
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: "2px", padding: "28px", fontSize: "14px", color: T.text }}>{loadErr}</div>
       </div>
     </div>
   );
@@ -123,7 +123,7 @@ export default function PaymentForm() {
     <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'Archivo',sans-serif" }}><Header />
       <div style={{ maxWidth: "520px", margin: "40px auto", padding: "0 20px", textAlign: "center" }}>
         <div style={{ fontSize: "52px", marginBottom: "12px" }}>🎉</div>
-        <div style={{ background: T.surface, border: `1px solid ${T.ok}33`, borderRadius: "10px", padding: "28px" }}>
+        <div style={{ background: T.surface, border: `1px solid ${T.ok}33`, borderRadius: "2px", padding: "28px" }}>
           <h1 style={{ fontSize: "20px", color: T.brand, marginBottom: "8px" }}>Thank you, {info?.influencerName}!</h1>
           <p style={{ fontSize: "14px", color: T.sub, lineHeight: 1.6 }}>Your payment details for <b>{info?.collabId}</b> have been received securely. Our finance team will process your payment of <b style={{ color: T.gold }}>{f(info?.amount)}</b> shortly.</p>
           <p style={{ fontSize: "12px", color: T.faint, marginTop: "14px" }}>You can close this page now. Need a correction? Reach out to your collab manager.</p>
@@ -137,11 +137,11 @@ export default function PaymentForm() {
       <Header />
       <div style={{ maxWidth: "720px", margin: "0 auto", padding: "24px 20px" }}>
         {/* Collab summary (read-only, auto-fetched) */}
-        <div style={{ background: T.goldSoft, border: `1px solid ${T.gold}44`, borderRadius: "8px", padding: "14px 16px", marginBottom: "16px" }}>
+        <div style={{ background: T.goldSoft, border: `1px solid ${T.gold}44`, borderRadius: "2px", padding: "14px 16px", marginBottom: "16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
             <div>
               <div style={{ fontSize: "12px", color: T.sub, fontWeight: 600 }}>Collaboration</div>
-              <div style={{ fontSize: "16px", fontWeight: 800, color: T.brand, fontFamily: "'Barlow',sans-serif", letterSpacing: "1px" }}>{info?.collabId || "—"}</div>
+              <div style={{ fontSize: "16px", fontWeight: 800, color: T.brand, fontFamily: "'Bodoni Moda',serif", letterSpacing: "1px" }}>{info?.collabId || "—"}</div>
               <div style={{ fontSize: "13px", color: T.text, marginTop: "2px" }}>{info?.influencerName}</div>
             </div>
             <div style={{ textAlign: "right" }}>
@@ -153,19 +153,19 @@ export default function PaymentForm() {
             <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: `1px solid ${T.gold}33` }}>
               <div style={{ fontSize: "11px", color: T.sub, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: "4px" }}>Deliverables</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                {info.deliverables.map((d, i) => <span key={i} style={{ background: "#fff", borderRadius: "4px", padding: "3px 9px", fontSize: "12px", color: T.text }}>{d.type}{d.description ? ` — ${d.description}` : ""}</span>)}
+                {info.deliverables.map((d, i) => <span key={i} style={{ background: "#fff", borderRadius: "2px", padding: "3px 9px", fontSize: "12px", color: T.text }}>{d.type}{d.description ? ` — ${d.description}` : ""}</span>)}
               </div>
             </div>
           )}
         </div>
 
-        <div style={{ padding: "8px 12px", background: T.infoBg, borderRadius: "6px", marginBottom: "14px", fontSize: "12px", color: T.info }}>
+        <div style={{ padding: "8px 12px", background: T.infoBg, borderRadius: "2px", marginBottom: "14px", fontSize: "12px", color: T.info }}>
           🔒 Your details are submitted securely over an encrypted connection and used only to process this payment.
         </div>
 
         {/* Bank details */}
-        <div style={{ background: T.surface, borderRadius: "10px", border: `1px solid ${T.border}`, padding: "24px", marginBottom: "16px" }}>
-          <div style={{ fontFamily: "'Barlow',sans-serif", fontSize: "13px", fontWeight: 700, color: T.brand, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "14px", paddingBottom: "8px", borderBottom: `2px solid ${T.brand}` }}>Bank Details</div>
+        <div style={{ background: T.surface, borderRadius: "2px", border: `1px solid ${T.border}`, padding: "24px", marginBottom: "16px" }}>
+          <div style={{ fontFamily: "'Bodoni Moda',serif", fontSize: "13px", fontWeight: 700, color: T.brand, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "14px", paddingBottom: "8px", borderBottom: `2px solid ${T.brand}` }}>Bank Details</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 12px" }}>
             <Field label="Beneficiary Name" required error={errors.beneficiary}><Inp value={form.beneficiary} onChange={e => set("beneficiary", e.target.value)} placeholder="Name as on bank account" /></Field>
             <Field label="Bank Name" required error={errors.bank}><Inp value={form.bank} onChange={e => set("bank", e.target.value)} placeholder="HDFC Bank" /></Field>
@@ -177,8 +177,8 @@ export default function PaymentForm() {
         </div>
 
         {/* Tax + contact */}
-        <div style={{ background: T.surface, borderRadius: "10px", border: `1px solid ${T.border}`, padding: "24px", marginBottom: "20px" }}>
-          <div style={{ fontFamily: "'Barlow',sans-serif", fontSize: "13px", fontWeight: 700, color: T.brand, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "14px", paddingBottom: "8px", borderBottom: `2px solid ${T.brand}` }}>Tax & Contact</div>
+        <div style={{ background: T.surface, borderRadius: "2px", border: `1px solid ${T.border}`, padding: "24px", marginBottom: "20px" }}>
+          <div style={{ fontFamily: "'Bodoni Moda',serif", fontSize: "13px", fontWeight: 700, color: T.brand, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "14px", paddingBottom: "8px", borderBottom: `2px solid ${T.brand}` }}>Tax & Contact</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 12px" }}>
             <Field label="PAN Number" required error={errors.pan}><Inp value={form.pan} onChange={e => set("pan", e.target.value.toUpperCase())} placeholder="ABCDE1234F" /></Field>
             <Field label="Name on PAN" required error={errors.panName}><Inp value={form.panName} onChange={e => set("panName", e.target.value)} placeholder="Exact name as on PAN card" /></Field>
@@ -188,16 +188,16 @@ export default function PaymentForm() {
           </div>
         </div>
 
-        {errors.submit && <div style={{ background: T.errBg, color: T.err, borderRadius: "8px", padding: "12px 16px", marginBottom: "12px", fontSize: "13px" }}>{errors.submit}</div>}
+        {errors.submit && <div style={{ background: T.errBg, color: T.err, borderRadius: "2px", padding: "12px 16px", marginBottom: "12px", fontSize: "13px" }}>{errors.submit}</div>}
 
         <button onClick={submit} disabled={submitting} style={{
           width: "100%", padding: "16px", background: T.brand, color: "#F6DFC1", border: "none",
-          borderRadius: "8px", fontSize: "16px", fontWeight: 800, cursor: submitting ? "not-allowed" : "pointer",
-          fontFamily: "'Barlow',sans-serif", letterSpacing: "2px", textTransform: "uppercase", opacity: submitting ? .6 : 1,
+          borderRadius: "2px", fontSize: "16px", fontWeight: 800, cursor: submitting ? "not-allowed" : "pointer",
+          fontFamily: "'Bodoni Moda',serif", letterSpacing: "2px", textTransform: "uppercase", opacity: submitting ? .6 : 1,
         }}>{submitting ? "Submitting…" : "Submit Payment Details"}</button>
 
         <div style={{ textAlign: "center", padding: "20px 0", fontSize: "11px", color: T.faint }}>
-          <span style={{ fontFamily: "'Barlow',sans-serif", fontWeight: 700, color: T.brand, letterSpacing: "2px" }}>INVOGUE</span>
+          <span style={{ fontFamily: "'Bodoni Moda',serif", fontWeight: 700, color: T.brand, letterSpacing: "2px" }}>INVOGUE</span>
           <span style={{ margin: "0 6px" }}>·</span>invogue.shop
         </div>
       </div>

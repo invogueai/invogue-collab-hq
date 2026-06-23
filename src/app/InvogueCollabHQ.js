@@ -2782,13 +2782,13 @@ input:focus,select:focus,textarea:focus{border-color:#770A1C!important;outline:n
         </div>
 
         {/* Login Card */}
-        <div style={{background:"#FFFFFF",borderRadius:"8px",padding:"32px",boxShadow:"0 4px 24px rgba(0,0,0,.06)",border:"1px solid rgba(26,26,26,.08)"}}>
+        <div style={{background:"#FFFFFF",borderRadius:"2px",padding:"32px",boxShadow:"0 4px 24px rgba(0,0,0,.06)",border:"1px solid rgba(26,26,26,.08)"}}>
           <div style={{fontFamily:"'Bodoni Moda',serif",fontSize:"18px",fontWeight:700,color:"#1A1A1A",marginBottom:"8px",textTransform:"uppercase"}}>Welcome back</div>
           <div style={{fontFamily:"'Archivo',sans-serif",fontSize:"12px",color:"#7D766A",marginBottom:"28px"}}>Sign in with your Invogue Google account</div>
 
           {/* Checking session spinner */}
           {authChecking && (
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"10px",padding:"14px",marginBottom:"14px",background:"#F6F4F0",borderRadius:"4px",fontSize:"12px",color:"#7D766A",fontFamily:"'Archivo',sans-serif"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"10px",padding:"14px",marginBottom:"14px",background:"#F6F4F0",borderRadius:"2px",fontSize:"12px",color:"#7D766A",fontFamily:"'Archivo',sans-serif"}}>
               <div style={{width:"14px",height:"14px",borderRadius:"50%",border:"2px solid rgba(119,10,28,.15)",borderTopColor:"#770A1C",animation:"spin .8s linear infinite"}}/>
               <span>Checking session...</span>
               <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
@@ -2797,7 +2797,7 @@ input:focus,select:focus,textarea:focus{border-color:#770A1C!important;outline:n
 
           {/* Error */}
           {loginErr && !authChecking && (
-            <div style={{padding:"10px 12px",background:"#FEE2E2",borderRadius:"4px",fontSize:"13px",color:"#991B1B",fontWeight:600,marginBottom:"18px",fontFamily:"'Archivo',sans-serif",lineHeight:1.4}}>{loginErr}</div>
+            <div style={{padding:"10px 12px",background:"#FEE2E2",borderRadius:"2px",fontSize:"13px",color:"#991B1B",fontWeight:600,marginBottom:"18px",fontFamily:"'Archivo',sans-serif",lineHeight:1.4}}>{loginErr}</div>
           )}
 
           {/* Google Sign-In Button */}
@@ -2808,7 +2808,7 @@ input:focus,select:focus,textarea:focus{border-color:#770A1C!important;outline:n
               width:"100%",padding:"12px 16px",
               background: (authChecking||authBusy) ? "#E5E1D8" : "#FFFFFF",
               color:"#1A1A1A",
-              border:"1px solid rgba(26,26,26,.20)",borderRadius:"4px",
+              border:"1px solid rgba(26,26,26,.20)",borderRadius:"2px",
               fontFamily:"'Archivo',sans-serif",fontSize:"14px",fontWeight:600,
               cursor:(authChecking||authBusy)?"not-allowed":"pointer",
               display:"flex",alignItems:"center",justifyContent:"center",gap:"10px",
@@ -2845,7 +2845,7 @@ return (
     <style>{`@import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..700&family=Archivo:wght@400;500;600&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#F6F4F0}::-webkit-scrollbar-thumb{background:#D4C49A;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#B08D42}@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}@media(max-width:768px){.mobile-grid-1{grid-template-columns:1fr!important}.mobile-hide{display:none!important}.mobile-stack{flex-direction:column!important}.mobile-full{width:100%!important;max-width:100%!important}.mobile-small-text{font-size:10px!important}.mobile-pad{padding:10px!important}}@media(max-width:480px){.mobile-xs-hide{display:none!important}}`}</style>
 
     {/* TOAST */}
-    {toast&&<div role="alert" aria-live="assertive" style={{position:"fixed",top:16,right:16,zIndex:2e3,padding:"14px 24px",borderRadius:"6px",fontSize:"13px",fontWeight:600,fontFamily:"Archivo,sans-serif",color:toast.type==="err"?T.err:toast.type==="warn"?T.warn:T.ok,background:toast.type==="err"?T.errBg:toast.type==="warn"?T.warnBg:T.okBg,boxShadow:"0 4px 16px rgba(0,0,0,.08)",animation:"fadeUp .3s ease",borderLeft:`4px solid ${toast.type==="err"?T.err:toast.type==="warn"?T.warn:T.ok}`}}>{toast.msg}</div>}
+    {toast&&<div role="alert" aria-live="assertive" style={{position:"fixed",top:16,right:16,zIndex:2e3,padding:"14px 24px",borderRadius:"2px",fontSize:"13px",fontWeight:600,fontFamily:"Archivo,sans-serif",color:toast.type==="err"?T.err:toast.type==="warn"?T.warn:T.ok,background:toast.type==="err"?T.errBg:toast.type==="warn"?T.warnBg:T.okBg,boxShadow:"0 4px 16px rgba(0,0,0,.08)",animation:"fadeUp .3s ease",borderLeft:`4px solid ${toast.type==="err"?T.err:toast.type==="warn"?T.warn:T.ok}`}}>{toast.msg}</div>}
 
     {/* ── HEADER ── */}
     <div role="banner" style={{background:"#FFFFFF",borderBottom:`1px solid ${T.borderHead}`,padding:"13px 32px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"12px"}}>
@@ -2860,7 +2860,7 @@ return (
         <input type="text" aria-label="Search deals, influencers, and campaigns" value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);if(e.target.value.trim())setSearchResults(performSearch(e.target.value));else setSearchResults(null)}}
           placeholder="Search deals, influencers, campaigns..."
           style={{width:"100%",padding:"10px 14px",borderRadius:"2px",border:`1px solid ${T.border}`,background:"#FFFFFF",color:"#1A1A1A",fontSize:"13px",fontFamily:"'Archivo',sans-serif",outline:"none"}}/>
-        {searchResults&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:"#FFFFFF",borderRadius:"4px",border:"1px solid rgba(26,26,26,.12)",marginTop:"4px",maxHeight:"300px",overflowY:"auto",zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,.06)"}}>
+        {searchResults&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:"#FFFFFF",borderRadius:"2px",border:"1px solid rgba(26,26,26,.12)",marginTop:"4px",maxHeight:"300px",overflowY:"auto",zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,.06)"}}>
           {(searchResults.dealMatches?.length||0)>0&&<>
             <div style={{fontSize:"10px",fontWeight:700,color:"#7D766A",padding:"8px 12px",textTransform:"uppercase"}}>Deals</div>
             {searchResults.dealMatches.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail");setSearchQuery("");setSearchResults(null)}} style={{padding:"8px 12px",borderBottom:`1px solid rgba(26,26,26,.08)`,cursor:"pointer",fontSize:"13px",color:"#1A1A1A"}}><b>{d.inf}</b><div style={{fontSize:"10px",color:"#7D766A"}}>{d.product}</div></div>)}
@@ -2883,7 +2883,7 @@ return (
             🔔
             {unreads>0&&<span style={{position:"absolute",top:-6,right:-6,background:"#770A1C",color:"#FFFFFF",borderRadius:"50%",width:"18px",height:"18px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px",fontWeight:800}}>{unreads}</span>}
           </button>
-          {notificationPanel&&<div style={{position:"absolute",top:"100%",right:0,background:"#FFFFFF",borderRadius:"4px",marginTop:"8px",width:"320px",maxHeight:"400px",overflowY:"auto",zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,.06)",border:"1px solid rgba(26,26,26,.08)"}}>
+          {notificationPanel&&<div style={{position:"absolute",top:"100%",right:0,background:"#FFFFFF",borderRadius:"2px",marginTop:"8px",width:"320px",maxHeight:"400px",overflowY:"auto",zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,.06)",border:"1px solid rgba(26,26,26,.08)"}}>
             <div style={{padding:"10px 12px",borderBottom:`1px solid rgba(26,26,26,.08)`,fontWeight:700,fontSize:"12px",color:"#1A1A1A"}}>Notifications</div>
             {recentNotifs.length===0?<div style={{padding:"12px",fontSize:"13px",color:"#7D766A",textAlign:"center"}}>No notifications</div>:recentNotifs.map(n=><div key={n.id} onClick={()=>{const deal=deals.find(x=>x.id===n.dealId);if(deal){setSel(deal);setModal("detail")}}} style={{padding:"10px 12px",borderBottom:`1px solid rgba(26,26,26,.08)`,fontSize:"12px",color:"#1A1A1A",cursor:"pointer"}}>
               <div style={{display:"flex",gap:"6px"}}>
@@ -2939,7 +2939,7 @@ return (
       {/* Google Drive connection banner — shows when Drive isn't connected yet.
           Only shows for roles that actually need to upload or review files. */}
       {driveConnStatus && !driveConnStatus.connected && ["admin","negotiator","approver"].includes(role) &&
-        <div style={{background:"#3a2a0d",border:"1px solid #78350f",borderLeft:`3px solid ${T.gold}`,borderRadius:"6px",padding:"12px 16px",marginBottom:"14px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px"}}>
+        <div style={{background:"#3a2a0d",border:"1px solid #78350f",borderLeft:`3px solid ${T.gold}`,borderRadius:"2px",padding:"12px 16px",marginBottom:"14px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px"}}>
           <div style={{flex:1}}>
             <div style={{fontSize:"13px",fontWeight:700,color:T.gold}}>📁 Google Drive not connected</div>
             <div style={{fontSize:"12px",color:"#b6a48b",marginTop:"2px"}}>Connect your @invogue.shop account to upload deliverables and raw clips. You'll only need to do this once.</div>
@@ -3147,7 +3147,7 @@ return (
         return <>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px"}}>
             <div>
-              <div style={{fontSize:"20px",fontWeight:800}}>👥 Team & User Management</div>
+              <div style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px"}}>Team & User Management</div>
               <div style={{fontSize:"13px",color:T.sub}}>Create users, assign roles, manage access</div>
             </div>
             <Btn v="gold" onClick={()=>{setUserF({name:"",email:"",role:"negotiator"});setModal("newUser")}}>+ Add Team Member</Btn>
@@ -3158,7 +3158,7 @@ return (
             {Object.entries(ROLE_CFG).map(([k,v])=>{
               const count = users.filter(u=>u.role===k&&u.status==="active").length;
               if(k==="admin"||k==="viewer") return null;
-              return <div key={k} style={{background:v.bg,border:`1px solid ${v.c}22`,borderRadius:"8px",padding:"10px 16px",display:"flex",alignItems:"center",gap:"8px"}}>
+              return <div key={k} style={{background:v.bg,border:`1px solid ${v.c}22`,borderRadius:"2px",padding:"10px 16px",display:"flex",alignItems:"center",gap:"8px"}}>
                 <span style={{fontSize:"18px"}}>{v.i}</span>
                 <div><div style={{fontSize:"20px",fontWeight:800,color:v.c}}>{count}</div><div style={{fontSize:"10px",fontWeight:700,color:v.c,textTransform:"uppercase"}}>{v.l}{(v.l.endsWith("s")||v.l==="Finance")?"":"s"}</div></div>
               </div>;
@@ -3166,7 +3166,7 @@ return (
           </div>
 
           {/* Users table */}
-          <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",overflow:"hidden"}}>
+          <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",overflow:"hidden"}}>
             <div style={{display:"grid",gridTemplateColumns:"40px 1.5fr 1.5fr 1fr 0.8fr 1.2fr",padding:"10px 14px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>
               <div></div><div>Name</div><div>Email</div><div>Role</div><div>Status</div><div>Actions</div>
             </div>
@@ -3177,7 +3177,7 @@ return (
                 <div style={{fontWeight:700}}>{u.name}</div>
                 <div style={{color:T.sub,fontSize:"13px"}}>{u.email}</div>
                 <div>
-                  <select value={u.role} onChange={e=>changeUserRole(u.id,e.target.value)} style={{padding:"3px 6px",borderRadius:"4px",border:`1px solid ${T.border}`,fontSize:"11px",fontWeight:700,color:rc.c,background:rc.bg,fontFamily:"inherit",cursor:"pointer"}}>
+                  <select value={u.role} onChange={e=>changeUserRole(u.id,e.target.value)} style={{padding:"3px 6px",borderRadius:"2px",border:`1px solid ${T.border}`,fontSize:"11px",fontWeight:700,color:rc.c,background:rc.bg,fontFamily:"inherit",cursor:"pointer"}}>
                     <option value="admin">Admin</option>
                     <option value="negotiator">Negotiator</option>
                     <option value="approver">Manager</option>
@@ -3187,7 +3187,7 @@ return (
                   </select>
                 </div>
                 <div>
-                  <span style={{padding:"2px 7px",borderRadius:"8px",fontSize:"11px",fontWeight:700,color:u.status==="active"?T.ok:T.err,background:u.status==="active"?T.okBg:T.errBg}}>{u.status==="active"?"Active":"Inactive"}</span>
+                  <span style={{padding:"2px 7px",borderRadius:"2px",fontSize:"11px",fontWeight:700,color:u.status==="active"?T.ok:T.err,background:u.status==="active"?T.okBg:T.errBg}}>{u.status==="active"?"Active":"Inactive"}</span>
                 </div>
                 <div style={{display:"flex",gap:"4px"}}>
                   <Btn v={u.status==="active"?"outline":"ok"} sm onClick={()=>toggleUserStatus(u.id)}>{u.status==="active"?"Deactivate":"Activate"}</Btn>
@@ -3199,7 +3199,7 @@ return (
           {/* Role Permissions Reference */}
           <div style={{marginTop:"20px"}}>
             <div style={{fontSize:"13px",fontWeight:800,marginBottom:"10px"}}>Role Permissions Reference</div>
-            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",overflow:"hidden"}}>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",overflow:"hidden"}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr 1fr 1fr",padding:"8px 12px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Bodoni Moda,serif",letterSpacing:".4px"}}>
                 <div>Permission</div><div>Admin</div><div>Manager</div><div>Finance</div><div>Negotiator</div><div>Logistics</div><div>Viewer</div>
               </div>
@@ -3247,16 +3247,16 @@ return (
 
         return <>
           <div style={{marginBottom:"16px"}}>
-            <div style={{fontSize:"20px",fontWeight:800}}>📜 Global Audit Log</div>
+            <div style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px"}}>Global Audit Log</div>
             <div style={{fontSize:"13px",color:T.sub}}>Complete activity trail across all deals and users — {allLogs.length} entries</div>
           </div>
           <div style={{display:"flex",gap:"8px",marginBottom:"12px",alignItems:"center",flexWrap:"wrap"}}>
-            <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>From</label><input type="date" value={auditDateFrom} onChange={e=>{setAuditDateFrom(e.target.value);setAuditPage(0)}} style={{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:"5px",fontSize:"13px",fontFamily:"inherit",background:T.surface,color:T.text}}/></div>
-            <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>To</label><input type="date" value={auditDateTo} onChange={e=>{setAuditDateTo(e.target.value);setAuditPage(0)}} style={{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:"5px",fontSize:"13px",fontFamily:"inherit",background:T.surface,color:T.text}}/></div>
+            <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>From</label><input type="date" value={auditDateFrom} onChange={e=>{setAuditDateFrom(e.target.value);setAuditPage(0)}} style={{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:"2px",fontSize:"13px",fontFamily:"inherit",background:T.surface,color:T.text}}/></div>
+            <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>To</label><input type="date" value={auditDateTo} onChange={e=>{setAuditDateTo(e.target.value);setAuditPage(0)}} style={{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:"2px",fontSize:"13px",fontFamily:"inherit",background:T.surface,color:T.text}}/></div>
             {(auditDateFrom||auditDateTo)&&<Btn v="ghost" sm onClick={()=>{setAuditDateFrom("");setAuditDateTo("");setAuditPage(0)}}>Clear filters</Btn>}
             <span style={{fontSize:"11px",color:T.sub,marginLeft:"auto"}}>{allLogs.length} total entries</span>
           </div>
-          <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",overflow:"hidden"}}>
+          <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",overflow:"hidden"}}>
             <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr 1.5fr 2fr 0.8fr",padding:"9px 14px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>
               <div>Timestamp</div><div>User</div><div>Action</div><div>Details</div><div>Influencer</div>
             </div>
@@ -3330,7 +3330,7 @@ return (
               else if(["live","partial_live"].includes(d.status)&&!d.inv) { actionLabel="Submit Invoice"; actionColor=T.gold; }
               else if(d.status==="payment_requested") { actionLabel="Payment Requested - with Manager"; actionColor=T.info; }
               else { actionLabel="Review needed"; }
-              return <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${actionColor}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",transition:"all .12s"}}
+              return <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${actionColor}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",transition:"all .12s"}}
                 onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}
                 onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
                 <div>
@@ -3347,7 +3347,7 @@ return (
 
           {/* Content Revisions Needed */}
           {myRevisions.length>0&&<Section title={`Content Revisions Needed (${myRevisions.reduce((s,d)=>s+d.dels.filter(x=>x.st==="revision_requested").length,0)})`} icon="✏️" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Revision Required</span>}>
-            {myRevisions.map(d=>d.dels.filter(dl=>dl.st==="revision_requested").map((dl,di)=><div key={d.id+"-"+di} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.errBg,border:`1px solid ${T.err}22`,borderLeft:`3px solid ${T.err}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer"}}
+            {myRevisions.map(d=>d.dels.filter(dl=>dl.st==="revision_requested").map((dl,di)=><div key={d.id+"-"+di} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.errBg,border:`1px solid ${T.err}22`,borderLeft:`3px solid ${T.err}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer"}}
               onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}
               onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"4px"}}>
@@ -3360,7 +3360,7 @@ return (
 
           {/* Pending Approval */}
           {myPending.length>0&&<Section title={`Awaiting Manager Approval (${myPending.length})`} icon="⏳">
-            {myPending.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"5px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            {myPending.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"5px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div><span style={{fontWeight:700,fontSize:"12px"}}>{d.inf}</span> <span style={{color:T.sub,fontSize:"13px"}}>· {f(d.amount)} · {d.dels.length} deliverables</span></div>
               <Badge s={d.status} sm/>
             </div>)}
@@ -3368,12 +3368,12 @@ return (
 
           {/* Renegotiation Requests */}
           {myRenegotiations.length>0&&<Section title={`Renegotiation Requests (${myRenegotiations.length})`} icon="🔄" action={<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Action Required</span>}>
-            {myRenegotiations.map(d=><div key={d.id} style={{background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px"}}>
+            {myRenegotiations.map(d=><div key={d.id} style={{background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:d.renegotiationNote?"6px":"0"}}>
                 <div><span style={{fontWeight:700,fontSize:"13px"}}>{d.inf}</span> <span style={{color:T.sub,fontSize:"12px"}}>· {f(d.amount)} · {d.dels.length} deliverables</span></div>
                 <Badge s={d.status} sm/>
               </div>
-              {d.renegotiationNote&&<div style={{fontSize:"12px",color:T.warn,fontStyle:"italic",marginBottom:"6px",padding:"4px 8px",background:"rgba(255,255,255,.5)",borderRadius:"4px"}}>💬 "{d.renegotiationNote}"</div>}
+              {d.renegotiationNote&&<div style={{fontSize:"12px",color:T.warn,fontStyle:"italic",marginBottom:"6px",padding:"4px 8px",background:"rgba(255,255,255,.5)",borderRadius:"2px"}}>💬 "{d.renegotiationNote}"</div>}
               <div style={{display:"flex",gap:"6px",justifyContent:"flex-end"}}>
                 <Btn v="danger" sm onClick={()=>{setSel(d);openDropModal(d)}}>🚫 Drop</Btn>
                 <Btn v="gold" sm onClick={()=>openResubmitModal(d)}>↩ Review & Resubmit</Btn>
@@ -3384,13 +3384,13 @@ return (
           {/* Shipment Tracking */}
           <Section title="📦 My Shipment Tracker" icon="">
             {myDeals.filter(d=>d.ship&&d.ship.st==="in_transit").length===0&&myDeals.filter(d=>["email_sent","acknowledged"].includes(d.status)&&!d.ship).length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>No active shipments</div>}
-            {myDeals.filter(d=>d.status==="email_sent"&&!d.ackAt).map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:"#fef3c7",border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
+            {myDeals.filter(d=>d.status==="email_sent"&&!d.ackAt).map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:"#fef3c7",border:`1px solid ${T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
               <span><b>{d.inf}</b> · {d.product}</span><span style={{color:"#92400e",fontWeight:700}}>⏳ Awaiting acknowledgement</span>
             </div>)}
-            {myDeals.filter(d=>d.status==="acknowledged"&&!d.ship).map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:"#ecfdf5",border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
+            {myDeals.filter(d=>d.status==="acknowledged"&&!d.ship).map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:"#ecfdf5",border:`1px solid ${T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
               <span><b>{d.inf}</b> · {d.product}</span><span style={{color:"#10b981",fontWeight:700}}>🤝 Acknowledged — awaiting dispatch</span>
             </div>)}
-            {myDeals.filter(d=>d.ship?.st==="in_transit").map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.purpleBg,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
+            {myDeals.filter(d=>d.ship?.st==="in_transit").map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.purpleBg,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
               <span><b>{d.inf}</b> · {d.ship.carrier}: <span style={{color:T.info,fontWeight:700}}>{d.ship.track}</span></span><span style={{color:T.purple,fontWeight:700}}>In transit</span>
             </div>)}
           </Section>
@@ -3400,7 +3400,7 @@ return (
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"8px"}}>
               {myActive.slice(0,6).map(d=>{
                 const done=d.dels.filter(x=>x.st==="live").length;
-                return <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"11px",cursor:"pointer",transition:"all .12s"}}
+                return <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"11px",cursor:"pointer",transition:"all .12s"}}
                   onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border}}>
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:"4px"}}><span style={{fontWeight:700,fontSize:"12px"}}>{d.inf}</span><Badge s={d.status} sm/></div>
                   <div style={{fontSize:"11px",color:T.sub,marginBottom:"5px"}}>{d.product} · {getCamp(d.cid)?.name||""}</div>
@@ -3421,8 +3421,8 @@ return (
             const reuseDeals = deals.filter(d=>d.reuseRequested);
             if(reuseDeals.length===0) return null;
             return <Section title={`Usage Extension Requests (${reuseDeals.length})`} icon="🔄" action={<span style={{fontSize:"11px",color:T.info,fontWeight:700}}>From Performance Marketer</span>}>
-              <div style={{fontSize:"12px",color:T.info,background:T.infoBg,padding:"6px 10px",borderRadius:"5px",marginBottom:"8px"}}>The performance marketing team is requesting usage extensions for high-performing creatives. Contact the influencer to negotiate extended rights.</div>
-              {reuseDeals.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.info}`,borderRadius:"6px",padding:"8px 12px",marginBottom:"4px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontSize:"12px",color:T.info,background:T.infoBg,padding:"6px 10px",borderRadius:"2px",marginBottom:"8px"}}>The performance marketing team is requesting usage extensions for high-performing creatives. Contact the influencer to negotiate extended rights.</div>
+              {reuseDeals.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.info}`,borderRadius:"2px",padding:"8px 12px",marginBottom:"4px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div><b style={{fontSize:"13px"}}>{d.inf}</b> <span style={{color:T.sub,fontSize:"12px"}}>· {d.product} · Usage ends: {d.usageEndDate||"N/A"}</span></div>
                 <span style={{fontSize:"11px",color:T.info,fontWeight:700}}>🔄 {d.reuseRequestedBy?`By ${d.reuseRequestedBy}`:"Requested"}</span>
               </div>)}
@@ -3453,13 +3453,13 @@ return (
 
           {/* APPROVAL QUEUE */}
           {pendingApproval.length>0&&<Section title={`Approval Queue (${pendingApproval.length})`} icon="⚡" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Action Required</span>}>
-            {pendingApproval.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${d.status==="manager_approved"?T.info:T.warn}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",transition:"all .12s"}}
+            {pendingApproval.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${d.status==="manager_approved"?T.info:T.warn}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",transition:"all .12s"}}
               onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}
               onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
               <div>
                 <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"13px"}}>· {d.platform} · {d.followers}</span></div>
                 <div style={{fontSize:"11px",color:T.sub}}>{d.product} · {d.dels.length} deliverables · by {d.by} · {getCamp(d.cid)?.name||""}</div>
-                <div style={{display:"flex",gap:"3px",marginTop:"4px"}}>{d.dels.map((dl,i)=><span key={i} style={{padding:"1px 5px",borderRadius:"4px",fontSize:"10px",fontWeight:600,background:d.status==="manager_approved"?T.infoBg:T.warnBg,color:d.status==="manager_approved"?T.info:T.warn}}>{dl.type}</span>)}</div>
+                <div style={{display:"flex",gap:"3px",marginTop:"4px"}}>{d.dels.map((dl,i)=><span key={i} style={{padding:"1px 5px",borderRadius:"2px",fontSize:"10px",fontWeight:600,background:d.status==="manager_approved"?T.infoBg:T.warnBg,color:d.status==="manager_approved"?T.info:T.warn}}>{dl.type}</span>)}</div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:"6px"}} onClick={e=>e.stopPropagation()}>
                 <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{f(d.amount)}</span>
@@ -3472,7 +3472,7 @@ return (
 
           {/* INVOICES AWAITING APPROVAL */}
           {(()=>{const pendingInvoices=deals.filter(d=>d.status==="invoice_pending_approval");return pendingInvoices.length>0&&<Section title={`Invoices Pending Approval (${pendingInvoices.length})`} icon="🧾" action={<span style={{fontSize:"11px",color:T.gold,fontWeight:700}}>Review Required</span>}>
-            {pendingInvoices.map(d=><div key={d.id} style={{background:T.goldSoft,border:`1px solid ${T.gold}33`,borderLeft:`3px solid ${T.gold}`,borderRadius:"7px",padding:"11px 13px",marginBottom:"6px"}}>
+            {pendingInvoices.map(d=><div key={d.id} style={{background:T.goldSoft,border:`1px solid ${T.gold}33`,borderLeft:`3px solid ${T.gold}`,borderRadius:"2px",padding:"11px 13px",marginBottom:"6px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div>
                   <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.platform}</span></div>
@@ -3490,12 +3490,12 @@ return (
 
           {/* DROP REQUESTS — Manager must approve/reject */}
           {(()=>{const dropRequests=deals.filter(d=>d.status==="drop_requested");return dropRequests.length>0&&<Section title={`Drop Requests (${dropRequests.length})`} icon="🚫" action={<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Needs Decision</span>}>
-            {dropRequests.map(d=><div key={d.id} style={{background:T.errBg,border:`1px solid ${T.err}33`,borderLeft:`3px solid ${T.err}`,borderRadius:"7px",padding:"11px 13px",marginBottom:"6px"}}>
+            {dropRequests.map(d=><div key={d.id} style={{background:T.errBg,border:`1px solid ${T.err}33`,borderLeft:`3px solid ${T.err}`,borderRadius:"2px",padding:"11px 13px",marginBottom:"6px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div>
                   <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.platform}</span></div>
                   <div style={{fontSize:"11px",color:T.sub,marginTop:"1px"}}>{d.product} · {f(d.amount)} · by {d.by}</div>
-                  {(d.dropReason||d.renegotiation_note)&&<div style={{fontSize:"12px",color:T.err,marginTop:"4px",padding:"4px 8px",background:"rgba(180,35,24,.08)",borderRadius:"4px"}}>Reason: {d.dropReason||d.renegotiation_note}</div>}
+                  {(d.dropReason||d.renegotiation_note)&&<div style={{fontSize:"12px",color:T.err,marginTop:"4px",padding:"4px 8px",background:"rgba(180,35,24,.08)",borderRadius:"2px"}}>Reason: {d.dropReason||d.renegotiation_note}</div>}
                 </div>
                 <div style={{display:"flex",gap:"6px"}}>
                   <Btn v="ok" sm onClick={()=>approveDropRequest(d)}>✓ Approve Drop</Btn>
@@ -3507,7 +3507,7 @@ return (
 
           {/* CONTENT AWAITING REVIEW */}
           {awaitingReview.length>0&&<Section title={`Content Awaiting Review (${awaitingReview.length})`} icon="📤" action={<span style={{fontSize:"11px",color:T.info,fontWeight:700}}>Review Required</span>}>
-            {awaitingReview.map((d,i)=>{const deal=deals.find(x=>x.id===d.dealId);return <div key={i} onClick={()=>{if(deal){setSel(deal);setModal("detail")}}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.info}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            {awaitingReview.map((d,i)=>{const deal=deals.find(x=>x.id===d.dealId);return <div key={i} onClick={()=>{if(deal){setSel(deal);setModal("detail")}}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.info}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
                 <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"13px"}}>· {d.platform}</span></div>
                 <div style={{fontSize:"11px",color:T.sub}}>{d.type}: {d.desc||"—"} · {getCamp(d.cid)?.name||""}</div>
@@ -3519,7 +3519,7 @@ return (
 
           {/* DISPUTES */}
           {disputed.length>0&&<Section title={`Active Disputes (${disputed.length})`} icon="⚠">
-            {disputed.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.errBg,border:`1px solid ${T.err}33`,borderRadius:"7px",padding:"10px 12px",marginBottom:"5px",cursor:"pointer"}}>
+            {disputed.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.errBg,border:`1px solid ${T.err}33`,borderRadius:"2px",padding:"10px 12px",marginBottom:"5px",cursor:"pointer"}}>
               <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700,fontSize:"12px"}}>{d.inf}</span><span style={{fontSize:"13px",color:T.err,fontWeight:700}}>Invoice: {f(d.inv?.amount)} vs Approved: {f(d.amount)}</span></div>
               <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{d.inv?.note||"Mismatch detected"}</div>
             </div>)}
@@ -3530,7 +3530,7 @@ return (
             const payReqs = deals.filter(d=>d.status==="payment_requested");
             return payReqs.length>0 && <Section title={`Legacy Payment Requests (${payReqs.length})`} icon="💸" action={<span style={{fontSize:"11px",color:T.sub,fontWeight:700}}>Auto-forwarded to Finance</span>}>
               <div style={{fontSize:"11px",color:T.sub,padding:"4px 0 8px",fontStyle:"italic"}}>These are from the old flow. They're now visible to Finance directly.</div>
-              {payReqs.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.info}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+              {payReqs.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.info}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
                 <div>
                   <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"13px"}}>· {f(d.amount)}</span></div>
                   <div style={{fontSize:"11px",color:T.sub}}>{d.product} · PAN: {d.pan?.number||d.pan_number||"N/A"}</div>
@@ -3542,14 +3542,14 @@ return (
 
           {/* PENDING SHIPMENTS */}
           {pendingShip.length>0&&<Section title={`Pending Shipments (${pendingShip.length})`} icon="📦">
-            {pendingShip.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
+            {pendingShip.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
               <span><b>{d.inf}</b> · {d.product}</span><span style={{color:T.warn,fontWeight:700}}>Awaiting logistics</span>
             </div>)}
           </Section>}
 
           {/* PAYMENT OVERVIEW */}
           {needPayment.length>0&&<Section title={`Outstanding Payments (${needPayment.length})`} icon="💰" action={<span style={{fontSize:"11px",color:T.sub}}>{f(needPayment.reduce((s,d)=>s+remaining(d),0))} total outstanding</span>}>
-            {needPayment.slice(0,8).map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
+            {needPayment.slice(0,8).map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
               <div><b>{d.inf}</b> <span style={{color:T.sub}}>· {getCamp(d.cid)?.name||""}</span></div>
               <div><span style={{color:T.ok}}>{f(totalPaid(d))}</span> / <b>{f(d.amount)}</b> <span style={{color:T.warn,fontWeight:700,marginLeft:"4px"}}>Due: {f(remaining(d))}</span></div>
             </div>)}
@@ -3653,7 +3653,7 @@ return (
 
         return <>
           <div style={{marginBottom:"14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div><span style={{fontSize:"20px",fontWeight:800}}>💰 Payment Center</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Payment scheduling, TDS tracking & batch exports</span></div>
+            <div><span style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px"}}>Payment Center</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Payment scheduling, TDS tracking & batch exports</span></div>
             <div style={{display:"flex",gap:"6px"}}>
               {batchMode&&<Btn v="ok" sm onClick={exportBatchCSV}>📥 Export {Object.values(batchSelected).filter(Boolean).length} Selected</Btn>}
               {batchMode&&<Btn v="primary" sm onClick={bulkGenerateInvoices}>🧾 Generate Invoices ({Object.values(batchSelected).filter(Boolean).length})</Btn>}
@@ -3689,7 +3689,7 @@ return (
               const fyTotal = getFYTotalForInfluencer(d.inf);
               const tdsApply = isTDSApplicable(d.inf, rem);
               const tdsAmt = tdsApply ? calcTDSAmount(rem, d.tdsRate||10) : 0;
-              return <div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderLeft:`3px solid ${tdsApply?"#7c3aed":T.ok}`,borderRadius:"8px",padding:"14px 16px",marginBottom:"10px"}}>
+              return <div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderLeft:`3px solid ${tdsApply?"#7c3aed":T.ok}`,borderRadius:"2px",padding:"14px 16px",marginBottom:"10px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
                   <div style={{display:"flex",alignItems:"flex-start",gap:"8px"}}>
                     {batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={()=>toggleBatch(d.id)} style={{marginTop:"4px",cursor:"pointer"}}/>}
@@ -3704,13 +3704,13 @@ return (
                   </div>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"6px",marginBottom:"8px"}}>
-                  <div style={{background:T.goldSoft,padding:"5px 7px",borderRadius:"5px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Locked</div><div style={{fontSize:"12px",fontWeight:800,color:T.gold}}>{f(d.amount)}</div></div>
-                  <div style={{background:d.inv?.match===false?T.errBg:T.infoBg,padding:"5px 7px",borderRadius:"5px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Invoice</div><div style={{fontSize:"12px",fontWeight:800,color:d.inv?.match===false?T.err:T.info}}>{f(d.inv?.amount||d.amount)}{d.inv?.match===false?" ⚠":" ✓"}</div></div>
-                  <div style={{background:T.okBg,padding:"5px 7px",borderRadius:"5px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Paid</div><div style={{fontSize:"12px",fontWeight:800,color:T.ok}}>{f(paid)}</div></div>
-                  <div style={{background:T.warnBg,padding:"5px 7px",borderRadius:"5px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Due</div><div style={{fontSize:"12px",fontWeight:800,color:T.warn}}>{f(rem)}</div></div>
-                  <div style={{background:tdsApply?"#f5f3ff":"#f0fdf4",padding:"5px 7px",borderRadius:"5px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>TDS</div><div style={{fontSize:"12px",fontWeight:800,color:tdsApply?"#7c3aed":T.ok}}>{tdsApply?`${f(tdsAmt)} (${d.tdsRate||10}%)`:"N/A"}</div></div>
+                  <div style={{background:T.goldSoft,padding:"5px 7px",borderRadius:"2px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Locked</div><div style={{fontSize:"12px",fontWeight:800,color:T.gold}}>{f(d.amount)}</div></div>
+                  <div style={{background:d.inv?.match===false?T.errBg:T.infoBg,padding:"5px 7px",borderRadius:"2px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Invoice</div><div style={{fontSize:"12px",fontWeight:800,color:d.inv?.match===false?T.err:T.info}}>{f(d.inv?.amount||d.amount)}{d.inv?.match===false?" ⚠":" ✓"}</div></div>
+                  <div style={{background:T.okBg,padding:"5px 7px",borderRadius:"2px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Paid</div><div style={{fontSize:"12px",fontWeight:800,color:T.ok}}>{f(paid)}</div></div>
+                  <div style={{background:T.warnBg,padding:"5px 7px",borderRadius:"2px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Due</div><div style={{fontSize:"12px",fontWeight:800,color:T.warn}}>{f(rem)}</div></div>
+                  <div style={{background:tdsApply?"#f5f3ff":"#f0fdf4",padding:"5px 7px",borderRadius:"2px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>TDS</div><div style={{fontSize:"12px",fontWeight:800,color:tdsApply?"#7c3aed":T.ok}}>{tdsApply?`${f(tdsAmt)} (${d.tdsRate||10}%)`:"N/A"}</div></div>
                 </div>
-                {d.agencyManaged&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",padding:"6px 8px",background:T.goldSoft,border:`1px solid ${T.gold}55`,borderRadius:"5px",marginBottom:"6px",fontSize:"11px"}}>
+                {d.agencyManaged&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",padding:"6px 8px",background:T.goldSoft,border:`1px solid ${T.gold}55`,borderRadius:"2px",marginBottom:"6px",fontSize:"11px"}}>
                   <span>🏢 <b>Agency-managed</b> · pay <b>{d.paymentDetails?.beneficiary||d.agencyName||"agency"}</b>{d.agencyGst?` · GST ${d.agencyGst}`:""}</span>
                   {d.agencyInvoiceUrl&&<a href={d.agencyInvoiceUrl} target="_blank" rel="noopener noreferrer" style={{color:T.brand,fontWeight:700,textDecoration:"none"}}>View invoice ↗</a>}
                 </div>}
@@ -3726,7 +3726,7 @@ return (
 
             {/* Advances Due */}
             {advanceDue.length>0&&<Section title={`Advance Payments Pending (${advanceDue.length})`} icon="⏰">
-              {advanceDue.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+              {advanceDue.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
                 <div><b>{d.inf}</b> <span style={{color:T.sub}}>· {f(d.amount)} · {d.status==="approved"?"Just approved":d.status==="shipped"?"Product shipped":"In progress"}</span></div>
                 <Btn v="outline" sm onClick={(e)=>{e.stopPropagation();setSel(d);setPayF({type:"advance",amount:"",note:""});setModal("payment")}}>Record Advance</Btn>
               </div>)}
@@ -3735,7 +3735,7 @@ return (
             {/* Recently Completed */}
             <Section title="Recently Completed" icon="✅">
               {recentPaid.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>No completed payments yet</div>}
-              {recentPaid.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",opacity:.85,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.opacity="1"}} onMouseLeave={e=>{e.currentTarget.style.opacity=".85"}}>
+              {recentPaid.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",opacity:.85,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.opacity="1"}} onMouseLeave={e=>{e.currentTarget.style.opacity=".85"}}>
                 <span><b>{d.inf}</b> · {getCamp(d.cid)?.name||""}</span>
                 <span style={{color:T.ok,fontWeight:700}}>⭐ {f(d.amount)} paid</span>
               </div>)}
@@ -3747,21 +3747,21 @@ return (
             {batchMode&&payableDeals.length>0&&<div style={{marginBottom:"8px",display:"flex",gap:"6px"}}><Btn v="outline" sm onClick={()=>selectAllInGroup(payableDeals)}>Select All ({payableDeals.length})</Btn></div>}
             {/* Overdue */}
             {overdueDates.map(dateKey=><Section key={dateKey} title={`⚠ OVERDUE — ${new Date(dateKey).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}`} icon="" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700}}>{byDueDate[dateKey].length} deal{byDueDate[dateKey].length>1?"s":""} · {f(byDueDate[dateKey].reduce((s,d)=>s+remaining(d),0))}</span>}>
-              {byDueDate[dateKey].map(d=><div key={d.id} style={{background:T.errBg,border:`1px solid ${T.err}22`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>{setSel(d);setModal("detail")}}>
+              {byDueDate[dateKey].map(d=><div key={d.id} style={{background:T.errBg,border:`1px solid ${T.err}22`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>{setSel(d);setModal("detail")}}>
                 <div style={{display:"flex",alignItems:"center",gap:"6px"}}>{batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{cursor:"pointer"}}/>}<div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.product}</span></div></div>
                 <div style={{textAlign:"right"}}><span style={{color:T.err,fontWeight:700}}>{f(remaining(d))} due</span></div>
               </div>)}
             </Section>)}
             {/* Upcoming */}
             {upcomingDates.map(dateKey=><Section key={dateKey} title={`📅 ${new Date(dateKey).toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short",year:"numeric"})}`} icon="" action={<span style={{fontSize:"11px",color:T.sub,fontWeight:700}}>{byDueDate[dateKey].length} deal{byDueDate[dateKey].length>1?"s":""} · {f(byDueDate[dateKey].reduce((s,d)=>s+remaining(d),0))}</span>}>
-              {byDueDate[dateKey].map(d=>{const inf=influencers.find(x=>x.name===d.inf);return <div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>{setSel(d);setModal("detail")}}>
+              {byDueDate[dateKey].map(d=>{const inf=influencers.find(x=>x.name===d.inf);return <div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>{setSel(d);setModal("detail")}}>
                 <div style={{display:"flex",alignItems:"center",gap:"6px"}}>{batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{cursor:"pointer"}}/>}<div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.product} · {PAYMENT_TERMS_LABELS[d.payment_terms||inf?.defaultPaymentTerms||"next_15th"]||""}</span></div></div>
                 <div style={{display:"flex",alignItems:"center",gap:"6px"}}><span style={{fontWeight:700}}>{f(remaining(d))}</span>{isTDSApplicable(d.inf,remaining(d))&&<span style={{padding:"1px 5px",borderRadius:"3px",fontSize:"9px",fontWeight:700,background:"#f5f3ff",color:"#7c3aed"}}>TDS</span>}{["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&<Btn v="ok" sm onClick={e=>{e.stopPropagation();setSel(d);setPayF({type:"final",amount:String(remaining(d)),note:"Paid ahead of due date"});setModal("payment")}}>Pay now</Btn>}</div>
               </div>;})}
             </Section>)}
             {/* Unscheduled */}
             {byDueDate.unscheduled&&byDueDate.unscheduled.length>0&&<Section title={`Unscheduled (${byDueDate.unscheduled.length})`} icon="❓" action={<span style={{fontSize:"11px",color:T.sub}}>No due date set</span>}>
-              {byDueDate.unscheduled.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>{setSel(d);setModal("detail")}}>
+              {byDueDate.unscheduled.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>{setSel(d);setModal("detail")}}>
                 <div style={{display:"flex",alignItems:"center",gap:"6px"}}>{batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{cursor:"pointer"}}/>}<div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.product} · <Badge s={d.status} sm/></span></div></div>
                 <span style={{fontWeight:700}}>{f(remaining(d))}</span>
               </div>)}
@@ -3771,12 +3771,12 @@ return (
 
           {/* ── TAB: TDS TRACKER ── */}
           {financeTab==="tds"&&<>
-            <div style={{padding:"10px 12px",background:"#f5f3ff",border:"1px solid #c4b5fd",borderRadius:"7px",marginBottom:"14px",fontSize:"12px",color:"#5b21b6"}}>
+            <div style={{padding:"10px 12px",background:"#f5f3ff",border:"1px solid #c4b5fd",borderRadius:"2px",marginBottom:"14px",fontSize:"12px",color:"#5b21b6"}}>
               <b>TDS Rule:</b> 10% TDS applies on payments to any creator whose cumulative financial transactions exceed ₹50,000 in {fy.label} (Apr 1 – Mar 31). Rate can be overridden per deal if invoice specifies otherwise.
             </div>
 
             {tdsInfluencers.length>0&&<Section title={`TDS Applicable — Above ₹50K (${tdsInfluencers.length})`} icon="🏛️">
-              {tdsInfluencers.map(([name,data])=>{const inf=influencers.find(x=>x.name===name);return <div key={name} onClick={()=>{if(inf)setInfProfile(inf)}} style={{background:T.surface,border:"1px solid #c4b5fd",borderLeft:"3px solid #7c3aed",borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",cursor:inf?"pointer":"default"}}>
+              {tdsInfluencers.map(([name,data])=>{const inf=influencers.find(x=>x.name===name);return <div key={name} onClick={()=>{if(inf)setInfProfile(inf)}} style={{background:T.surface,border:"1px solid #c4b5fd",borderLeft:"3px solid #7c3aed",borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",cursor:inf?"pointer":"default"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                   <div>
                     <div style={{fontWeight:700,fontSize:"14px"}}>{name}</div>
@@ -3792,7 +3792,7 @@ return (
             </Section>}
 
             {nearingTDS.length>0&&<Section title={`Nearing Threshold — ₹35K-50K (${nearingTDS.length})`} icon="⚡" action={<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Watch list</span>}>
-              {nearingTDS.map(([name,data])=>{const inf=influencers.find(x=>x.name===name);const pct=Math.round(data.paid/50000*100);return <div key={name} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px"}}>
+              {nearingTDS.map(([name,data])=>{const inf=influencers.find(x=>x.name===name);const pct=Math.round(data.paid/50000*100);return <div key={name} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:"4px"}}><b>{name}</b><span style={{color:T.warn,fontWeight:700}}>{f(data.paid)} / {f(50000)} ({pct}%)</span></div>
                 <div style={{height:"4px",borderRadius:"2px",background:T.border}}><div style={{height:"100%",width:`${pct}%`,background:pct>90?"#ef4444":"#f59e0b",borderRadius:"2px"}}/></div>
               </div>;})}
@@ -3804,7 +3804,7 @@ return (
           {/* ── TAB: DISPUTES ── */}
           {financeTab==="disputes"&&<>
             {disputed.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"20px 0",textAlign:"center"}}>No active disputes</div>}
-            {disputed.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.errBg,border:`1px solid ${T.err}33`,borderLeft:`3px solid ${T.err}`,borderRadius:"7px",padding:"11px 13px",marginBottom:"6px",cursor:"pointer"}}>
+            {disputed.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.errBg,border:`1px solid ${T.err}33`,borderLeft:`3px solid ${T.err}`,borderRadius:"2px",padding:"11px 13px",marginBottom:"6px",cursor:"pointer"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div>
                   <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.platform}</span></div>
@@ -3830,7 +3830,7 @@ return (
         const delivered = deals.filter(d=>d.ship?.st==="delivered");
         const totalActions = pendingShip.length + pickupRequests.length + reshipPending.length;
         return <>
-          <div style={{marginBottom:"14px"}}><span style={{fontSize:"20px",fontWeight:800}}>📦 Shipment Center</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Dispatch, track, pickups & re-shipments</span></div>
+          <div style={{marginBottom:"14px"}}><span style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px"}}>Shipment Center</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Dispatch, track, pickups & re-shipments</span></div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"8px",marginBottom:"16px"}}>
             <StatBox l="Awaiting Ack" v={awaitingAck.length} c={awaitingAck.length>0?"#f59e0b":T.ok} sub="Influencer must confirm"/>
             <StatBox l="Ready to Ship" v={pendingShip.length} c={pendingShip.length>0?T.err:T.ok} sub="Ship these now"/>
@@ -3842,8 +3842,8 @@ return (
 
           {/* AWAITING ACKNOWLEDGEMENT */}
           {awaitingAck.length>0&&<Section title={`Awaiting Acknowledgement (${awaitingAck.length})`} icon="⏳">
-            <div style={{fontSize:"12px",color:"#92400e",background:"#fef3c7",padding:"8px 10px",borderRadius:"5px",marginBottom:"8px"}}>These influencers haven't confirmed via email yet. Dispatch is blocked until they click "I Agree to the Terms".</div>
-            {awaitingAck.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:"3px solid #f59e0b",borderRadius:"6px",padding:"8px 12px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
+            <div style={{fontSize:"12px",color:"#92400e",background:"#fef3c7",padding:"8px 10px",borderRadius:"2px",marginBottom:"8px"}}>These influencers haven't confirmed via email yet. Dispatch is blocked until they click "I Agree to the Terms".</div>
+            {awaitingAck.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:"3px solid #f59e0b",borderRadius:"2px",padding:"8px 12px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
               <span><b>{d.inf}</b> · {d.product} · {getCamp(d.cid)?.name||""}</span>
               <span style={{color:"#92400e",fontWeight:700,fontSize:"11px"}}>⏳ Pending</span>
             </div>)}
@@ -3852,7 +3852,7 @@ return (
           {/* DISPATCH QUEUE */}
           <Section title={`Ready to Dispatch (${pendingShip.length})`} icon="⚡" action={pendingShip.length>0?<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Action Required</span>:null}>
             {pendingShip.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"10px 0"}}>All products dispatched!</div>}
-            {pendingShip.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.err}`,borderRadius:"7px",padding:"12px 14px",marginBottom:"7px",cursor:"pointer"}}>
+            {pendingShip.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.err}`,borderRadius:"2px",padding:"12px 14px",marginBottom:"7px",cursor:"pointer"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
                 <div>
                   <div style={{fontWeight:700,fontSize:"13px"}}>{d.inf}</div>
@@ -3860,7 +3860,7 @@ return (
                 </div>
                 <Btn v="purple" onClick={(e)=>{e.stopPropagation();setSel(d);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch Now</Btn>
               </div>
-              <div style={{padding:"8px 10px",background:T.purpleBg,borderRadius:"5px",fontSize:"12px",color:T.purple}}>
+              <div style={{padding:"8px 10px",background:T.purpleBg,borderRadius:"2px",fontSize:"12px",color:T.purple}}>
                 <div>📍 <b>Ship to:</b> {d.address||"Address not provided"}</div>
                 <div style={{marginTop:"2px"}}>📱 <b>Phone:</b> {d.phone||"Not provided"}</div>
               </div>
@@ -3872,7 +3872,7 @@ return (
           {pickupRequests.length>0&&<Section title={`Pickup Requests (${pickupRequests.length})`} icon="🔄" action={<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Arrange Returns</span>}>
             {pickupRequests.map((h,idx)=>{
               const deal = deals.find(d=>d.id===h.dealId);
-              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`,borderRadius:"7px",padding:"12px 14px",marginBottom:"7px"}}>
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`,borderRadius:"2px",padding:"12px 14px",marginBottom:"7px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
                   <div>
                     <div style={{fontWeight:700,fontSize:"13px"}}>{h.inf} <span style={{fontSize:"11px",fontWeight:400,color:T.sub}}>· Pickup</span></div>
@@ -3882,7 +3882,7 @@ return (
                   </div>
                   <Btn v="gold" onClick={()=>{setSel(deal);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("arrangePickup-"+h.histIdx)}}>🔄 Arrange Pickup</Btn>
                 </div>
-                <div style={{padding:"8px 10px",background:T.warnBg,borderRadius:"5px",fontSize:"12px",color:T.warn}}>
+                <div style={{padding:"8px 10px",background:T.warnBg,borderRadius:"2px",fontSize:"12px",color:T.warn}}>
                   <div>📍 <b>Pickup from:</b> {h.address||"Address not provided"}</div>
                   <div style={{marginTop:"2px"}}>📱 <b>Phone:</b> {h.phone||"Not provided"}</div>
                 </div>
@@ -3895,7 +3895,7 @@ return (
           {pickupsInTransit.length>0&&<Section title={`Return Pickups In Transit (${pickupsInTransit.length})`} icon="📮">
             {pickupsInTransit.map(h=>{
               const deal = deals.find(d=>d.id===h.dealId);
-              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.warnBg,border:`1px solid ${T.warn}22`,borderRadius:"7px",padding:"11px 13px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.warnBg,border:`1px solid ${T.warn}22`,borderRadius:"2px",padding:"11px 13px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
                   <div style={{fontWeight:700,fontSize:"14px"}}>{h.inf} <span style={{color:T.sub,fontWeight:400}}>· Return</span></div>
                   <div style={{fontSize:"13px",marginTop:"2px"}}>{h.returnCarrier}: <span style={{color:T.info,fontWeight:700}}>{h.returnTrack}</span></div>
@@ -3910,7 +3910,7 @@ return (
           {reshipPending.length>0&&<Section title={`Re-shipments Pending (${reshipPending.length})`} icon="📦" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,animation:"pulse 1.5s infinite"}}>Ship New Products</span>}>
             {reshipPending.map(h=>{
               const deal = deals.find(d=>d.id===h.dealId);
-              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.purple}`,borderRadius:"7px",padding:"12px 14px",marginBottom:"7px"}}>
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.purple}`,borderRadius:"2px",padding:"12px 14px",marginBottom:"7px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
                   <div>
                     <div style={{fontWeight:700,fontSize:"13px"}}>{h.inf} <span style={{fontSize:"11px",fontWeight:400,color:T.sub}}>· Re-shipment</span></div>
@@ -3919,11 +3919,11 @@ return (
                   </div>
                   <Btn v="purple" onClick={()=>{setSel(deal);setReshipShipF({track:"",carrier:"DTDC",orderId:""});setModal("reshipDispatch-"+h.histIdx)}}>📦 Dispatch</Btn>
                 </div>
-                <div style={{padding:"8px 10px",background:T.purpleBg,borderRadius:"5px",fontSize:"12px",color:T.purple}}>
+                <div style={{padding:"8px 10px",background:T.purpleBg,borderRadius:"2px",fontSize:"12px",color:T.purple}}>
                   <div>📍 <b>Ship to:</b> {h.address||"Address not provided"}</div>
                   <div style={{marginTop:"2px"}}>📱 <b>Phone:</b> {h.phone||"Not provided"}</div>
                 </div>
-                {(h.products||[]).length>0&&<div style={{marginTop:"6px",padding:"8px",background:T.surfaceAlt,borderRadius:"4px",fontSize:"11px"}}>
+                {(h.products||[]).length>0&&<div style={{marginTop:"6px",padding:"8px",background:T.surfaceAlt,borderRadius:"2px",fontSize:"11px"}}>
                   <div style={{fontWeight:700,marginBottom:"4px"}}>Items to pack & ship:</div>
                   {h.products.map((p,i)=><div key={i}><b>{p.name}</b>{p.color?" · "+p.color:""}{p.size?" · "+p.size:""}{p.qty?" · Qty: "+p.qty:""}</div>)}
                 </div>}
@@ -3936,7 +3936,7 @@ return (
           {reshipInTransit.length>0&&<Section title={`Re-shipments In Transit (${reshipInTransit.length})`} icon="🚚">
             {reshipInTransit.map(h=>{
               const deal = deals.find(d=>d.id===h.dealId);
-              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.purpleBg,border:`1px solid ${T.purple}22`,borderRadius:"7px",padding:"11px 13px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.purpleBg,border:`1px solid ${T.purple}22`,borderRadius:"2px",padding:"11px 13px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
                   <div style={{fontWeight:700,fontSize:"14px"}}>{h.inf} <span style={{color:T.sub,fontWeight:400}}>· Re-shipment</span></div>
                   <div style={{fontSize:"13px",marginTop:"2px"}}>{h.reCarrier}: <span style={{color:T.info,fontWeight:700}}>{h.reTrack}</span></div>
@@ -3950,7 +3950,7 @@ return (
           {/* IN TRANSIT (original shipments) */}
           <Section title={`In Transit (${inTransit.length})`} icon="🚚">
             {inTransit.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>Nothing in transit</div>}
-            {inTransit.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.purpleBg,border:`1px solid ${T.purple}22`,borderRadius:"7px",padding:"11px 13px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+            {inTransit.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.purpleBg,border:`1px solid ${T.purple}22`,borderRadius:"2px",padding:"11px 13px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
               <div>
                 <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div>
                 <div style={{fontSize:"13px",marginTop:"2px"}}>{d.ship.carrier}: <span style={{color:T.info,fontWeight:700}}>{d.ship.track}</span></div>
@@ -3962,7 +3962,7 @@ return (
 
           {/* DELIVERED */}
           <Section title={`Delivered (${delivered.length})`} icon="✅">
-            {delivered.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",opacity:.65,cursor:"pointer"}}>
+            {delivered.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",opacity:.65,cursor:"pointer"}}>
               <span><b>{d.inf}</b> · {d.products?d.products.map(p=>p.name).join(", "):d.product} · {d.ship.carrier}: {d.ship.track}</span>
               <span style={{color:T.ok}}>✓ {d.ship.delAt}</span>
             </div>)}
@@ -3970,7 +3970,7 @@ return (
 
           {/* PRODUCT CATALOG MANAGEMENT */}
           <Section title="Product Catalog" icon="📦" action={(role==='logistics'||role==='admin')&&<Btn v="gold" sm onClick={()=>{setShowProductMgmt(!showProductMgmt);setEditingProduct(null)}}>{showProductMgmt?"Close":"⚙ Manage Products"}</Btn>}>
-            {showProductMgmt&&<div style={{background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"14px",marginBottom:"12px"}}>
+            {showProductMgmt&&<div style={{background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"14px",marginBottom:"12px"}}>
               <div style={{fontSize:"12px",fontWeight:700,marginBottom:"8px"}}>Add New Product</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",gap:"6px",alignItems:"end"}}>
                 <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Name</label><Inp value={newProduct.name} onChange={e=>setNewProduct({...newProduct,name:e.target.value})} placeholder="Product name"/></div>
@@ -3987,7 +3987,7 @@ return (
               </div>
             </div>}
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:"8px"}}>
-              {productCatalog.map(p=><div key={p.id} style={{background:T.surface,border:`1px solid ${editingProduct===p.id?T.gold:T.border}`,borderRadius:"6px",padding:"10px",transition:"border-color 0.2s"}}>
+              {productCatalog.map(p=><div key={p.id} style={{background:T.surface,border:`1px solid ${editingProduct===p.id?T.gold:T.border}`,borderRadius:"2px",padding:"10px",transition:"border-color 0.2s"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div style={{fontWeight:700,fontSize:"13px"}}>{p.name}</div>
                   {showProductMgmt&&<div style={{display:"flex",gap:"4px"}}>
@@ -4002,7 +4002,7 @@ return (
                   <span style={{fontWeight:600}}>Colors:</span> {p.colors.length?p.colors.map((c,i)=><span key={c} style={{display:"inline-block",background:T.surfaceAlt,borderRadius:"3px",padding:"1px 5px",margin:"1px 2px",fontSize:"10px"}}>{c}{editingProduct===p.id&&<span onClick={()=>{setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,colors:x.colors.filter((_,j)=>j!==i)}:x))}} style={{cursor:"pointer",color:T.err,marginLeft:"3px",fontWeight:700}}>×</span>}</span>):<span style={{color:T.sub,fontStyle:"italic"}}>None</span>}
                 </div>
                 <div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{p.sizes.length*(p.colors.length||1)} variant{p.sizes.length*(p.colors.length||1)!==1?'s':''}</div>
-                {editingProduct===p.id&&<div style={{marginTop:"8px",padding:"8px",background:T.surfaceAlt,borderRadius:"5px",border:`1px dashed ${T.gold}`}}>
+                {editingProduct===p.id&&<div style={{marginTop:"8px",padding:"8px",background:T.surfaceAlt,borderRadius:"2px",border:`1px dashed ${T.gold}`}}>
                   <div style={{fontSize:"11px",fontWeight:700,marginBottom:"6px",color:T.gold}}>Add Variants</div>
                   <div style={{display:"flex",gap:"6px",alignItems:"end",flexWrap:"wrap"}}>
                     <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>New Size</label><Inp value={editVariant.size} onChange={e=>setEditVariant({...editVariant,size:e.target.value})} placeholder="e.g. 4XL" style={{width:"100px"}}/></div>
@@ -4098,7 +4098,7 @@ return (
           const liveLinks = (d.dels||[]).filter(dl=>dl.st==="live"&&dl.link);
           const isFresh = d.adStatus==="fresh"||!d.adStatus;
           const statusLabel = d.adStatus==="running"?"🏃 Running":d.adStatus==="tested"?"✅ Tested":"🆕 Fresh";
-          return <div onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${isExpired?T.err+"44":isExpiring?"#f59e0b44":T.border}`,borderLeft:`3px solid ${isExpired?T.err:isExpiring?"#f59e0b":d.adStatus==="running"?T.info:d.adStatus==="tested"?T.ok:"#0891b2"}`,borderRadius:"8px",padding:"14px",marginBottom:"8px",cursor:"pointer",transition:"all .15s"}}
+          return <div onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${isExpired?T.err+"44":isExpiring?"#f59e0b44":T.border}`,borderLeft:`3px solid ${isExpired?T.err:isExpiring?"#f59e0b":d.adStatus==="running"?T.info:d.adStatus==="tested"?T.ok:"#0891b2"}`,borderRadius:"2px",padding:"14px",marginBottom:"8px",cursor:"pointer",transition:"all .15s"}}
             onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.08)"}}
             onMouseLeave={e=>{e.currentTarget.style.boxShadow="none"}}>
             {/* Header */}
@@ -4114,29 +4114,29 @@ return (
                 <div style={{fontSize:"12px",color:T.sub}}>📦 {d.product} · 🎯 {camp?.name||"—"}</div>
               </div>
               <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"4px"}}>
-                <span style={{padding:"3px 8px",borderRadius:"4px",fontSize:"10px",fontWeight:700,background:d.adStatus==="running"?T.infoBg:d.adStatus==="tested"?T.okBg:"#ecfeff",color:d.adStatus==="running"?T.info:d.adStatus==="tested"?T.ok:"#0891b2"}}>{statusLabel}</span>
-                {daysLeft!==null&&<span style={{padding:"3px 8px",borderRadius:"4px",fontSize:"10px",fontWeight:700,background:isExpired?"#fef2f2":isExpiring?"#fef3c7":"#ecfdf5",color:isExpired?T.err:isExpiring?"#92400e":T.ok}}>{isExpired?`Expired ${Math.abs(daysLeft)}d ago`:daysLeft===0?"Expires today":`${daysLeft}d left`}</span>}
-                {d.reuseRequested&&<span style={{padding:"2px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700,background:T.infoBg,color:T.info}}>🔄 REUSE REQUESTED</span>}
+                <span style={{padding:"3px 8px",borderRadius:"2px",fontSize:"10px",fontWeight:700,background:d.adStatus==="running"?T.infoBg:d.adStatus==="tested"?T.okBg:"#ecfeff",color:d.adStatus==="running"?T.info:d.adStatus==="tested"?T.ok:"#0891b2"}}>{statusLabel}</span>
+                {daysLeft!==null&&<span style={{padding:"3px 8px",borderRadius:"2px",fontSize:"10px",fontWeight:700,background:isExpired?"#fef2f2":isExpiring?"#fef3c7":"#ecfdf5",color:isExpired?T.err:isExpiring?"#92400e":T.ok}}>{isExpired?`Expired ${Math.abs(daysLeft)}d ago`:daysLeft===0?"Expires today":`${daysLeft}d left`}</span>}
+                {d.reuseRequested&&<span style={{padding:"2px 6px",borderRadius:"2px",fontSize:"9px",fontWeight:700,background:T.infoBg,color:T.info}}>🔄 REUSE REQUESTED</span>}
               </div>
             </div>
 
             {/* Live content links */}
-            {liveLinks.length>0&&<div style={{background:T.surfaceAlt,borderRadius:"5px",padding:"6px 8px",marginBottom:"6px",fontSize:"11px"}}>
+            {liveLinks.length>0&&<div style={{background:T.surfaceAlt,borderRadius:"2px",padding:"6px 8px",marginBottom:"6px",fontSize:"11px"}}>
               <span style={{fontWeight:700,color:T.text}}>📎 Live Content:</span>
               {liveLinks.map((dl,i)=><span key={i} style={{marginLeft:"6px"}}><a href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{color:T.info,textDecoration:"none",fontWeight:600}}>{dl.type}: {dl.desc}</a>{i<liveLinks.length-1?", ":""}</span>)}
             </div>}
 
             {/* Ad platform link & notes (read mode) */}
-            {!isEditing&&(d.adPlatformLink||d.adNotes)&&<div style={{background:"#f0f9ff",borderRadius:"5px",padding:"6px 8px",marginBottom:"6px",fontSize:"11px"}}>
+            {!isEditing&&(d.adPlatformLink||d.adNotes)&&<div style={{background:"#f0f9ff",borderRadius:"2px",padding:"6px 8px",marginBottom:"6px",fontSize:"11px"}}>
               {d.adPlatformLink&&<div>🔗 <a href={ensureUrl(d.adPlatformLink)} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{color:T.info,textDecoration:"none",fontWeight:600}}>Ad Platform Link</a></div>}
               {d.adNotes&&<div style={{marginTop:"2px",color:T.sub}}>📝 {d.adNotes}</div>}
             </div>}
 
             {/* Edit mode for notes */}
-            {isEditing&&<div onClick={e=>e.stopPropagation()} style={{background:"#f0f9ff",border:"1px dashed #0891b2",borderRadius:"5px",padding:"8px",marginBottom:"6px"}}>
+            {isEditing&&<div onClick={e=>e.stopPropagation()} style={{background:"#f0f9ff",border:"1px dashed #0891b2",borderRadius:"2px",padding:"8px",marginBottom:"6px"}}>
               <div style={{fontSize:"10px",fontWeight:700,color:"#0891b2",marginBottom:"4px"}}>AD NOTES & LINK</div>
               <Inp value={adNotesF.link} onChange={e=>setAdNotesF({...adNotesF,link:e.target.value})} placeholder="Meta/Google ad link..." />
-              <textarea value={adNotesF.notes} onChange={e=>setAdNotesF({...adNotesF,notes:e.target.value})} placeholder="Performance notes, ROAS, observations..." rows={2} style={{width:"100%",padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"12px",marginTop:"4px",fontFamily:"Archivo,sans-serif",resize:"vertical",boxSizing:"border-box"}}/>
+              <textarea value={adNotesF.notes} onChange={e=>setAdNotesF({...adNotesF,notes:e.target.value})} placeholder="Performance notes, ROAS, observations..." rows={2} style={{width:"100%",padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:"2px",fontSize:"12px",marginTop:"4px",fontFamily:"Archivo,sans-serif",resize:"vertical",boxSizing:"border-box"}}/>
               <div style={{display:"flex",gap:"4px",marginTop:"4px"}}>
                 <Btn v="ok" sm onClick={()=>saveAdNotes(d,adNotesF.notes,adNotesF.link)}>Save</Btn>
                 <Btn v="ghost" sm onClick={()=>setEditingAdNotes(null)}>Cancel</Btn>
@@ -4163,7 +4163,7 @@ return (
 
         return <>
           {/* Header */}
-          <div style={{background:"linear-gradient(135deg,#0e7490,#0891b2)",borderRadius:"6px",padding:"16px 20px",marginBottom:"16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{background:"linear-gradient(135deg,#0e7490,#0891b2)",borderRadius:"2px",padding:"16px 20px",marginBottom:"16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
               <div style={{fontSize:"20px",fontWeight:800,color:"#ecfeff",fontFamily:"Bodoni Moda,serif",textTransform:"uppercase",letterSpacing:"1.5px"}}>📈 Creative Performance Hub</div>
               <div style={{fontSize:"13px",color:"rgba(236,254,255,.6)",marginTop:"2px"}}>Manage influencer creatives for paid ad campaigns</div>
@@ -4181,7 +4181,7 @@ return (
           </div>
 
           {/* Expiring alerts */}
-          {expiringCreatives.length>0&&<div style={{background:"#fef3c7",border:"1px solid #f59e0b33",borderRadius:"6px",padding:"10px 14px",marginBottom:"14px"}}>
+          {expiringCreatives.length>0&&<div style={{background:"#fef3c7",border:"1px solid #f59e0b33",borderRadius:"2px",padding:"10px 14px",marginBottom:"14px"}}>
             <div style={{fontSize:"12px",fontWeight:700,color:"#92400e",marginBottom:"4px"}}>⚠️ EXPIRING CREATIVES ({expiringCreatives.length})</div>
             {expiringCreatives.slice(0,3).map(d=>{const dl=getDaysLeft(d);return <div key={d.id} style={{fontSize:"12px",color:"#92400e",padding:"2px 0"}}>
               <b>{d.inf}</b> — {d.product} — {dl<=0?<span style={{color:T.err,fontWeight:700}}>EXPIRED</span>:<span>{dl} day{dl!==1?"s":""} left</span>}
@@ -4191,7 +4191,7 @@ return (
           </div>}
 
           {/* Reuse requests pending (visible to negotiator/admin too) */}
-          {allCreatives.filter(d=>d.reuseRequested).length>0&&<div style={{background:T.infoBg,border:`1px solid ${T.info}22`,borderRadius:"6px",padding:"10px 14px",marginBottom:"14px"}}>
+          {allCreatives.filter(d=>d.reuseRequested).length>0&&<div style={{background:T.infoBg,border:`1px solid ${T.info}22`,borderRadius:"2px",padding:"10px 14px",marginBottom:"14px"}}>
             <div style={{fontSize:"12px",fontWeight:700,color:T.info,marginBottom:"2px"}}>🔄 REUSE REQUESTS ({allCreatives.filter(d=>d.reuseRequested).length})</div>
             <div style={{fontSize:"11px",color:T.info}}>These creatives have pending usage extension requests sent to the negotiation team.</div>
           </div>}
@@ -4208,11 +4208,11 @@ return (
           {/* Quick filters */}
           <div style={{display:"flex",gap:"8px",marginBottom:"14px",flexWrap:"wrap",alignItems:"center"}}>
             <div style={{flex:"0 0 200px"}}><Inp value={adFilter.search} onChange={e=>setAdFilter({...adFilter,search:e.target.value})} placeholder="🔍 Search influencer, product..."/></div>
-            <select value={adFilter.campaign} onChange={e=>setAdFilter({...adFilter,campaign:e.target.value})} style={{padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"12px",fontFamily:"Archivo,sans-serif",color:T.text,background:T.surface}}>
+            <select value={adFilter.campaign} onChange={e=>setAdFilter({...adFilter,campaign:e.target.value})} style={{padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:"2px",fontSize:"12px",fontFamily:"Archivo,sans-serif",color:T.text,background:T.surface}}>
               <option value="">All Campaigns</option>
               {campIds.map(cid=><option key={cid} value={cid}>{getCamp(cid)?.name||cid}</option>)}
             </select>
-            <select value={adFilter.platform} onChange={e=>setAdFilter({...adFilter,platform:e.target.value})} style={{padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"12px",fontFamily:"Archivo,sans-serif",color:T.text,background:T.surface}}>
+            <select value={adFilter.platform} onChange={e=>setAdFilter({...adFilter,platform:e.target.value})} style={{padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:"2px",fontSize:"12px",fontFamily:"Archivo,sans-serif",color:T.text,background:T.surface}}>
               <option value="">All Platforms</option>
               {platforms.map(p=><option key={p} value={p}>{p}</option>)}
             </select>
@@ -4235,7 +4235,7 @@ return (
 
           return <>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
-              <div><span style={{fontSize:"20px",fontWeight:800}}>⭐ Influencer Database</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>{influencers.length} influencers</span></div>
+              <div><span style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px"}}>Influencer Database</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>{influencers.length} influencers</span></div>
               {(role==="negotiator"||role==="admin")&&<Btn v="gold" sm onClick={()=>setModal("newInfluencer")}>+ Add Influencer</Btn>}
             </div>
 
@@ -4255,7 +4255,7 @@ return (
                 const activeCollabs = infDeals.filter(d=>!["rejected","paid"].includes(d.status)).length;
                 const totalSpend = getInfTotalSpend(inf);
                 const ratingColor = inf.rating==="A+"?T.ok:inf.rating==="A"?T.info:inf.rating==="B+"?T.warn:T.sub;
-                return <div key={inf.id} onClick={()=>setInfProfile(inf)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"10px",padding:"14px",cursor:"pointer",transition:"all .12s"}}
+                return <div key={inf.id} onClick={()=>setInfProfile(inf)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"14px",cursor:"pointer",transition:"all .12s"}}
                   onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow=T.cardShadowHover}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"8px"}}>
@@ -4266,11 +4266,11 @@ return (
                         <div style={{fontSize:"11px",color:T.sub}}>{inf.platform} · {inf.followers} · {inf.city}</div>
                       </div>
                     </div>
-                    <span style={{padding:"2px 7px",borderRadius:"8px",fontSize:"11px",fontWeight:800,color:ratingColor,background:ratingColor+"18"}}>{inf.rating}</span>
+                    <span style={{padding:"2px 7px",borderRadius:"2px",fontSize:"11px",fontWeight:800,color:ratingColor,background:ratingColor+"18"}}>{inf.rating}</span>
                   </div>
                   <div style={{fontSize:"11px",color:T.sub,marginBottom:"6px"}}>{inf.category} · POC: {inf.poc}</div>
                   <div style={{display:"flex",gap:"4px",marginBottom:"8px",flexWrap:"wrap"}}>
-                    {(inf.tags||[]).slice(0,4).map((tag,i)=><span key={i} style={{padding:"1px 6px",borderRadius:"4px",fontSize:"10px",fontWeight:600,background:T.goldSoft,color:T.gold}}>#{tag}</span>)}
+                    {(inf.tags||[]).slice(0,4).map((tag,i)=><span key={i} style={{padding:"1px 6px",borderRadius:"2px",fontSize:"10px",fontWeight:600,background:T.goldSoft,color:T.gold}}>#{tag}</span>)}
                   </div>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:"6px",borderTop:`1px solid ${T.border}`,fontSize:"12px"}}>
                     <span style={{color:T.sub}}>{totalCollabs} collabs ({activeCollabs} active)</span>
@@ -4298,7 +4298,7 @@ return (
               <div style={{display:"flex",gap:"14px",alignItems:"center",marginBottom:"16px"}}>
                 <div style={{width:"48px",height:"48px",borderRadius:"50%",background:`linear-gradient(135deg,${T.goldSoft},${T.goldMid})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",fontWeight:800,color:T.gold}}>{inf.name.split(" ").map(w=>w[0]).join("")}</div>
                 <div style={{flex:1}}>
-                  <div style={{fontWeight:800,fontSize:"20px"}}>{inf.name} <span style={{padding:"2px 7px",borderRadius:"8px",fontSize:"11px",fontWeight:800,color:ratingColor,background:ratingColor+"18",marginLeft:"6px"}}>{inf.rating}</span></div>
+                  <div style={{fontWeight:800,fontSize:"20px"}}>{inf.name} <span style={{padding:"2px 7px",borderRadius:"2px",fontSize:"11px",fontWeight:800,color:ratingColor,background:ratingColor+"18",marginLeft:"6px"}}>{inf.rating}</span></div>
                   <div style={{fontSize:"13px",color:T.sub}}>{inf.handle} · {inf.platform} · {inf.followers} · {inf.city}</div>
                   <div style={{fontSize:"11px",color:T.gold,fontWeight:600}}>{inf.category}</div>
                 </div>
@@ -4306,7 +4306,7 @@ return (
 
               {/* Contact & Details */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"14px"}}>
-                {[["📱 Phone",inf.phone],["📧 Email",inf.email],["👤 POC",inf.poc],["🔗 Profile",inf.profile],["📍 Address",inf.address],["📅 Added",inf.added]].map(([l,v])=><div key={l} style={{padding:"7px 10px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"5px"}}><div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>{l}</div><div style={{fontSize:"13px",marginTop:"2px"}}>{v||"—"}</div></div>)}
+                {[["📱 Phone",inf.phone],["📧 Email",inf.email],["👤 POC",inf.poc],["🔗 Profile",inf.profile],["📍 Address",inf.address],["📅 Added",inf.added]].map(([l,v])=><div key={l} style={{padding:"7px 10px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}><div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>{l}</div><div style={{fontSize:"13px",marginTop:"2px"}}>{v||"—"}</div></div>)}
               </div>
 
               {/* Financial Summary */}
@@ -4318,33 +4318,33 @@ return (
               </div>
 
               {/* Bank & Payment Details */}
-              {(inf.bankHolder||inf.bankAccount||inf.panNumber||inf.upiId)&&<div style={{padding:"10px 12px",background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:"7px",marginBottom:"14px"}}>
+              {(inf.bankHolder||inf.bankAccount||inf.panNumber||inf.upiId)&&<div style={{padding:"10px 12px",background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:"2px",marginBottom:"14px"}}>
                 <div style={{fontSize:"11px",fontWeight:700,color:"#0284c7",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px"}}>💳 Bank & Payment Details</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
-                  {[["Account Holder",inf.bankHolder],["Account Number",inf.bankAccount],["IFSC",inf.bankIfsc],["PAN",inf.panNumber],["UPI ID",inf.upiId],["Default Terms",{next_15th:"15th of Next Month","45_days":"45 Days","60_days":"60 Days",advance:"Advance",immediate:"Immediate",custom:"Custom"}[inf.defaultPaymentTerms]||inf.defaultPaymentTerms]].filter(([,v])=>v).map(([l,v])=><div key={l} style={{padding:"4px 8px",background:"#fff",borderRadius:"4px",fontSize:"12px"}}><span style={{fontWeight:700,color:T.sub,fontSize:"10px"}}>{l}:</span> {v}</div>)}
+                  {[["Account Holder",inf.bankHolder],["Account Number",inf.bankAccount],["IFSC",inf.bankIfsc],["PAN",inf.panNumber],["UPI ID",inf.upiId],["Default Terms",{next_15th:"15th of Next Month","45_days":"45 Days","60_days":"60 Days",advance:"Advance",immediate:"Immediate",custom:"Custom"}[inf.defaultPaymentTerms]||inf.defaultPaymentTerms]].filter(([,v])=>v).map(([l,v])=><div key={l} style={{padding:"4px 8px",background:"#fff",borderRadius:"2px",fontSize:"12px"}}><span style={{fontWeight:700,color:T.sub,fontSize:"10px"}}>{l}:</span> {v}</div>)}
                 </div>
               </div>}
-              {!(inf.bankHolder||inf.bankAccount||inf.panNumber||inf.upiId)&&(role==="finance"||role==="admin")&&<div style={{padding:"10px 12px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderRadius:"7px",marginBottom:"14px",fontSize:"12px",color:T.warn}}>
+              {!(inf.bankHolder||inf.bankAccount||inf.panNumber||inf.upiId)&&(role==="finance"||role==="admin")&&<div style={{padding:"10px 12px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderRadius:"2px",marginBottom:"14px",fontSize:"12px",color:T.warn}}>
                 ⚠ No bank details on file. Ask the negotiator to update this influencer's profile with bank details for payment processing.
               </div>}
 
               {/* Tags */}
               <div style={{display:"flex",gap:"4px",marginBottom:"14px",flexWrap:"wrap"}}>
-                {(inf.tags||[]).map((tag,i)=><span key={i} style={{padding:"2px 8px",borderRadius:"5px",fontSize:"11px",fontWeight:600,background:T.goldSoft,color:T.gold}}>#{tag}</span>)}
+                {(inf.tags||[]).map((tag,i)=><span key={i} style={{padding:"2px 8px",borderRadius:"2px",fontSize:"11px",fontWeight:600,background:T.goldSoft,color:T.gold}}>#{tag}</span>)}
               </div>
 
               {/* Notes */}
-              {inf.notes&&<div style={{padding:"10px 12px",background:T.warnBg,borderRadius:"6px",marginBottom:"14px",fontSize:"13px",color:T.warn}}>
+              {inf.notes&&<div style={{padding:"10px 12px",background:T.warnBg,borderRadius:"2px",marginBottom:"14px",fontSize:"13px",color:T.warn}}>
                 <div style={{fontWeight:700,marginBottom:"2px"}}>📝 Notes</div>{inf.notes}
               </div>}
 
               {/* Avg Rate & Overall Rating */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"14px"}}>
-                <div style={{padding:"8px 10px",background:T.goldSoft,borderRadius:"6px",fontSize:"13px"}}>
+                <div style={{padding:"8px 10px",background:T.goldSoft,borderRadius:"2px",fontSize:"13px"}}>
                   <span style={{fontWeight:700,color:T.brand}}>Average Rate</span>
                   <div style={{fontWeight:800,color:T.gold,fontSize:"13px",marginTop:"2px"}}>{f(inf.avgRate)}</div>
                 </div>
-                {typeof inf.rating==="number"&&<div style={{padding:"8px 10px",background:T.okBg,borderRadius:"6px",fontSize:"13px"}}>
+                {typeof inf.rating==="number"&&<div style={{padding:"8px 10px",background:T.okBg,borderRadius:"2px",fontSize:"13px"}}>
                   <span style={{fontWeight:700,color:T.ok}}>Overall Rating</span>
                   <div style={{fontWeight:800,color:T.ok,fontSize:"13px",marginTop:"2px"}}>{inf.rating.toFixed(1)}/5 ⭐</div>
                 </div>}
@@ -4356,7 +4356,7 @@ return (
                 {infDeals.map(d=>{
                   const paid = (d.pays||[]).reduce((s,p)=>s+p.amount,0);
                   const delDone = d.dels.filter(x=>x.st==="live").length;
-                  return <div key={d.id} onClick={()=>{setSel(d);setInfProfile(null);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer",transition:"all .12s"}}
+                  return <div key={d.id} onClick={()=>{setSel(d);setInfProfile(null);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer",transition:"all .12s"}}
                     onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.04)"}
                     onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"4px"}}>
@@ -4398,7 +4398,7 @@ return (
               <Field label="Address" span={2}><Inp value={nInf.address} onChange={e=>setNInf({...nInf,address:e.target.value})} placeholder="Full shipping address"/></Field>
               <Field label="Tags (comma separated)"><Inp value={nInf.tags} onChange={e=>setNInf({...nInf,tags:e.target.value})} placeholder="fashion, lifestyle, mumbai"/></Field>
               <Field label="Notes"><Inp value={nInf.notes} onChange={e=>setNInf({...nInf,notes:e.target.value})} placeholder="Any important notes about this influencer..."/></Field>
-              <div style={{marginTop:"10px",padding:"10px",background:T.surfaceAlt,borderRadius:"7px",border:`1px solid ${T.border}`}}>
+              <div style={{marginTop:"10px",padding:"10px",background:T.surfaceAlt,borderRadius:"2px",border:`1px solid ${T.border}`}}>
                 <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"8px"}}>💳 Bank & Payment Details (optional)</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 10px"}}>
                   <Field label="Account Holder Name"><Inp value={nInf.bankHolder} onChange={e=>setNInf({...nInf,bankHolder:e.target.value})} placeholder="As per bank records"/></Field>
@@ -4434,7 +4434,7 @@ return (
           const months = Object.keys(analytics.monthlySpend).sort().slice(-6);
           const maxSpend = Math.max(...months.map(m => analytics.monthlySpend[m]||0));
           return <>
-            <h2 style={{fontSize:"20px",fontWeight:800,marginBottom:"14px"}}>📊 Analytics & Reports</h2>
+            <h2 style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px",marginBottom:"14px"}}>Analytics & Reports</h2>
 
             {/* ROI Metrics Section */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"8px",marginBottom:"16px"}}>
@@ -4447,7 +4447,7 @@ return (
             </div>
 
             {/* Monthly Spend Chart */}
-            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"14px",marginBottom:"14px"}}>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"14px",marginBottom:"14px"}}>
               <div style={{fontSize:"12px",fontWeight:700,marginBottom:"10px"}}>Monthly Spend Trend</div>
               <div style={{display:"flex",alignItems:"flex-end",gap:"6px",height:"160px",justifyContent:"space-around",paddingBottom:"8px"}}>
                 {months.map(m => {
@@ -4464,7 +4464,7 @@ return (
             </div>
 
             {/* Campaign Performance */}
-            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"14px",marginBottom:"14px"}}>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"14px",marginBottom:"14px"}}>
               <div style={{fontSize:"12px",fontWeight:700,marginBottom:"10px"}}>Campaign Performance (Budget vs Spent)</div>
               {campaigns.map(c => {
                 const perf = analytics.campaignPerf[c.id] || {budget:c.budget,spent:0};
@@ -4482,7 +4482,7 @@ return (
             </div>
 
             {/* Top Influencers */}
-            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"14px",marginBottom:"14px"}}>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"14px",marginBottom:"14px"}}>
               <div style={{fontSize:"12px",fontWeight:700,marginBottom:"10px"}}>Top Influencers</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
                 <div>
@@ -4501,7 +4501,7 @@ return (
             </div>
 
             {/* Status Distribution Pie */}
-            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"14px",marginBottom:"14px"}}>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"14px",marginBottom:"14px"}}>
               <div style={{fontSize:"12px",fontWeight:700,marginBottom:"10px"}}>Deal Status Distribution</div>
               {(()=>{
                 const total = Object.values(analytics.statusDist).reduce((s,v)=>s+v,0);
@@ -4540,7 +4540,7 @@ return (
             </div>
 
             {/* Deliverables Completion */}
-            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",padding:"14px",marginBottom:"14px"}}>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"14px",marginBottom:"14px"}}>
               <div style={{fontWeight:800,fontSize:"13px",marginBottom:"10px"}}>Deliverables Completion</div>
               {(()=>{
                 const allDels = deals.flatMap(d=>d.dels||[]);
@@ -4553,8 +4553,8 @@ return (
                     <span>{live} of {total} deliverables completed</span>
                     <span style={{fontWeight:700,color:pct>80?T.ok:pct>50?T.warn:T.err}}>{pct}%</span>
                   </div>
-                  <div style={{height:"8px",borderRadius:"4px",background:T.border,overflow:"hidden"}}>
-                    <div style={{height:"100%",width:`${pct}%`,background:pct>80?T.ok:pct>50?T.warn:T.err,borderRadius:"4px",transition:"width .3s"}}/>
+                  <div style={{height:"8px",borderRadius:"2px",background:T.border,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${pct}%`,background:pct>80?T.ok:pct>50?T.warn:T.err,borderRadius:"2px",transition:"width .3s"}}/>
                   </div>
                   <div style={{display:"flex",gap:"16px",marginTop:"8px",fontSize:"11px",color:T.sub}}>
                     <span>Live: {live}</span><span>Pending: {pending}</span>
@@ -4612,7 +4612,7 @@ return (
               <Btn v="outline" sm onClick={()=>{setFilterDateFrom("");setFilterDateTo("");setFilterAmountMin("");setFilterAmountMax("");setFilterPlatform("");setFilterNegotiator("");setFilterStatus([]);setActiveFilters([])}}>Clear All</Btn>
             </div>
             {activeFilters.length>0&&<div style={{marginTop:"8px",display:"flex",gap:"4px",flexWrap:"wrap"}}>
-              {activeFilters.map((f,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:"4px",background:T.goldSoft,color:T.brand,padding:"4px 8px",borderRadius:"4px",fontSize:"10px",fontWeight:700}}>
+              {activeFilters.map((f,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:"4px",background:T.goldSoft,color:T.brand,padding:"4px 8px",borderRadius:"2px",fontSize:"10px",fontWeight:700}}>
                 {f}<button onClick={()=>clearFilter(i)} style={{background:"none",border:"none",color:T.brand,cursor:"pointer",fontSize:"12px",padding:"0",lineHeight:1}}>✕</button>
               </span>)}
             </div>}
@@ -4695,12 +4695,12 @@ return (
           const droppedDeals = deals.filter(d=>d.status==="dropped");
           return <>
             <div style={{marginBottom:"14px"}}>
-              <span style={{fontSize:"20px",fontWeight:800}}>🚫 Dropped Collabs</span>
+              <span style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px"}}>Dropped Collabs</span>
               <span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>({droppedDeals.length} total)</span>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(295px,1fr))",gap:"9px"}}>
               {droppedDeals.map(d=>(
-                <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.errBg,border:`1px solid ${T.err}33`,borderRadius:"9px",padding:"13px",cursor:"pointer",transition:"all .12s"}}
+                <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.errBg,border:`1px solid ${T.err}33`,borderRadius:"2px",padding:"13px",cursor:"pointer",transition:"all .12s"}}
                   onMouseEnter={e=>{e.currentTarget.style.borderColor=T.err}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=`${T.err}33`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"5px"}}>
@@ -4708,7 +4708,7 @@ return (
                     <Badge s={d.status} sm/>
                   </div>
                   <div style={{fontSize:"12px",color:T.sub,marginBottom:"6px"}}>{d.product}</div>
-                  <div style={{fontSize:"11px",color:T.err,fontWeight:600,padding:"6px",background:"rgba(180,35,24,.1)",borderRadius:"4px",marginBottom:"6px"}}>Dropped by {d.logs?.find(l=>l.a==="Collab dropped")?.u||"Unknown"}</div>
+                  <div style={{fontSize:"11px",color:T.err,fontWeight:600,padding:"6px",background:"rgba(180,35,24,.1)",borderRadius:"2px",marginBottom:"6px"}}>Dropped by {d.logs?.find(l=>l.a==="Collab dropped")?.u||"Unknown"}</div>
                   <div style={{display:"flex",justifyContent:"space-between"}}>
                     <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{f(d.amount)}</span>
                     <span style={{fontSize:"11px",color:T.sub}}>{d.dels.length} deliverables</span>
@@ -4723,16 +4723,16 @@ return (
         {/* ═══ CAMPAIGNS ═══ */}
         {view==="campaigns"&&<>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
-            <span style={{fontSize:"18px",fontWeight:800}}>🎯 Campaigns</span>
+            <span style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px"}}>Campaigns</span>
             {(role==="approver"||role==="finance"||role==="admin")&&<Btn v="gold" sm onClick={()=>{setNCamp({name:"",budget:"",target:"",deadline:"",brief:""});setModal("newCamp")}}>+ New Campaign</Btn>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(330px,1fr))",gap:"10px"}}>
             {campaigns.map(c=>{
               const comm=campCommitted(c.id),pd=campPaid(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0,lk=campLocked(c.id);
-              return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",padding:"16px",cursor:"pointer",transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}>
+              return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"16px",cursor:"pointer",transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:"10px"}}>
                   <div><div style={{fontWeight:800,fontSize:"14px"}}>{c.name}</div><div style={{fontSize:"11px",color:T.sub,marginTop:"1px"}}>Deadline: {c.deadline}</div></div>
-                  <span style={{padding:"2px 7px",borderRadius:"8px",fontSize:"11px",fontWeight:700,color:c.status==="active"?T.ok:T.warn,background:c.status==="active"?T.okBg:T.warnBg}}>{c.status}</span>
+                  <span style={{padding:"2px 7px",borderRadius:"2px",fontSize:"11px",fontWeight:700,color:c.status==="active"?T.ok:T.warn,background:c.status==="active"?T.okBg:T.warnBg}}>{c.status}</span>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"10px"}}>
                   <div><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>BUDGET</div><div style={{fontSize:"18px",fontWeight:800}}>{f(c.budget)}</div></div>
@@ -4750,27 +4750,27 @@ return (
 
         {/* ═══ DELIVERABLES BANK ═══ */}
         {view==="deliverables"&&<>
-          <div style={{fontSize:"18px",fontWeight:800,marginBottom:"14px"}}>📋 Deliverables Bank — <span style={{color:T.purple}}>{pendingDels.length} Active</span></div>
+          <div style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px",marginBottom:"14px"}}>Deliverables Bank — <span style={{color:T.purple}}>{pendingDels.length} Active</span></div>
           {/* Workflow summary cards */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"8px",marginBottom:"16px"}}>
-            <div style={{background:T.warnBg,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"10px 14px"}}>
+            <div style={{background:T.warnBg,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 14px"}}>
               <div style={{fontSize:"11px",color:T.warn,fontWeight:700,textTransform:"uppercase"}}>Pending</div>
               <div style={{fontSize:"20px",fontWeight:800,color:T.warn}}>{pendingDels.filter(d=>d.st==="pending").length}</div>
             </div>
-            <div style={{background:T.infoBg,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"10px 14px"}}>
+            <div style={{background:T.infoBg,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 14px"}}>
               <div style={{fontSize:"11px",color:T.info,fontWeight:700,textTransform:"uppercase"}}>Submitted</div>
               <div style={{fontSize:"20px",fontWeight:800,color:T.info}}>{awaitingReview.length}</div>
             </div>
-            <div style={{background:T.errBg,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"10px 14px"}}>
+            <div style={{background:T.errBg,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 14px"}}>
               <div style={{fontSize:"11px",color:T.err,fontWeight:700,textTransform:"uppercase"}}>Revision Needed</div>
               <div style={{fontSize:"20px",fontWeight:800,color:T.err}}>{revisionNeeded.length}</div>
             </div>
-            <div style={{background:T.okBg,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"10px 14px"}}>
+            <div style={{background:T.okBg,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 14px"}}>
               <div style={{fontSize:"11px",color:T.ok,fontWeight:700,textTransform:"uppercase"}}>Approved</div>
               <div style={{fontSize:"20px",fontWeight:800,color:T.ok}}>{pendingDels.filter(d=>d.st==="approved").length}</div>
             </div>
           </div>
-          <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",overflow:"hidden",marginBottom:"20px"}}>
+          <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",overflow:"hidden",marginBottom:"20px"}}>
             <div style={{display:"grid",gridTemplateColumns:"1.8fr 1.5fr 1.2fr 0.8fr 0.8fr 0.7fr",padding:"8px 12px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>
               <div>Influencer</div><div>Deliverable</div><div>Campaign</div><div>Platform</div><div>Deadline</div><div>Status</div>
             </div>
@@ -4795,11 +4795,11 @@ return (
             pendingDels.forEach(d=>{(byType[d.type]=byType[d.type]||[]).push(d);});
             const types=Object.keys(byType).sort();
             if(types.length===0) return <div style={{color:T.sub,fontSize:"12px",marginBottom:"20px"}}>No active deliverables.</div>;
-            const chip=(n,label,c,bg)=>n>0&&<span style={{padding:"2px 7px",borderRadius:"10px",fontSize:"10px",fontWeight:700,color:c,background:bg}}>{n} {label}</span>;
+            const chip=(n,label,c,bg)=>n>0&&<span style={{padding:"2px 7px",borderRadius:"2px",fontSize:"10px",fontWeight:700,color:c,background:bg}}>{n} {label}</span>;
             return <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:"10px",marginBottom:"22px"}}>
               {types.map(type=>{
                 const list=byType[type]; const cnt=st=>list.filter(d=>d.st===st).length;
-                return <div key={type} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"9px",padding:"12px"}}>
+                return <div key={type} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"12px"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
                     <span style={{fontWeight:800,fontSize:"14px"}}>{type}</span>
                     <span style={{fontSize:"12px",fontWeight:800,color:T.purple}}>{list.length}</span>
@@ -4826,13 +4826,13 @@ return (
             const done=d.dels.filter(x=>x.st==="live").length;
             const stColor={pending:T.warn,submitted:T.info,revision_requested:T.err,approved:T.ok,live:T.ok};
             const stIcon={pending:"⏳",submitted:"📤",revision_requested:"✏️",approved:"✅",live:"✓"};
-            return <div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px"}}>
+            return <div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"4px"}}>
                 <div><span style={{fontWeight:800,fontSize:"12px"}}>{d.inf}</span> <span style={{fontSize:"11px",color:T.sub}}>· {d.platform} · {getCamp(d.cid)?.name||""}</span></div>
                 <span style={{fontSize:"13px",fontWeight:800,color:done===d.dels.length?T.ok:T.warn}}>{done}/{d.dels.length} live</span>
               </div>
               <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
-                {d.dels.map((dl,i)=><span key={i} style={{padding:"3px 8px",borderRadius:"5px",fontSize:"11px",fontWeight:700,background:dl.st==="live"?T.okBg:dl.st==="submitted"?T.infoBg:dl.st==="revision_requested"?T.errBg:dl.st==="approved"?T.okBg:T.warnBg,color:stColor[dl.st]||T.warn}}>{dl.type} {stIcon[dl.st]||"⏳"}</span>)}
+                {d.dels.map((dl,i)=><span key={i} style={{padding:"3px 8px",borderRadius:"2px",fontSize:"11px",fontWeight:700,background:dl.st==="live"?T.okBg:dl.st==="submitted"?T.infoBg:dl.st==="revision_requested"?T.errBg:dl.st==="approved"?T.okBg:T.warnBg,color:stColor[dl.st]||T.warn}}>{dl.type} {stIcon[dl.st]||"⏳"}</span>)}
               </div>
             </div>;
           })}
@@ -4840,15 +4840,15 @@ return (
 
         {/* ═══ SHIPMENTS (full view) ═══ */}
         {view==="shipments"&&<>
-          <div style={{fontSize:"18px",fontWeight:800,marginBottom:"14px"}}>🚚 All Shipments</div>
+          <div style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px",marginBottom:"14px"}}>All Shipments</div>
           {awaitingAck.length>0&&<Section title={`Awaiting Acknowledgement (${awaitingAck.length})`} icon="⏳">
-            {awaitingAck.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:"3px solid #f59e0b",borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            {awaitingAck.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:"3px solid #f59e0b",borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Email sent · Deadline: {d.deadline}</div></div>
               <span style={{fontSize:"11px",color:"#92400e",fontWeight:700}}>⏳ Awaiting influencer confirmation</span>
             </div>)}
           </Section>}
           {pendingShip.length>0&&<Section title={`Ready to Dispatch (${pendingShip.length})`} icon="📋">
-            {pendingShip.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            {pendingShip.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Acknowledged: {d.ackAt?new Date(d.ackAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"}):"—"} · Deadline: {d.deadline}</div></div>
               {role==="logistics"?<Btn v="purple" sm onClick={()=>{setSel(d);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>:<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Awaiting logistics</span>}
             </div>)}
@@ -4858,7 +4858,7 @@ return (
           {pickupRequests.length>0&&<Section title={`Pickup Requests (${pickupRequests.length})`} icon="🔄">
             {pickupRequests.map(h=>{
               const deal = deals.find(d=>d.id===h.dealId);
-              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.warn,fontWeight:600}}>· Return ({h.reason})</span></div><div style={{fontSize:"11px",color:T.sub}}>📍 {h.address||"—"} · Requested: {new Date(h.requestedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div></div>
                 {role==="logistics"&&<Btn v="gold" sm onClick={()=>{setSel(deal);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("arrangePickup-"+h.histIdx)}}>🔄 Arrange</Btn>}
               </div>;
@@ -4869,7 +4869,7 @@ return (
           {pickupsInTransit.length>0&&<Section title={`Return Pickups In Transit (${pickupsInTransit.length})`} icon="📮">
             {pickupsInTransit.map(h=>{
               const deal = deals.find(d=>d.id===h.dealId);
-              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.info,fontWeight:600}}>· Return In Transit</span></div><div style={{fontSize:"11px",color:T.sub}}>{h.returnCarrier}: <span style={{color:T.info,fontWeight:700}}>{h.returnTrack}</span></div></div>
                 {role==="logistics"&&<Btn v="ok" sm onClick={()=>markProductReturned(deal,h.histIdx)}>✓ Product Returned</Btn>}
               </div>;
@@ -4880,7 +4880,7 @@ return (
           {reshipPending.length>0&&<Section title={`Re-shipments Pending (${reshipPending.length})`} icon="📦">
             {reshipPending.map(h=>{
               const deal = deals.find(d=>d.id===h.dealId);
-              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.purple}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.purple}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.purple,fontWeight:600}}>· New Shipment</span></div><div style={{fontSize:"11px",color:T.sub}}>📦 {(h.products||[]).map(p=>p.name).join(", ")} · 📍 {h.address||"—"}</div></div>
                 {role==="logistics"&&<Btn v="purple" sm onClick={()=>{setSel(deal);setReshipShipF({track:"",carrier:"DTDC",orderId:""});setModal("reshipDispatch-"+h.histIdx)}}>📦 Dispatch</Btn>}
               </div>;
@@ -4891,7 +4891,7 @@ return (
           {reshipInTransit.length>0&&<Section title={`Re-shipments In Transit (${reshipInTransit.length})`} icon="🚚">
             {reshipInTransit.map(h=>{
               const deal = deals.find(d=>d.id===h.dealId);
-              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.purple,fontWeight:600}}>· Re-shipment</span></div><div style={{fontSize:"11px",color:T.sub}}>{h.reCarrier}: <span style={{color:T.info,fontWeight:700}}>{h.reTrack}</span></div></div>
                 {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(deal);setReshipDelivF({date:todayLocal(),note:"",histIdx:h.histIdx});setModal("markReshipDelivered")}}>✓ Delivered</Btn>}
               </div>;
@@ -4900,13 +4900,13 @@ return (
 
           <Section title={`In Transit (${inTransit.length})`} icon="🚚">
             {inTransit.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"12px"}}>None in transit</div>}
-            {inTransit.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            {inTransit.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} · {d.products?d.products.map(p=>p.name).join(", "):d.product}</div><div style={{fontSize:"11px",color:T.sub}}>📦 {d.ship.carrier}: <span style={{fontWeight:700,color:T.info}}>{d.ship.track}</span> · {d.ship.dispAt}</div></div>
               {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(d);setDeliveryF({date:todayLocal(),note:""});setModal("markDelivered")}}>✓ Delivered</Btn>}
             </div>)}
           </Section>
           <Section title="Delivered" icon="✓">
-            {deals.filter(d=>d.ship?.st==="delivered").map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"8px 12px",marginBottom:"4px",display:"flex",justifyContent:"space-between",alignItems:"center",opacity:.6}}>
+            {deals.filter(d=>d.ship?.st==="delivered").map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"8px 12px",marginBottom:"4px",display:"flex",justifyContent:"space-between",alignItems:"center",opacity:.6}}>
               <span style={{fontSize:"13px"}}><b>{d.inf}</b> · {d.products?d.products.map(p=>p.name).join(", "):d.product}</span>
               <span style={{fontSize:"11px",color:T.ok}}>✓ {d.ship.delAt}</span>
             </div>)}
@@ -4940,10 +4940,10 @@ return (
             const pastDeals = deals.filter(d => d.inf?.toLowerCase() === nDeal.inf?.toLowerCase() && d.status !== 'rejected' && d.status !== 'dropped');
             if(pastDeals.length === 0) return null;
             const avgRate = Math.round(pastDeals.reduce((s,d)=>s+d.amount,0)/pastDeals.length);
-            return <div style={{padding:"10px 12px",background:T.infoBg,border:`1px solid ${T.info}33`,borderRadius:"7px",marginBottom:"8px",fontSize:"12px"}}>
+            return <div style={{padding:"10px 12px",background:T.infoBg,border:`1px solid ${T.info}33`,borderRadius:"2px",marginBottom:"8px",fontSize:"12px"}}>
               <div style={{fontWeight:800,fontSize:"11px",color:T.info,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px"}}>📊 Previous Collaborations with {nDeal.inf} ({pastDeals.length})</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"4px 12px",marginBottom:"4px"}}>
-                {pastDeals.slice(0,6).map((pd,idx)=><div key={idx} style={{display:"flex",justifyContent:"space-between",padding:"3px 6px",background:"rgba(255,255,255,.05)",borderRadius:"4px"}}>
+                {pastDeals.slice(0,6).map((pd,idx)=><div key={idx} style={{display:"flex",justifyContent:"space-between",padding:"3px 6px",background:"rgba(255,255,255,.05)",borderRadius:"2px"}}>
                   <span style={{color:T.sub}}>{pd.at?.slice(0,7)||"—"}</span>
                   <span style={{fontWeight:700,color:T.gold}}>{f(pd.amount)}</span>
                 </div>)}
@@ -4957,7 +4957,7 @@ return (
           })()}
 
           {/* Products */}
-          <div style={{marginTop:"8px",padding:"12px",background:T.surfaceAlt,borderRadius:"7px",marginBottom:"8px"}}>
+          <div style={{marginTop:"8px",padding:"12px",background:T.surfaceAlt,borderRadius:"2px",marginBottom:"8px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
               <span style={{fontSize:"11px",fontWeight:800,color:T.brand,textTransform:"uppercase",letterSpacing:".5px"}}>📦 Products ({nDeal.products?.length||0})</span>
               <Btn v="outline" sm onClick={()=>setNDeal({...nDeal,products:[...(nDeal.products||[]),{id:uid(),name:"",color:"",size:"",qty:"1"}]})}>+ Add Product</Btn>
@@ -4976,7 +4976,7 @@ return (
           <Field label="Payment Terms"><Sel value={nDeal.paymentTerms||"Net 15 days"} onChange={e=>setNDeal({...nDeal,paymentTerms:e.target.value})} options={[{v:"Net 15 days",l:"Net 15 days"},{v:"Net 30 days",l:"Net 30 days"},{v:"50% Advance + 50% on delivery",l:"50% Advance + 50% on delivery"},{v:"100% Advance",l:"100% Advance"},{v:"100% Post Content",l:"100% Post Content"},{v:"Custom",l:"Custom"}]}/></Field>
 
           {/* Deliverables */}
-          <div style={{marginTop:"12px",padding:"12px",background:formErrors.dels?T.errBg:T.goldSoft,borderRadius:"7px",border:formErrors.dels?`1px solid ${T.err}`:"none"}}>
+          <div style={{marginTop:"12px",padding:"12px",background:formErrors.dels?T.errBg:T.goldSoft,borderRadius:"2px",border:formErrors.dels?`1px solid ${T.err}`:"none"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
               <span style={{fontSize:"11px",fontWeight:800,color:T.brand,textTransform:"uppercase",letterSpacing:".5px"}}>📋 Deliverables ({nDeal.dels.length})</span>
               <Btn v="outline" sm onClick={()=>setNDeal({...nDeal,dels:[...nDeal.dels,{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]})}>+ Add</Btn>
@@ -4993,7 +4993,7 @@ return (
             <Btn v="outline" onClick={()=>{setModal(null);setEditingDealId(null)}}>Cancel</Btn>
             <Btn v="gold" disabled={submittingDeal} onClick={editingDealId?saveDealEdits:createDeal}>{submittingDeal?(editingDealId?"Saving…":"Submitting…"):(editingDealId?"Save Changes":"Submit for Approval")}</Btn>
           </div>
-          <div style={{marginTop:"7px",padding:"6px 10px",background:T.infoBg,borderRadius:"5px",fontSize:"11px",color:T.info}}>🔒 Amount and deliverable list lock after manager approval. Email auto-generates from locked data.</div>
+          <div style={{marginTop:"7px",padding:"6px 10px",background:T.infoBg,borderRadius:"2px",fontSize:"11px",color:T.info}}>🔒 Amount and deliverable list lock after manager approval. Email auto-generates from locked data.</div>
         </>}
       </Modal>
 
@@ -5031,31 +5031,31 @@ return (
           return <>
             {/* Budget overview */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"8px",marginBottom:"14px"}}>
-              <div style={{background:T.surfaceAlt,borderRadius:"7px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>BUDGET</div><div style={{fontSize:"16px",fontWeight:800}}>{f(selCamp.budget)}</div></div>
-              <div style={{background:T.surfaceAlt,borderRadius:"7px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>COMMITTED</div><div style={{fontSize:"16px",fontWeight:800,color:T.gold}}>{f(comm)}</div></div>
-              <div style={{background:T.surfaceAlt,borderRadius:"7px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>PAID OUT</div><div style={{fontSize:"16px",fontWeight:800,color:T.ok}}>{f(pd)}</div></div>
-              <div style={{background:T.surfaceAlt,borderRadius:"7px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>REMAINING</div><div style={{fontSize:"16px",fontWeight:800,color:pct>90?T.err:T.brand}}>{f(Math.max(0,selCamp.budget-comm))}</div></div>
+              <div style={{background:T.surfaceAlt,borderRadius:"2px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>BUDGET</div><div style={{fontSize:"16px",fontWeight:800}}>{f(selCamp.budget)}</div></div>
+              <div style={{background:T.surfaceAlt,borderRadius:"2px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>COMMITTED</div><div style={{fontSize:"16px",fontWeight:800,color:T.gold}}>{f(comm)}</div></div>
+              <div style={{background:T.surfaceAlt,borderRadius:"2px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>PAID OUT</div><div style={{fontSize:"16px",fontWeight:800,color:T.ok}}>{f(pd)}</div></div>
+              <div style={{background:T.surfaceAlt,borderRadius:"2px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>REMAINING</div><div style={{fontSize:"16px",fontWeight:800,color:pct>90?T.err:T.brand}}>{f(Math.max(0,selCamp.budget-comm))}</div></div>
             </div>
             <div style={{marginBottom:"14px"}}>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:"11px",color:T.sub,marginBottom:"3px"}}><span>{lk}/{selCamp.target} influencers locked</span><span style={{color:pct>90?T.err:T.sub}}>{pct}% budget used</span></div>
-              <div style={{height:"6px",borderRadius:"4px",background:T.border,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.warn:T.ok,borderRadius:"4px",transition:"width .3s"}}/></div>
+              <div style={{height:"6px",borderRadius:"2px",background:T.border,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.warn:T.ok,borderRadius:"2px",transition:"width .3s"}}/></div>
             </div>
-            {selCamp.brief&&<div style={{padding:"10px 12px",background:T.surfaceAlt,borderRadius:"6px",marginBottom:"14px",fontSize:"12px",color:T.sub,lineHeight:1.6}}><b style={{color:T.text}}>Brief:</b> {selCamp.brief}</div>}
+            {selCamp.brief&&<div style={{padding:"10px 12px",background:T.surfaceAlt,borderRadius:"2px",marginBottom:"14px",fontSize:"12px",color:T.sub,lineHeight:1.6}}><b style={{color:T.text}}>Brief:</b> {selCamp.brief}</div>}
             {selCamp.deadline&&<div style={{fontSize:"12px",color:T.sub,marginBottom:"14px"}}>Deadline: <b>{selCamp.deadline}</b></div>}
 
             {/* Status breakdown pills */}
             <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"14px"}}>
-              {pending.length>0&&<span style={{padding:"3px 10px",borderRadius:"12px",fontSize:"11px",fontWeight:700,background:T.warnBg,color:T.warn}}>⏳ {pending.length} Pending</span>}
-              {locked.length>0&&<span style={{padding:"3px 10px",borderRadius:"12px",fontSize:"11px",fontWeight:700,background:T.infoBg,color:T.info}}>🔒 {locked.length} Locked</span>}
-              {shipped.length>0&&<span style={{padding:"3px 10px",borderRadius:"12px",fontSize:"11px",fontWeight:700,background:T.purpleBg,color:T.purple}}>📦 {shipped.length} Shipped/Delivered</span>}
-              {live.length>0&&<span style={{padding:"3px 10px",borderRadius:"12px",fontSize:"11px",fontWeight:700,background:T.okBg,color:T.ok}}>🔴 {live.length} Live</span>}
-              {payment.length>0&&<span style={{padding:"3px 10px",borderRadius:"12px",fontSize:"11px",fontWeight:700,background:T.goldSoft,color:T.brand}}>💰 {payment.length} Payment</span>}
-              {dropped.length>0&&<span style={{padding:"3px 10px",borderRadius:"12px",fontSize:"11px",fontWeight:700,background:T.errBg,color:T.err}}>🚫 {dropped.length} Dropped</span>}
+              {pending.length>0&&<span style={{padding:"3px 10px",borderRadius:"2px",fontSize:"11px",fontWeight:700,background:T.warnBg,color:T.warn}}>⏳ {pending.length} Pending</span>}
+              {locked.length>0&&<span style={{padding:"3px 10px",borderRadius:"2px",fontSize:"11px",fontWeight:700,background:T.infoBg,color:T.info}}>🔒 {locked.length} Locked</span>}
+              {shipped.length>0&&<span style={{padding:"3px 10px",borderRadius:"2px",fontSize:"11px",fontWeight:700,background:T.purpleBg,color:T.purple}}>📦 {shipped.length} Shipped/Delivered</span>}
+              {live.length>0&&<span style={{padding:"3px 10px",borderRadius:"2px",fontSize:"11px",fontWeight:700,background:T.okBg,color:T.ok}}>🔴 {live.length} Live</span>}
+              {payment.length>0&&<span style={{padding:"3px 10px",borderRadius:"2px",fontSize:"11px",fontWeight:700,background:T.goldSoft,color:T.brand}}>💰 {payment.length} Payment</span>}
+              {dropped.length>0&&<span style={{padding:"3px 10px",borderRadius:"2px",fontSize:"11px",fontWeight:700,background:T.errBg,color:T.err}}>🚫 {dropped.length} Dropped</span>}
               {cd.length===0&&<span style={{fontSize:"12px",color:T.sub}}>No deals in this campaign yet</span>}
             </div>
 
             {/* Creator list */}
-            {cd.length>0&&<div style={{border:`1px solid ${T.border}`,borderRadius:"8px",overflow:"hidden"}}>
+            {cd.length>0&&<div style={{border:`1px solid ${T.border}`,borderRadius:"2px",overflow:"hidden"}}>
               <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr 0.8fr 0.8fr 1.2fr",padding:"8px 12px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",letterSpacing:".5px"}}>
                 <div>Creator</div><div>Platform</div><div>Amount</div><div>Paid</div><div>Status</div>
               </div>
@@ -5068,7 +5068,7 @@ return (
                     <div style={{color:T.sub}}>{d.platform}</div>
                     <div style={{fontWeight:700}}>{f(d.amount)}</div>
                     <div style={{color:paidAmt>0?T.ok:T.sub,fontWeight:paidAmt>0?700:400}}>{paidAmt>0?f(paidAmt):"—"}</div>
-                    <div><span style={{padding:"2px 8px",borderRadius:"8px",fontSize:"10px",fontWeight:700,background:sc.bg,color:sc.c}}>{sc.i} {sc.l}</span></div>
+                    <div><span style={{padding:"2px 8px",borderRadius:"2px",fontSize:"10px",fontWeight:700,background:sc.bg,color:sc.c}}>{sc.i} {sc.l}</span></div>
                   </div>;
                 })}
               </div>
@@ -5080,9 +5080,9 @@ return (
       {/* DISPATCH */}
       <Modal open={modal==="ship"} onClose={()=>setModal(null)} title={`Dispatch to ${sel?.inf}`} w={440}>
         {sel&&<>
-          <div style={{padding:"12px",background:T.purpleBg,borderRadius:"7px",marginBottom:"14px",fontSize:"13px",color:T.purple}}>
+          <div style={{padding:"12px",background:T.purpleBg,borderRadius:"2px",marginBottom:"14px",fontSize:"13px",color:T.purple}}>
             <div style={{fontWeight:800,fontSize:"13px",marginBottom:"6px"}}>📦 {sel.products?sel.products.map(p=>p.name).join(", "):sel.product}</div>
-            {sel.products && sel.products.length>0 && <div style={{marginTop:"8px",padding:"8px",background:T.surfaceAlt,borderRadius:"4px",fontSize:"11px"}}>
+            {sel.products && sel.products.length>0 && <div style={{marginTop:"8px",padding:"8px",background:T.surfaceAlt,borderRadius:"2px",fontSize:"11px"}}>
               <div style={{fontWeight:700,marginBottom:"4px"}}>Items to pack & ship:</div>
               {sel.products.map((p,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px",marginBottom:"3px"}}>
                 <span><b>{p.name}</b></span>
@@ -5107,7 +5107,7 @@ return (
       <Modal open={modal==="payment"} onClose={()=>setModal("detail")} title={`Payment — ${sel?.inf}`} w={460}>
         {sel&&<>
           {/* Invoice Details — Prominent for Finance */}
-          {sel.inv&&<div style={{padding:"10px 12px",background:sel.inv.match===false?T.errBg:T.okBg,border:`1px solid ${sel.inv.match===false?T.err:T.ok}33`,borderRadius:"6px",marginBottom:"10px",fontSize:"12px"}}>
+          {sel.inv&&<div style={{padding:"10px 12px",background:sel.inv.match===false?T.errBg:T.okBg,border:`1px solid ${sel.inv.match===false?T.err:T.ok}33`,borderRadius:"2px",marginBottom:"10px",fontSize:"12px"}}>
             <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Bodoni Moda,serif"}}>🧾 Invoice Details</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3px 10px"}}>
               <div><span style={{color:T.sub}}>Invoice #:</span> <b>{sel.invoiceNumber||"—"}</b></div>
@@ -5119,7 +5119,7 @@ return (
           </div>}
 
           {/* Deal Context */}
-          <div style={{padding:"10px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",marginBottom:"12px",fontSize:"13px"}}>
+          <div style={{padding:"10px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}>
             <div style={{fontWeight:700,marginBottom:"6px",fontSize:"12px"}}>📋 Deal Terms</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px"}}>
               <div><span style={{color:T.sub}}>Product:</span> <b>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product}</b></div>
@@ -5127,12 +5127,12 @@ return (
               <div><span style={{color:T.sub}}>Deadline:</span> <b>{sel.deadline}</b></div>
               <div><span style={{color:T.sub}}>Payment Terms:</span> <b>{sel.paymentTerms||"Net 15 days"}</b></div>
             </div>
-            {(sel.pan||sel.pan_number)&&<div style={{marginTop:"4px",padding:"4px 6px",background:T.infoBg,borderRadius:"4px"}}><span style={{color:T.info,fontWeight:600}}>PAN:</span> {sel.pan?.number||sel.pan_number} ({sel.pan?.name||sel.pan_name})</div>}
+            {(sel.pan||sel.pan_number)&&<div style={{marginTop:"4px",padding:"4px 6px",background:T.infoBg,borderRadius:"2px"}}><span style={{color:T.info,fontWeight:600}}>PAN:</span> {sel.pan?.number||sel.pan_number} ({sel.pan?.name||sel.pan_name})</div>}
             <div style={{marginTop:"6px",fontWeight:700,fontSize:"11px",color:T.sub}}>Deliverables:</div>
             {sel.dels.map((dl,i)=><div key={i} style={{fontSize:"11px",padding:"2px 0"}}>{dl.type}: {dl.desc} — <span style={{color:dl.st==="live"?T.ok:T.warn,fontWeight:600}}>{dl.st==="live"?"Live":"Pending"}</span></div>)}
           </div>
 
-          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"13px"}}>
+          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}>
             <div style={{display:"flex",justifyContent:"space-between"}}><span>Locked:</span><b>{f(sel.amount)}</b></div>
             <div style={{display:"flex",justifyContent:"space-between"}}><span>Paid:</span><b style={{color:T.ok}}>{f(totalPaid(sel))}</b></div>
             <div style={{display:"flex",justifyContent:"space-between",borderTop:`1px solid ${T.border}`,marginTop:"4px",paddingTop:"4px"}}><b>Remaining:</b><b style={{color:remaining(sel)>0?T.err:T.ok}}>{f(remaining(sel))}</b></div>
@@ -5140,7 +5140,7 @@ return (
           <Field label="Type"><Sel value={payF.type} onChange={e=>setPayF({...payF,type:e.target.value})} options={[{v:"advance",l:"Advance"},{v:"partial",l:"Part Payment"},{v:"final",l:"Final Settlement"}]}/></Field>
           <Field label="Amount *"><Inp value={payF.amount} onChange={e=>setPayF({...payF,amount:e.target.value})} type="number" prefix="₹" placeholder={String(remaining(sel))}/></Field>
           <Field label="Note"><Inp value={payF.note} onChange={e=>setPayF({...payF,note:e.target.value})} placeholder="Advance on lock / Post content live"/></Field>
-          {+payF.amount>remaining(sel)&&remaining(sel)>0&&<div style={{padding:"5px 8px",background:T.errBg,borderRadius:"4px",fontSize:"11px",color:T.err,marginBottom:"6px"}}>⚠ Exceeds remaining balance!</div>}
+          {+payF.amount>remaining(sel)&&remaining(sel)>0&&<div style={{padding:"5px 8px",background:T.errBg,borderRadius:"2px",fontSize:"11px",color:T.err,marginBottom:"6px"}}>⚠ Exceeds remaining balance!</div>}
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"8px"}}><Btn v="outline" onClick={()=>setModal("detail")}>Back</Btn><Btn v="ok" onClick={recordPayment} disabled={!payF.amount}>Record Payment</Btn></div>
         </>}
       </Modal>
@@ -5148,12 +5148,12 @@ return (
       {/* INVOICE */}
       <Modal open={modal==="invoice"} onClose={()=>setModal("detail")} title={`Submit Invoice — ${sel?.inf}`} w={420}>
         {sel&&<>
-          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
             <div>🔒 <b>Approved amount:</b> <span style={{fontSize:"20px",fontWeight:800,color:T.gold}}>{f(sel.amount)}</span></div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>Enter the exact amount shown on the influencer's invoice. The system will compare it to the locked amount.</div>
           </div>
           <Field label="Invoice Amount *"><Inp value={invF} onChange={e=>setInvF(e.target.value)} type="number" prefix="₹" placeholder={String(sel.amount)}/></Field>
-          {invF&&+invF!==sel.amount&&<div style={{padding:"6px 8px",background:T.errBg,borderRadius:"4px",fontSize:"11px",color:T.err,marginTop:"4px"}}>⚠ MISMATCH: Invoice {f(invF)} ≠ Approved {f(sel.amount)}. This will be flagged as a dispute.</div>}
+          {invF&&+invF!==sel.amount&&<div style={{padding:"6px 8px",background:T.errBg,borderRadius:"2px",fontSize:"11px",color:T.err,marginTop:"4px"}}>⚠ MISMATCH: Invoice {f(invF)} ≠ Approved {f(sel.amount)}. This will be flagged as a dispute.</div>}
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}><Btn v="outline" onClick={()=>{setModal("detail");setInvF("")}}>Back</Btn><Btn v="gold" onClick={()=>submitInvoice(sel)} disabled={!invF}>Submit Invoice</Btn></div>
         </>}
       </Modal>
@@ -5172,7 +5172,7 @@ return (
             {v:"viewer",l:"👁 Viewer — Read-only access to dashboards"},
           ]}/>
         </Field>
-        <div style={{marginTop:"8px",padding:"8px 10px",background:T.infoBg,borderRadius:"5px",fontSize:"11px",color:T.info}}>
+        <div style={{marginTop:"8px",padding:"8px 10px",background:T.infoBg,borderRadius:"2px",fontSize:"11px",color:T.info}}>
           {userF.role==="negotiator"&&"Negotiators can create deals with deliverables, send confirmation emails, mark content as live, and submit invoices. They cannot approve deals or process payments."}
           {userF.role==="approver"&&"Managers can approve/reject deals, create campaigns with budgets, record advance payments, and see the full bird's-eye view of all operations."}
           {userF.role==="finance"&&"Finance can process all payment types (advance, partial, final), resolve invoice disputes, view complete audit trails, and override amounts with logged reasons."}
@@ -5201,7 +5201,7 @@ return (
       {/* RENEGOTIATE */}
       <Modal open={modal==="renegotiate"&&!!renegF} onClose={()=>{setModal(null);setRenegF(null)}} title={`Renegotiate — ${sel?.inf}`} w={540}>
         {renegF&&sel&&<>
-          <div style={{padding:"10px 12px",background:T.warnBg,borderRadius:"6px",marginBottom:"14px",fontSize:"13px",color:T.warn}}>
+          <div style={{padding:"10px 12px",background:T.warnBg,borderRadius:"2px",marginBottom:"14px",fontSize:"13px",color:T.warn}}>
             <b>Current terms:</b> {f(sel.amount)} · {sel.dels.length} deliverables · by {sel.by}
           </div>
 
@@ -5213,7 +5213,7 @@ return (
           <div style={{marginBottom:"14px"}}>
             <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px"}}>Select Deliverables to Keep</div>
             {renegF.dels.map((dl,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",gap:"8px",padding:"7px 10px",background:dl.keep?T.surface:T.surfaceAlt,border:`1px solid ${dl.keep?T.border:T.border}`,borderRadius:"6px",marginBottom:"4px",opacity:dl.keep?1:.5}}>
+              <div key={i} style={{display:"flex",alignItems:"center",gap:"8px",padding:"7px 10px",background:dl.keep?T.surface:T.surfaceAlt,border:`1px solid ${dl.keep?T.border:T.border}`,borderRadius:"2px",marginBottom:"4px",opacity:dl.keep?1:.5}}>
                 <input type="checkbox" checked={dl.keep} onChange={()=>{
                   const ds=[...renegF.dels]; ds[i]={...ds[i],keep:!ds[i].keep}; setRenegF({...renegF,dels:ds});
                 }} style={{accentColor:T.gold,width:"16px",height:"16px"}}/>
@@ -5256,12 +5256,12 @@ return (
       {/* ═══════════════ NEGOTIATOR RESUBMIT AFTER RENEGOTIATION ═══════════════ */}
       <Modal open={modal==="resubmitReneg"&&!!resubmitF} onClose={()=>{setModal(null);setResubmitF(null)}} title={`Review & Resubmit — ${sel?.inf}`} w={560}>
         {resubmitF&&sel&&<>
-          {sel.renegotiationNote&&<div style={{padding:"12px 14px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"6px",marginBottom:"14px"}}>
+          {sel.renegotiationNote&&<div style={{padding:"12px 14px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"2px",marginBottom:"14px"}}>
             <div style={{fontSize:"10px",fontWeight:800,color:T.warn,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px"}}>📝 Manager's Note</div>
             <div style={{fontSize:"13px",color:T.text,lineHeight:1.5}}>{sel.renegotiationNote}</div>
           </div>}
 
-          <div style={{padding:"10px 12px",background:T.infoBg,borderRadius:"6px",marginBottom:"14px",fontSize:"12px",color:T.info,lineHeight:1.5}}>
+          <div style={{padding:"10px 12px",background:T.infoBg,borderRadius:"2px",marginBottom:"14px",fontSize:"12px",color:T.info,lineHeight:1.5}}>
             💡 Adjust the terms (if needed) based on the manager's feedback and add a response. Resubmitting sends this deal back to the manager for re-approval.
           </div>
 
@@ -5273,7 +5273,7 @@ return (
           <div style={{marginBottom:"14px"}}>
             <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px"}}>Deliverables</div>
             {resubmitF.dels.map((dl,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",gap:"8px",padding:"7px 10px",background:dl.keep?T.surface:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"6px",marginBottom:"4px",opacity:dl.keep?1:.5}}>
+              <div key={i} style={{display:"flex",alignItems:"center",gap:"8px",padding:"7px 10px",background:dl.keep?T.surface:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"2px",marginBottom:"4px",opacity:dl.keep?1:.5}}>
                 <input type="checkbox" checked={dl.keep} onChange={()=>{
                   const ds=[...resubmitF.dels]; ds[i]={...ds[i],keep:!ds[i].keep}; setResubmitF({...resubmitF,dels:ds});
                 }} style={{accentColor:T.gold,width:"16px",height:"16px"}}/>
@@ -5325,7 +5325,7 @@ return (
               <div style={{display:"flex",gap:"5px",alignItems:"center"}}><Badge s={sel.status}/>{camp&&<span style={{fontSize:"11px",color:T.gold,fontWeight:700}}>🎯 {camp.name}</span>}</div>
               <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
                 {(()=>{const inf=influencers.find(x=>x.name===sel.inf); return inf?<Btn v="ghost" sm onClick={()=>{setModal(null);setSel(null);setInfProfile(inf)}}>⭐ View Profile</Btn>:null;})()}
-                <span style={{fontSize:"11px",fontWeight:700,color:T.brand,background:T.goldSoft,padding:"2px 8px",borderRadius:"4px",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>{sel.collabId||"—"}</span>
+                <span style={{fontSize:"11px",fontWeight:700,color:T.brand,background:T.goldSoft,padding:"2px 8px",borderRadius:"2px",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>{sel.collabId||"—"}</span>
                 <span style={{fontSize:"10px",color:T.sub}}>{sel.by} · {sel.at}</span>
               </div>
             </div>
@@ -5334,12 +5334,12 @@ return (
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"12px"}}>
               {[["Platform",`${sel.platform} · ${sel.followers}`],["Product",sel.products?sel.products.map(p=>p.name).join(", "):sel.product],["Usage",sel.usage],["Deadline",sel.deadline],["Profile",sel.profile],["Phone",sel.phone||"—"],["Email",sel.email||"Not provided"]].map(([l,v])=><div key={l}><div style={{fontSize:"10px",fontWeight:800,color:T.sub,textTransform:"uppercase"}}>{l}</div><div style={{fontSize:"13px",marginTop:"1px"}}>{v}</div></div>)}
             </div>
-            {sel.paymentTerms&&<div style={{padding:"8px 10px",background:T.infoBg,borderRadius:"5px",marginBottom:"12px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>💳 Payment Terms:</span> {sel.paymentTerms}</div>}
-            {sel.address&&<div style={{padding:"8px 10px",background:T.infoBg,borderRadius:"5px",marginBottom:"12px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>📍 Address:</span> {sel.address}</div>}
-            {sel.status==="renegotiate"&&sel.renegotiationNote&&<div style={{padding:"10px 12px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"6px",marginBottom:"12px",fontSize:"13px"}}><div style={{fontSize:"10px",fontWeight:800,color:T.warn,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"3px"}}>📝 Manager's Renegotiation Note</div><div style={{color:T.text,lineHeight:1.5}}>{sel.renegotiationNote}</div></div>}
+            {sel.paymentTerms&&<div style={{padding:"8px 10px",background:T.infoBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>💳 Payment Terms:</span> {sel.paymentTerms}</div>}
+            {sel.address&&<div style={{padding:"8px 10px",background:T.infoBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>📍 Address:</span> {sel.address}</div>}
+            {sel.status==="renegotiate"&&sel.renegotiationNote&&<div style={{padding:"10px 12px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}><div style={{fontSize:"10px",fontWeight:800,color:T.warn,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"3px"}}>📝 Manager's Renegotiation Note</div><div style={{color:T.text,lineHeight:1.5}}>{sel.renegotiationNote}</div></div>}
 
             {/* Amount box */}
-            <div style={{background:T.goldSoft,border:`1px dashed ${T.goldMid}`,borderRadius:"7px",padding:"12px",marginBottom:"12px"}}>
+            <div style={{background:T.goldSoft,border:`1px dashed ${T.goldMid}`,borderRadius:"2px",padding:"12px",marginBottom:"12px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
                 <div>
                   <div style={{fontSize:"10px",fontWeight:800,color:T.sub,textTransform:"uppercase"}}>{["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","partial_paid","paid"].includes(sel.status)?"🔒 Locked Amount":"Proposed Amount"}</div>
@@ -5351,12 +5351,12 @@ return (
                 </div>
               </div>
               {paid>0&&<div style={{height:"4px",borderRadius:"3px",background:T.border,marginTop:"8px"}}><div style={{height:"100%",width:`${Math.min(paid/sel.amount*100,100)}%`,background:T.ok,borderRadius:"3px"}}/></div>}
-              {sel.inv&&!sel.inv.match&&<div style={{marginTop:"8px",padding:"6px 8px",background:T.errBg,borderRadius:"5px",fontSize:"11px",color:T.err}}>⚠ Invoice: {f(sel.inv.amount)} vs Locked: {f(sel.amount)} — Difference: {f(Math.abs(sel.inv.amount-sel.amount))}</div>}
+              {sel.inv&&!sel.inv.match&&<div style={{marginTop:"8px",padding:"6px 8px",background:T.errBg,borderRadius:"2px",fontSize:"11px",color:T.err}}>⚠ Invoice: {f(sel.inv.amount)} vs Locked: {f(sel.amount)} — Difference: {f(Math.abs(sel.inv.amount-sel.amount))}</div>}
             </div>
 
             {/* Payments */}
             {sel.pays.length>0&&<Section title="Payment History" icon="💰">
-              {sel.pays.map((p,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 9px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"5px",marginBottom:"3px",fontSize:"13px"}}>
+              {sel.pays.map((p,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 9px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",marginBottom:"3px",fontSize:"13px"}}>
                 <div><span style={{fontWeight:700,textTransform:"capitalize"}}>{p.type}</span> <span style={{color:T.sub}}>· {p.note}</span></div>
                 <div><b style={{color:T.ok}}>{f(p.amount)}</b> <span style={{color:T.sub,fontSize:"11px"}}>· {p.date}</span></div>
               </div>)}
@@ -5393,7 +5393,7 @@ return (
                 const delFiles = driveFiles.deliverables?.[dl.id] || [];
                 const latestFile = delFiles[0]; // already sorted version desc
                 const activeUploads = Object.entries(driveUploading).filter(([k])=>k.startsWith(`${sel.id}:${dl.id}:`));
-                return <div key={i} style={{background:T.surface,border:`1px solid ${dl.st==="revision_requested"?T.err+"33":T.border}`,borderRadius:"6px",padding:"12px",marginBottom:"8px"}}>
+                return <div key={i} style={{background:T.surface,border:`1px solid ${dl.st==="revision_requested"?T.err+"33":T.border}`,borderRadius:"2px",padding:"12px",marginBottom:"8px"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:canSubmit||canReview||canMarkLive?"10px":"0"}}>
                     <div style={{flex:1}}>
                       <span style={{fontSize:"14px",fontWeight:700}}>{dl.type}</span>
@@ -5404,7 +5404,7 @@ return (
                   </div>
 
                   {/* Revision feedback banner */}
-                  {dl.st==="revision_requested"&&dl.feedback&&<div style={{background:T.errBg,border:`1px solid ${T.err}22`,borderRadius:"4px",padding:"10px 12px",marginBottom:"10px",fontSize:"13px"}}>
+                  {dl.st==="revision_requested"&&dl.feedback&&<div style={{background:T.errBg,border:`1px solid ${T.err}22`,borderRadius:"2px",padding:"10px 12px",marginBottom:"10px",fontSize:"13px"}}>
                     <div style={{fontWeight:700,color:T.err,fontSize:"11px",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Bodoni Moda,serif"}}>Manager Feedback</div>
                     <div style={{color:T.text}}>{dl.feedback}</div>
                   </div>}
@@ -5430,10 +5430,10 @@ return (
                   </div>}
 
                   {/* Files & Versions — shows all uploaded versions for this deliverable */}
-                  {(delFiles.length>0||activeUploads.length>0)&&<div style={{background:T.surfaceAlt,borderRadius:"4px",padding:"10px 12px",marginBottom:"8px"}}>
+                  {(delFiles.length>0||activeUploads.length>0)&&<div style={{background:T.surfaceAlt,borderRadius:"2px",padding:"10px 12px",marginBottom:"8px"}}>
                     <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>Uploaded Files ({delFiles.length} version{delFiles.length===1?"":"s"})</div>
                     {delFiles.map(ff=><div key={ff.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"12px",borderBottom:`1px dashed ${T.border}`}}>
-                      <span style={{background:T.info+"22",color:T.info,fontSize:"10px",fontWeight:800,padding:"2px 6px",borderRadius:"4px"}}>v{ff.version}</span>
+                      <span style={{background:T.info+"22",color:T.info,fontSize:"10px",fontWeight:800,padding:"2px 6px",borderRadius:"2px"}}>v{ff.version}</span>
                       <span style={{flex:1,fontFamily:"ui-monospace,monospace",color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ff.file_name}</span>
                       <span style={{color:T.faint,fontSize:"10px"}}>{ff.size_bytes?(ff.size_bytes/1048576).toFixed(1)+" MB":""}</span>
                       {ff.web_view_link&&<a href={ff.web_view_link} target="_blank" rel="noopener noreferrer" style={{color:T.info,fontSize:"11px",fontWeight:700,textDecoration:"none"}}>Open ↗</a>}
@@ -5445,7 +5445,7 @@ return (
                   </div>}
 
                   {/* Negotiator: Submit content for review */}
-                  {canSubmit&&<div style={{background:T.surfaceAlt,borderRadius:"4px",padding:"10px 12px"}}>
+                  {canSubmit&&<div style={{background:T.surfaceAlt,borderRadius:"2px",padding:"10px 12px"}}>
                     <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>{dl.st==="revision_requested"?"Resubmit Revised Content":"Submit Content for Review"}</div>
                     <div style={{display:"flex",gap:"6px",alignItems:"center",marginBottom:"6px"}}>
                       <div style={{flex:1}}><Inp value={url} onChange={e=>setDeliverableLinkF({...deliverableLinkF,[dl.id]:e.target.value})} placeholder="Content URL (Instagram, Drive link, etc.) *"/></div>
@@ -5464,10 +5464,10 @@ return (
                   </div>}
 
                   {/* Manager: Review & approve or request revision */}
-                  {canReview&&<div style={{background:T.purpleBg,borderRadius:"4px",padding:"10px 12px"}}>
+                  {canReview&&<div style={{background:T.purpleBg,borderRadius:"2px",padding:"10px 12px"}}>
                     <div style={{fontSize:"11px",fontWeight:700,color:T.purple,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>Review Content</div>
                     {dl.link&&<div style={{fontSize:"12px",color:T.info,marginBottom:"6px"}}>🔗 <a href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info}}>{dl.link}</a></div>}
-                    {latestFile&&<div style={{fontSize:"12px",marginBottom:"8px",padding:"6px 8px",background:T.surface,borderRadius:"4px"}}>📁 Latest upload: <b>{latestFile.file_name}</b>{latestFile.web_view_link&&<a href={latestFile.web_view_link} target="_blank" rel="noopener noreferrer" style={{color:T.info,marginLeft:"8px",fontWeight:700}}>Download ↗</a>}</div>}
+                    {latestFile&&<div style={{fontSize:"12px",marginBottom:"8px",padding:"6px 8px",background:T.surface,borderRadius:"2px"}}>📁 Latest upload: <b>{latestFile.file_name}</b>{latestFile.web_view_link&&<a href={latestFile.web_view_link} target="_blank" rel="noopener noreferrer" style={{color:T.info,marginLeft:"8px",fontWeight:700}}>Download ↗</a>}</div>}
                     <div style={{display:"flex",gap:"6px",marginBottom:"8px"}}>
                       <Btn v="ok" sm onClick={()=>approveContent(sel,i)}>✅ Approve Content</Btn>
                       <Btn v="danger" sm onClick={()=>{const fb=revisionFeedback[dl.id];if(!fb){notify("Enter feedback before requesting revision","err");return;}requestRevision(sel,i,fb)}}>↩ Request Revision</Btn>
@@ -5476,7 +5476,7 @@ return (
                   </div>}
 
                   {/* Negotiator: Mark approved content as live */}
-                  {canMarkLive&&<div style={{background:T.okBg,borderRadius:"4px",padding:"10px 12px"}}>
+                  {canMarkLive&&<div style={{background:T.okBg,borderRadius:"2px",padding:"10px 12px"}}>
                     <div style={{fontSize:"11px",fontWeight:700,color:T.ok,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>Content Approved — Ready to Go Live</div>
                     <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
                       <div style={{flex:1}}><Inp value={url} onChange={e=>setDeliverableLinkF({...deliverableLinkF,[dl.id]:e.target.value})} placeholder="Final live URL (if different)"/></div>
@@ -5494,9 +5494,9 @@ return (
             {/* RAW Clips — optional raw footage from influencer, organized in Drive RAW/ subfolder */}
             {(role==="negotiator"||role==="admin"||role==="approver")&&sel.ship?.st==="delivered"&&<Section title={`Raw Clips (${driveFiles.raw.length})`} icon="🎞">
               <div style={{fontSize:"12px",color:T.sub,marginBottom:"8px",lineHeight:1.5}}>Optional raw footage the influencer shared. Saved to the <code style={{background:T.surfaceAlt,padding:"1px 5px",borderRadius:"3px"}}>RAW/</code> subfolder in Drive — separate from the approved deliverables.</div>
-              {driveFiles.raw.length>0&&<div style={{background:T.surfaceAlt,borderRadius:"4px",padding:"8px 12px",marginBottom:"8px"}}>
+              {driveFiles.raw.length>0&&<div style={{background:T.surfaceAlt,borderRadius:"2px",padding:"8px 12px",marginBottom:"8px"}}>
                 {driveFiles.raw.map(ff=><div key={ff.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"5px 0",fontSize:"12px",borderBottom:`1px dashed ${T.border}`}}>
-                  <span style={{background:T.gold+"22",color:T.gold,fontSize:"10px",fontWeight:800,padding:"2px 6px",borderRadius:"4px"}}>RAW</span>
+                  <span style={{background:T.gold+"22",color:T.gold,fontSize:"10px",fontWeight:800,padding:"2px 6px",borderRadius:"2px"}}>RAW</span>
                   <span style={{flex:1,fontFamily:"ui-monospace,monospace",color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ff.file_name}</span>
                   <span style={{color:T.faint,fontSize:"10px"}}>{ff.size_bytes?(ff.size_bytes/1048576).toFixed(1)+" MB":""}</span>
                   {ff.web_view_link&&<a href={ff.web_view_link} target="_blank" rel="noopener noreferrer" style={{color:T.info,fontSize:"11px",fontWeight:700}}>Open ↗</a>}
@@ -5511,14 +5511,14 @@ return (
                   const files = Array.from(e.target.files||[]); e.target.value='';
                   for(const file of files) { await uploadDriveFile({deal:sel, deliverable:null, isRaw:true, file}); }
                 }}/>
-                <span style={{padding:"6px 12px",background:T.gold,color:"#1a1a22",borderRadius:"5px",fontSize:"12px",fontWeight:700}}>⬆ Upload Raw Clip(s)</span>
+                <span style={{padding:"6px 12px",background:T.gold,color:"#1a1a22",borderRadius:"2px",fontSize:"12px",fontWeight:700}}>⬆ Upload Raw Clip(s)</span>
               </label>}
             </Section>}
 
             {/* Shipment & Logistics History */}
             {(sel.ship||(sel.shipHistory||[]).length>0)&&<Section title="Shipment & Logistics" icon="📦">
               {/* Original shipment */}
-              {sel.ship&&<div style={{padding:"8px 10px",background:T.purpleBg,borderRadius:"5px",fontSize:"13px",marginBottom:"8px"}}>
+              {sel.ship&&<div style={{padding:"8px 10px",background:T.purpleBg,borderRadius:"2px",fontSize:"13px",marginBottom:"8px"}}>
                 <div style={{fontWeight:700,fontSize:"11px",color:T.purple,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Bodoni Moda,serif"}}>Original Shipment</div>
                 <div><b>{sel.ship.carrier}:</b> <span style={{color:T.info,fontWeight:700}}>{sel.ship.track}</span></div>
                 <div style={{color:T.sub,marginTop:"1px"}}>Dispatched: {sel.ship.dispAt} by {sel.ship.dispBy}</div>
@@ -5573,16 +5573,16 @@ return (
 
             {/* Email preview */}
             {/* Acknowledgement status banner */}
-            {sel.status==="email_sent"&&!sel.ackAt&&<div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"7px",padding:"10px 14px",marginBottom:"10px",fontSize:"13px",color:"#92400e"}}>
+            {sel.status==="email_sent"&&!sel.ackAt&&<div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"2px",padding:"10px 14px",marginBottom:"10px",fontSize:"13px",color:"#92400e"}}>
               <b>⏳ Awaiting Influencer Acknowledgement</b> — The confirmation email has been sent. Dispatch will be unlocked once the influencer clicks "I Agree to the Terms" in their email.
             </div>}
-            {(sel.status==="acknowledged"||(sel.ackAt&&sel.status!=="email_sent"))&&<div style={{background:"#ecfdf5",border:"1px solid #10b981",borderRadius:"7px",padding:"10px 14px",marginBottom:"10px",fontSize:"13px",color:"#065f46"}}>
+            {(sel.status==="acknowledged"||(sel.ackAt&&sel.status!=="email_sent"))&&<div style={{background:"#ecfdf5",border:"1px solid #10b981",borderRadius:"2px",padding:"10px 14px",marginBottom:"10px",fontSize:"13px",color:"#065f46"}}>
               <b>🤝 Influencer Acknowledged</b> — {sel.inf} agreed to the collaboration terms on {sel.ackAt?new Date(sel.ackAt).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}):"—"}.{sel.status==="acknowledged"?" Logistics can now dispatch the products.":""}
             </div>}
 
             {["email_sent","acknowledged","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","partial_paid","paid"].includes(sel.status)&&
             <Section title="Confirmation Email (System-Generated)" icon="✉">
-              <div style={{background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"12px",fontSize:"13px",lineHeight:1.7,color:T.text}}>
+              <div style={{background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"12px",fontSize:"13px",lineHeight:1.7,color:T.text}}>
                 Dear {sel.inf},<br/><br/>
                 Thank you for partnering with <b>Invogue</b>! Confirmed terms:<br/><br/>
                 <b>Product:</b> {sel.products?sel.products.map(p=>p.name).join(", "):sel.product}<br/>
@@ -5626,15 +5626,15 @@ return (
               {(role==="negotiator"||role==="admin")&&["email_sent","acknowledged","shipped","delivered_prod","partial_live","live","invoice_ok","disputed"].includes(sel.status)&&<Btn v="ghost" sm onClick={()=>confirmAndResendEmail(sel)}>🔁 Resend Confirmation Email</Btn>}
               {(role==="negotiator"||role==="admin")&&["pending","renegotiate","approved","manager_approved","email_sent","acknowledged","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
               {(role==="logistics"||role==="admin")&&sel.status==="acknowledged"&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>}
-              {(role==="logistics"||role==="admin")&&sel.status==="email_sent"&&!sel.ship&&<div style={{padding:"8px 12px",background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"6px",fontSize:"12px",color:"#92400e"}}>⏳ Awaiting influencer acknowledgement before dispatch</div>}
-              {(role==="negotiator"||role==="admin")&&["partial_live","live"].includes(sel.status)&&!isPaymentEligible(sel)&&!sel.paymentDetailsAt&&<div style={{fontSize:"12px",color:T.warn,fontWeight:600,padding:"6px 10px",background:T.warnBg,borderRadius:"4px"}}>⏳ Payment opens once all required (non-Story) content is live. Stories are optional.</div>}
-              {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&isPaymentEligible(sel)&&!sel.paymentDetailsAt&&<label style={{display:"inline-flex",alignItems:"center",gap:"6px",fontSize:"12px",color:T.sub,cursor:"pointer",padding:"6px 10px",background:sel.agencyManaged?T.goldSoft:"transparent",border:`1px solid ${sel.agencyManaged?T.gold:T.border}`,borderRadius:"6px"}}><input type="checkbox" checked={!!sel.agencyManaged} onChange={()=>toggleAgencyManaged(sel)} style={{cursor:"pointer"}}/>🏢 Agency-managed (agency raises GST invoice)</label>}
+              {(role==="logistics"||role==="admin")&&sel.status==="email_sent"&&!sel.ship&&<div style={{padding:"8px 12px",background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"2px",fontSize:"12px",color:"#92400e"}}>⏳ Awaiting influencer acknowledgement before dispatch</div>}
+              {(role==="negotiator"||role==="admin")&&["partial_live","live"].includes(sel.status)&&!isPaymentEligible(sel)&&!sel.paymentDetailsAt&&<div style={{fontSize:"12px",color:T.warn,fontWeight:600,padding:"6px 10px",background:T.warnBg,borderRadius:"2px"}}>⏳ Payment opens once all required (non-Story) content is live. Stories are optional.</div>}
+              {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&isPaymentEligible(sel)&&!sel.paymentDetailsAt&&<label style={{display:"inline-flex",alignItems:"center",gap:"6px",fontSize:"12px",color:T.sub,cursor:"pointer",padding:"6px 10px",background:sel.agencyManaged?T.goldSoft:"transparent",border:`1px solid ${sel.agencyManaged?T.gold:T.border}`,borderRadius:"2px"}}><input type="checkbox" checked={!!sel.agencyManaged} onChange={()=>toggleAgencyManaged(sel)} style={{cursor:"pointer"}}/>🏢 Agency-managed (agency raises GST invoice)</label>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&isPaymentEligible(sel)&&!sel.paymentDetailsAt&&!sel.agencyManaged&&<Btn v="primary" onClick={()=>setModal("collectPayment")}>{sel.paymentFormSent?"✅ Form Sent — Resend":"📩 Send Payment Details Form"}</Btn>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&isPaymentEligible(sel)&&!sel.paymentDetailsAt&&sel.agencyManaged&&<Btn v="gold" onClick={()=>openAgencyModal(sel)}>🏢 Attach Agency Invoice &amp; Details</Btn>}
-              {sel.paymentDetailsAt&&sel.status!=="paid"&&(role==="negotiator"||role==="admin"||role==="approver")&&<div style={{fontSize:"12px",color:T.ok,fontWeight:700,padding:"6px 10px",background:T.okBg,borderRadius:"4px"}}>{sel.agencyManaged?`🏢 Agency invoice attached (${sel.agencyName||"agency"}) — ready for Finance`:"🧾 Payment details received — ready for Finance to pay"}</div>}
-              {sel.status==="manager_approved"&&<div style={{fontSize:"12px",color:T.info,fontWeight:700,padding:"6px 10px",background:T.infoBg,borderRadius:"4px"}}>✅ Manager approved — awaiting admin final approval (₹50K+ deal)</div>}
+              {sel.paymentDetailsAt&&sel.status!=="paid"&&(role==="negotiator"||role==="admin"||role==="approver")&&<div style={{fontSize:"12px",color:T.ok,fontWeight:700,padding:"6px 10px",background:T.okBg,borderRadius:"2px"}}>{sel.agencyManaged?`🏢 Agency invoice attached (${sel.agencyName||"agency"}) — ready for Finance`:"🧾 Payment details received — ready for Finance to pay"}</div>}
+              {sel.status==="manager_approved"&&<div style={{fontSize:"12px",color:T.info,fontWeight:700,padding:"6px 10px",background:T.infoBg,borderRadius:"2px"}}>✅ Manager approved — awaiting admin final approval (₹50K+ deal)</div>}
               {sel.status==="drop_requested"&&(role==="approver"||role==="admin")&&<div style={{display:"flex",gap:"6px"}}><Btn v="ok" sm onClick={()=>approveDropRequest(sel)}>✓ Approve Drop</Btn><Btn v="outline" sm onClick={()=>rejectDropRequest(sel)}>✕ Reject Drop</Btn></div>}
-              {sel.status==="drop_requested"&&role==="negotiator"&&<div style={{fontSize:"12px",color:T.warn,fontWeight:700,padding:"6px 10px",background:T.warnBg,borderRadius:"4px"}}>⏳ Drop request pending manager approval</div>}
+              {sel.status==="drop_requested"&&role==="negotiator"&&<div style={{fontSize:"12px",color:T.warn,fontWeight:700,padding:"6px 10px",background:T.warnBg,borderRadius:"2px"}}>⏳ Drop request pending manager approval</div>}
               {(role==="finance"||role==="admin")&&!["pending","renegotiate","rejected","dropped"].includes(sel.status)&&rem>0&&<Btn v="ok" onClick={()=>{setPayF({type:paid===0?"advance":"partial",amount:"",note:""});setModal("payment")}}>💰 Record Payment</Btn>}
               {(role==="finance"||role==="admin")&&sel.status==="disputed"&&<>
                 <Btn v="ok" sm onClick={()=>{setPayF({type:"final",amount:String(sel.amount-paid),note:"Paying approved amount per dispute resolution"});setModal("payment")}}>Pay Approved Amount</Btn>
@@ -5663,11 +5663,11 @@ return (
       {/* MARK DELIVERED MODAL */}
       <Modal open={modal==="markDelivered"} onClose={()=>setModal(null)} title={`Mark Delivered — ${sel?.inf}`} w={420}>
         {sel&&<>
-          <div style={{padding:"10px",background:T.purpleBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px"}}>
+          <div style={{padding:"10px",background:T.purpleBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}>
             <div><b>Product:</b> {sel.product}</div>
             <div><b>Carrier:</b> {sel.ship?.carrier}: {sel.ship?.track}</div>
           </div>
-          <Field label="Delivery Date *"><input value={deliveryF.date} onChange={e=>setDeliveryF({...deliveryF,date:e.target.value})} type="date" min={toDateOnly(sel.ship?.dispAt)} max={todayLocal()} style={{width:"100%",padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"14px",fontFamily:"Archivo,sans-serif",color:T.text,outline:"none"}}/></Field>
+          <Field label="Delivery Date *"><input value={deliveryF.date} onChange={e=>setDeliveryF({...deliveryF,date:e.target.value})} type="date" min={toDateOnly(sel.ship?.dispAt)} max={todayLocal()} style={{width:"100%",padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:"2px",fontSize:"14px",fontFamily:"Archivo,sans-serif",color:T.text,outline:"none"}}/></Field>
           <Field label="Note (optional)"><Inp value={deliveryF.note} onChange={e=>setDeliveryF({...deliveryF,note:e.target.value})} placeholder="Any delivery notes..."/></Field>
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}>
             <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
@@ -5682,7 +5682,7 @@ return (
           const reship = (sel.shipHistory||[])[reshipDelivF.histIdx];
           const reDispDate = toDateOnly(reship?.reDispatchedAt);
           return <>
-            <div style={{padding:"10px",background:T.purpleBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px"}}>
+            <div style={{padding:"10px",background:T.purpleBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}>
               <div style={{fontWeight:700,color:T.purple,fontSize:"11px",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Bodoni Moda,serif"}}>📦 Re-shipment Info</div>
               <div><b>Carrier:</b> {reship?.reCarrier}: {reship?.reTrack}</div>
               {(reship?.products||[]).length>0&&<div><b>Products:</b> {reship.products.map(p=>p.name).join(", ")}</div>}
@@ -5690,7 +5690,7 @@ return (
               <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>Re-dispatched: {reDispDate}</div>
             </div>
             <Field label="Delivery Date *">
-              <input value={reshipDelivF.date} onChange={e=>setReshipDelivF({...reshipDelivF,date:e.target.value})} type="date" min={reDispDate} max={todayLocal()} style={{width:"100%",padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:"4px",fontSize:"14px",fontFamily:"Archivo,sans-serif",color:T.text,outline:"none"}}/>
+              <input value={reshipDelivF.date} onChange={e=>setReshipDelivF({...reshipDelivF,date:e.target.value})} type="date" min={reDispDate} max={todayLocal()} style={{width:"100%",padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:"2px",fontSize:"14px",fontFamily:"Archivo,sans-serif",color:T.text,outline:"none"}}/>
             </Field>
             <Field label="Note (optional)"><Inp value={reshipDelivF.note} onChange={e=>setReshipDelivF({...reshipDelivF,note:e.target.value})} placeholder="Any delivery notes..."/></Field>
             <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}>
@@ -5704,7 +5704,7 @@ return (
       {/* PICKUP REQUEST MODAL — Negotiator requests product pickup */}
       <Modal open={modal==="pickupRequest"} onClose={()=>setModal("detail")} title={`Request Pickup — ${sel?.inf}`} w={460}>
         {sel&&<>
-          <div style={{padding:"10px",background:T.warnBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px"}}>
+          <div style={{padding:"10px",background:T.warnBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}>
             <div style={{fontWeight:700,color:T.warn,marginBottom:"4px"}}>🔄 Request Product Return</div>
             <div>Product will be picked up from the influencer and returned to warehouse.</div>
           </div>
@@ -5712,7 +5712,7 @@ return (
             <Sel value={pickupF.reason} onChange={e=>setPickupF({...pickupF,reason:e.target.value})} options={[{v:"Product Change",l:"Product Change"},{v:"Collab Dropped",l:"Collab Dropped"},{v:"Defective/Wrong Product",l:"Defective / Wrong Product"},{v:"Other",l:"Other"}]}/>
           </Field>
           <Field label="Note for Logistics (optional)"><Textarea value={pickupF.note} onChange={e=>setPickupF({...pickupF,note:e.target.value})} placeholder="Any special instructions for pickup..." rows={2}/></Field>
-          <div style={{padding:"8px 10px",background:T.surfaceAlt,borderRadius:"5px",marginBottom:"10px",fontSize:"12px",color:T.sub}}>
+          <div style={{padding:"8px 10px",background:T.surfaceAlt,borderRadius:"2px",marginBottom:"10px",fontSize:"12px",color:T.sub}}>
             <div>📍 <b>Pickup from:</b> {sel.address||"Address not provided"}</div>
             <div>📱 <b>Phone:</b> {sel.phone||"Not provided"}</div>
           </div>
@@ -5728,12 +5728,12 @@ return (
       {(sel&&modal&&modal.startsWith("arrangePickup-"))&&(()=>{
         const histIdx = parseInt(modal.split("-")[1]);
         return <Modal open={true} onClose={()=>setModal(null)} title={`Arrange Return Pickup — ${sel?.inf}`} w={440}>
-          <div style={{padding:"10px",background:T.warnBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px"}}>
+          <div style={{padding:"10px",background:T.warnBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}>
             <div style={{fontWeight:700,color:T.warn,marginBottom:"4px"}}>🔄 Return Pickup Details</div>
             <div>Reason: <b>{(sel.shipHistory||[])[histIdx]?.reason||"—"}</b></div>
             {(sel.shipHistory||[])[histIdx]?.note&&<div style={{marginTop:"2px",fontStyle:"italic"}}>{(sel.shipHistory||[])[histIdx].note}</div>}
           </div>
-          <div style={{padding:"8px 10px",background:T.surfaceAlt,borderRadius:"5px",marginBottom:"10px",fontSize:"12px"}}>
+          <div style={{padding:"8px 10px",background:T.surfaceAlt,borderRadius:"2px",marginBottom:"10px",fontSize:"12px"}}>
             <div>📍 <b>Pickup from:</b> {sel.address||"—"}</div>
             <div>📱 <b>Phone:</b> {sel.phone||"—"}</div>
           </div>
@@ -5749,7 +5749,7 @@ return (
       {/* REQUEST RE-SHIPMENT MODAL — Negotiator requests new product shipment */}
       <Modal open={modal==="resendEmail"} onClose={()=>setModal("detail")} title={`Resend Confirmation — ${sel?.inf}`} w={460}>
         {sel&&<>
-          <div style={{padding:"10px 12px",background:T.infoBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px",color:T.info}}>
+          <div style={{padding:"10px 12px",background:T.infoBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px",color:T.info}}>
             Resend the collaboration confirmation. You can correct the recipient's email below — the new address is saved to the deal for future emails.
           </div>
           <Field label="Recipient Email"><Inp value={resendF.email} onChange={e=>setResendF({...resendF,email:e.target.value})} placeholder="influencer@email.com"/></Field>
@@ -5762,11 +5762,11 @@ return (
 
       <Modal open={modal==="reshipRequest"} onClose={()=>setModal("detail")} title={`Request New Shipment — ${sel?.inf}`} w={520}>
         {sel&&<>
-          <div style={{padding:"10px",background:T.purpleBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px",color:T.purple}}>
+          <div style={{padding:"10px",background:T.purpleBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px",color:T.purple}}>
             <div style={{fontWeight:700,marginBottom:"4px"}}>📦 New Product Shipment</div>
             <div>Logistics will dispatch the new product to the influencer.</div>
           </div>
-          <div style={{padding:"12px",background:T.surfaceAlt,borderRadius:"7px",marginBottom:"10px"}}>
+          <div style={{padding:"12px",background:T.surfaceAlt,borderRadius:"2px",marginBottom:"10px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
               <span style={{fontSize:"11px",fontWeight:800,color:T.brand,textTransform:"uppercase",letterSpacing:".5px"}}>📦 New Products ({reshipF.products?.length||0})</span>
               <Btn v="outline" sm onClick={()=>setReshipF({...reshipF,products:[...(reshipF.products||[]),{name:"",color:"",size:"",qty:"1"}]})}>+ Add</Btn>
@@ -5801,11 +5801,11 @@ return (
         const histIdx = parseInt(modal.split("-")[1]);
         const h = (sel.shipHistory||[])[histIdx];
         return <Modal open={true} onClose={()=>setModal(null)} title={`Dispatch Re-shipment — ${sel?.inf}`} w={440}>
-          <div style={{padding:"10px",background:T.purpleBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px",color:T.purple}}>
+          <div style={{padding:"10px",background:T.purpleBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px",color:T.purple}}>
             <div style={{fontWeight:700,marginBottom:"4px"}}>📦 Re-shipment Products</div>
             {(h?.products||[]).map((p,i)=><div key={i}><b>{p.name}</b>{p.color?" · "+p.color:""}{p.size?" · "+p.size:""}{p.qty?" · Qty: "+p.qty:""}</div>)}
           </div>
-          <div style={{padding:"8px 10px",background:T.surfaceAlt,borderRadius:"5px",marginBottom:"10px",fontSize:"12px"}}>
+          <div style={{padding:"8px 10px",background:T.surfaceAlt,borderRadius:"2px",marginBottom:"10px",fontSize:"12px"}}>
             <div>📍 <b>Ship to:</b> {h?.newAddress||sel.address||"—"}</div>
             <div>📱 <b>Phone:</b> {h?.phone||sel.phone||"—"}</div>
           </div>
@@ -5823,10 +5823,10 @@ return (
       {/* COLLECT PAYMENT DETAILS MODAL */}
       <Modal open={modal==="agencyInvoice"} onClose={()=>setModal("detail")} title={`Agency Invoice & Details — ${sel?.inf}`} w={540}>
         {sel&&<>
-          <div style={{padding:"10px 12px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+          <div style={{padding:"10px 12px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>Locked Amount: <b style={{fontSize:"18px",color:T.gold}}>{f(sel.amount)}</b></div>
-              <span style={{fontSize:"12px",fontWeight:700,color:T.brand,background:"#fff",padding:"3px 10px",borderRadius:"4px"}}>{sel.collabId||"—"}</span>
+              <span style={{fontSize:"12px",fontWeight:700,color:T.brand,background:"#fff",padding:"3px 10px",borderRadius:"2px"}}>{sel.collabId||"—"}</span>
             </div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"3px"}}>This creator is agency-managed — attach the agency's GST invoice and payout details. Finance pays the agency the locked amount.</div>
           </div>
@@ -5843,12 +5843,12 @@ return (
           </div>
 
           <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",margin:"10px 0 6px",fontFamily:"Bodoni Moda,serif"}}>📄 Agency GST Invoice</div>
-          <div style={{border:`2px dashed ${agencyFile?T.ok:T.border}`,borderRadius:"8px",padding:"14px",textAlign:"center",marginBottom:"8px",background:agencyFile?T.okBg:"transparent",cursor:"pointer"}} onClick={()=>document.getElementById('agencyFileInput')?.click()}>
+          <div style={{border:`2px dashed ${agencyFile?T.ok:T.border}`,borderRadius:"2px",padding:"14px",textAlign:"center",marginBottom:"8px",background:agencyFile?T.okBg:"transparent",cursor:"pointer"}} onClick={()=>document.getElementById('agencyFileInput')?.click()}>
             <input id="agencyFileInput" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style={{display:"none"}} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)setAgencyFile(file);}}/>
             {agencyFile?<div style={{fontSize:"13px",fontWeight:700,color:T.ok}}>📄 {agencyFile.name} <span style={{fontSize:"11px",color:T.sub,fontWeight:400}}>· click to change</span></div>:<div><div style={{fontSize:"22px",marginBottom:"2px"}}>📤</div><div style={{fontSize:"12px",color:T.sub}}>Click to upload the agency's GST invoice (PDF/JPG/PNG)</div></div>}
           </div>
           <Field label="…or paste an invoice link"><Inp value={agencyF.invoiceLink} onChange={e=>setAgencyF({...agencyF,invoiceLink:e.target.value})} placeholder="https://drive.google.com/…"/></Field>
-          {agencyUploading&&<div style={{padding:"8px",background:T.infoBg,borderRadius:"6px",marginBottom:"8px",fontSize:"12px",color:T.info,fontWeight:600}}>⏳ Uploading invoice to Drive…</div>}
+          {agencyUploading&&<div style={{padding:"8px",background:T.infoBg,borderRadius:"2px",marginBottom:"8px",fontSize:"12px",color:T.info,fontWeight:600}}>⏳ Uploading invoice to Drive…</div>}
 
           <div style={{display:"flex",gap:"8px",justifyContent:"flex-end",marginTop:"12px",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>
             <Btn v="outline" onClick={()=>setModal("detail")}>Cancel</Btn>
@@ -5859,23 +5859,23 @@ return (
 
       <Modal open={modal==="collectPayment"} onClose={()=>setModal("detail")} title={`Send Payment Details Form — ${sel?.inf}`} w={520}>
         {sel&&<>
-          <div style={{padding:"12px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+          <div style={{padding:"12px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>Amount: <b style={{fontSize:"20px",color:T.gold}}>{f(sel.amount)}</b></div>
-              <span style={{fontSize:"12px",fontWeight:700,color:T.brand,background:"#fff",padding:"3px 10px",borderRadius:"4px",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>{sel.collabId||"—"}</span>
+              <span style={{fontSize:"12px",fontWeight:700,color:T.brand,background:"#fff",padding:"3px 10px",borderRadius:"2px",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>{sel.collabId||"—"}</span>
             </div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product} · {sel.dels.filter(d=>d.st==="live").length}/{sel.dels.length} live</div>
           </div>
-          <div style={{padding:"10px",background:T.infoBg,borderRadius:"6px",marginBottom:"14px",fontSize:"12px",color:T.info}}>
+          <div style={{padding:"10px",background:T.infoBg,borderRadius:"2px",marginBottom:"14px",fontSize:"12px",color:T.info}}>
             <b>🔒 Secure form:</b> The influencer opens a private, token-protected link (no one else can access their collab) and submits their bank, PAN and UPI details. The details come straight back into the deal — no PDF to chase, no amount to match.
           </div>
 
-          {sel.paymentFormSent&&<div style={{padding:"8px 10px",background:T.okBg,borderRadius:"5px",marginBottom:"10px",fontSize:"12px",color:T.ok}}>
+          {sel.paymentFormSent&&<div style={{padding:"8px 10px",background:T.okBg,borderRadius:"2px",marginBottom:"10px",fontSize:"12px",color:T.ok}}>
             ✅ Form already sent on {sel.paymentFormSentAt?new Date(sel.paymentFormSentAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}
           </div>}
 
           {/* How it works */}
-          <div style={{padding:"10px 12px",background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"6px",marginBottom:"14px",fontSize:"12px"}}>
+          <div style={{padding:"10px 12px",background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"2px",marginBottom:"14px",fontSize:"12px"}}>
             <div style={{fontWeight:700,marginBottom:"6px",fontSize:"10px",color:T.sub,textTransform:"uppercase",letterSpacing:".5px"}}>How it works</div>
             <div style={{display:"flex",gap:"8px",alignItems:"flex-start",marginBottom:"4px"}}><span style={{fontSize:"14px"}}>1️⃣</span><span>You send the secure payment-details link (deliverables &amp; amount are pre-filled, read-only)</span></div>
             <div style={{display:"flex",gap:"8px",alignItems:"flex-start",marginBottom:"4px"}}><span style={{fontSize:"14px"}}>2️⃣</span><span>Influencer fills in bank account, IFSC, UPI &amp; PAN and submits</span></div>
@@ -5883,7 +5883,7 @@ return (
           </div>
 
           {/* Email Preview */}
-          <div style={{padding:"10px 12px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"6px",marginBottom:"14px",fontSize:"11px"}}>
+          <div style={{padding:"10px 12px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",marginBottom:"14px",fontSize:"11px"}}>
             <div style={{fontWeight:700,marginBottom:"4px",fontSize:"10px",color:T.sub,textTransform:"uppercase",letterSpacing:".5px"}}>Email Preview</div>
             <div><b>To:</b> {sel.email||"—"}</div>
             <div><b>Subject:</b> Invogue × {sel.inf} — Submit Your Payment Details ({sel.collabId||""})</div>
@@ -5901,7 +5901,7 @@ return (
       {/* GENERATE INVOICE MODAL */}
       <Modal open={modal==="uploadInvoice"} onClose={()=>setModal("detail")} title={`Upload Invoice & Send to Finance — ${sel?.inf}`} w={520}>
         {sel&&<>
-          <div style={{padding:"12px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+          <div style={{padding:"12px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>🔒 Locked Amount: <b style={{fontSize:"20px",color:T.gold}}>{f(sel.amount)}</b></div>
               <span style={{fontSize:"12px",fontWeight:700,color:T.brand,fontFamily:"Bodoni Moda,serif"}}>{sel.collabId||"—"}</span>
@@ -5909,16 +5909,16 @@ return (
             <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product} · {sel.dels.length} deliverables · {sel.paymentTerms||"Net 15 days"}</div>
           </div>
 
-          <div style={{padding:"10px",background:T.infoBg,borderRadius:"6px",marginBottom:"14px",fontSize:"12px",color:T.info,lineHeight:1.5}}>
+          <div style={{padding:"10px",background:T.infoBg,borderRadius:"2px",marginBottom:"14px",fontSize:"12px",color:T.info,lineHeight:1.5}}>
             <b>One-step submission.</b> Fill in all fields below. On submit, the invoice goes directly to Finance for payment. If the amount matches the locked amount, Finance can pay immediately. If it doesn't match, it will be flagged as a dispute for manager review.
           </div>
 
           <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>📄 Invoice Document</div>
-          <div style={{border:`2px dashed ${invoiceFile?T.ok:T.border}`,borderRadius:"8px",padding:"16px",textAlign:"center",marginBottom:"10px",background:invoiceFile?T.okBg:"transparent",cursor:"pointer",transition:"all .2s"}} onClick={()=>document.getElementById('invoiceFileInput')?.click()}>
+          <div style={{border:`2px dashed ${invoiceFile?T.ok:T.border}`,borderRadius:"2px",padding:"16px",textAlign:"center",marginBottom:"10px",background:invoiceFile?T.okBg:"transparent",cursor:"pointer",transition:"all .2s"}} onClick={()=>document.getElementById('invoiceFileInput')?.click()}>
             <input id="invoiceFileInput" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style={{display:"none"}} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file){setInvoiceFile(file);if(!invoiceF.notes)setInvoiceF(prev=>({...prev,notes:file.name}))}}}/>
             {invoiceFile?<div><div style={{fontSize:"14px",fontWeight:700,color:T.ok}}>📄 {invoiceFile.name}</div><div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>{(invoiceFile.size/1024).toFixed(1)} KB · Click to change</div></div>:<div><div style={{fontSize:"24px",marginBottom:"4px"}}>📤</div><div style={{fontSize:"13px",fontWeight:600,color:T.sub}}>Click to upload invoice</div><div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>PDF, JPG, PNG, DOC accepted</div></div>}
           </div>
-          {invoiceUploading&&<div style={{padding:"8px",background:T.infoBg,borderRadius:"6px",marginBottom:"8px",fontSize:"12px",color:T.info,fontWeight:600}}>⏳ Uploading invoice to Google Drive...</div>}
+          {invoiceUploading&&<div style={{padding:"8px",background:T.infoBg,borderRadius:"2px",marginBottom:"8px",fontSize:"12px",color:T.info,fontWeight:600}}>⏳ Uploading invoice to Google Drive...</div>}
           <Field label="Invoice Number (from the PDF)">
             <Inp value={invoiceF.beneficiary} onChange={e=>setInvoiceF({...invoiceF,beneficiary:e.target.value})} placeholder="e.g. INV-A3F2XK-ABCD (auto-filled if blank)"/>
           </Field>
@@ -5927,8 +5927,8 @@ return (
           <Field label="Invoice Amount *">
             <Inp value={invoiceF.amount} onChange={e=>setInvoiceF({...invoiceF,amount:e.target.value})} type="number" prefix="₹" placeholder={String(sel.amount)}/>
           </Field>
-          {invoiceF.amount&&+invoiceF.amount!==sel.amount&&<div style={{padding:"6px 8px",background:T.errBg,borderRadius:"4px",fontSize:"11px",color:T.err,marginTop:"-4px",marginBottom:"8px"}}>⚠ MISMATCH: Invoice {f(invoiceF.amount)} ≠ Locked {f(sel.amount)}. Will be flagged as dispute for manager review.</div>}
-          {invoiceF.amount&&+invoiceF.amount===sel.amount&&<div style={{padding:"6px 8px",background:T.okBg,borderRadius:"4px",fontSize:"11px",color:T.ok,marginTop:"-4px",marginBottom:"8px"}}>✓ Matches locked amount — Finance can pay immediately.</div>}
+          {invoiceF.amount&&+invoiceF.amount!==sel.amount&&<div style={{padding:"6px 8px",background:T.errBg,borderRadius:"2px",fontSize:"11px",color:T.err,marginTop:"-4px",marginBottom:"8px"}}>⚠ MISMATCH: Invoice {f(invoiceF.amount)} ≠ Locked {f(sel.amount)}. Will be flagged as dispute for manager review.</div>}
+          {invoiceF.amount&&+invoiceF.amount===sel.amount&&<div style={{padding:"6px 8px",background:T.okBg,borderRadius:"2px",fontSize:"11px",color:T.ok,marginTop:"-4px",marginBottom:"8px"}}>✓ Matches locked amount — Finance can pay immediately.</div>}
 
           <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginTop:"10px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>🪪 PAN Details (required for payment)</div>
           <Field label="PAN Number *">
@@ -5947,11 +5947,11 @@ return (
 
       <Modal open={modal==="sendForPayment"} onClose={()=>setModal(null)} title={`Send for Payment — ${sel?.inf}`} w={460}>
         {sel&&<>
-          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
             <div>Amount: <b style={{fontSize:"20px",color:T.gold}}>{f(sel.amount)}</b></div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product} · {sel.dels.length} deliverables</div>
           </div>
-          <div style={{padding:"10px",background:T.warnBg,borderRadius:"6px",marginBottom:"12px",fontSize:"11px",color:T.warn}}>
+          <div style={{padding:"10px",background:T.warnBg,borderRadius:"2px",marginBottom:"12px",fontSize:"11px",color:T.warn}}>
             <b>PAN details are mandatory</b> for payment processing. Please enter the creator's PAN information below.
           </div>
           <Field label="Creator's PAN Number *" required><Inp value={panF.number} onChange={e=>setPanF({...panF,number:e.target.value.toUpperCase()})} placeholder="ABCDE1234F"/></Field>
@@ -5966,7 +5966,7 @@ return (
       {/* REJECT DEAL MODAL */}
       <Modal open={modal==="reject"} onClose={()=>setModal(null)} title={`Reject Deal — ${sel?.inf}`} w={420}>
         {sel&&<>
-          <div style={{padding:"10px",background:T.errBg,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+          <div style={{padding:"10px",background:T.errBg,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
             <div style={{color:T.err,fontWeight:700}}>Amount: {f(sel.amount)}</div>
             <div style={{fontSize:"11px",color:T.err,marginTop:"2px"}}>{sel.product} · {sel.dels.length} deliverables</div>
           </div>
@@ -5983,12 +5983,12 @@ return (
       {/* DROP COLLAB MODAL */}
       <Modal open={modal==="drop"} onClose={()=>setModal(null)} title={`Drop Collab — ${sel?.inf}`} w={420}>
         {sel&&<>
-          <div style={{padding:"10px",background:T.errBg,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+          <div style={{padding:"10px",background:T.errBg,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
             <div style={{color:T.err,fontWeight:700}}>Amount: {f(sel.amount)}</div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>Status: {sel.status}</div>
             <div style={{fontSize:"11px",color:T.err,marginTop:"4px",fontWeight:600}}>⚠ Can only drop if NO payments made (Current paid: {f(totalPaid(sel))})</div>
           </div>
-          {totalPaid(sel)>0&&<div style={{padding:"10px",background:T.errBg,borderRadius:"6px",marginBottom:"12px",fontSize:"13px",color:T.err}}>
+          {totalPaid(sel)>0&&<div style={{padding:"10px",background:T.errBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px",color:T.err}}>
             ❌ Cannot drop: Payment(s) already recorded. Contact manager to handle this collab.
           </div>}
           {totalPaid(sel)===0&&<>
@@ -6006,7 +6006,7 @@ return (
       {/* ═══ FEATURE 2: RATING MODAL ═══ */}
       <Modal open={modal==="rate"} onClose={()=>setModal(null)} title={`Rate Influencer — ${sel?.inf}`} w={480}>
         {sel&&<>
-          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
             <div>Collab: <b>{sel.product}</b></div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>Status: {sel.status} · Amount: {f(sel.amount)}</div>
           </div>
@@ -6015,7 +6015,7 @@ return (
             {["timeliness","quality","communication","professionalism"].map(dim=><div key={dim} style={{marginBottom:"8px"}}>
               <div style={{fontSize:"11px",fontWeight:600,marginBottom:"4px",textTransform:"capitalize"}}>{dim}</div>
               <div style={{display:"flex",gap:"4px"}}>
-                {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setRatingF({...ratingF,stars:{...ratingF.stars,[dim]:n}})} style={{width:"32px",height:"32px",border:"1px solid "+T.border,borderRadius:"4px",cursor:"pointer",background:ratingF.stars[dim]>=n?T.gold:T.surface,color:ratingF.stars[dim]>=n?"#fff":T.sub,fontWeight:700,fontSize:"14px"}}>⭐</button>)}
+                {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setRatingF({...ratingF,stars:{...ratingF.stars,[dim]:n}})} style={{width:"32px",height:"32px",border:"1px solid "+T.border,borderRadius:"2px",cursor:"pointer",background:ratingF.stars[dim]>=n?T.gold:T.surface,color:ratingF.stars[dim]>=n?"#fff":T.sub,fontWeight:700,fontSize:"14px"}}>⭐</button>)}
               </div>
             </div>)}
           </div>
@@ -6032,7 +6032,7 @@ return (
       {/* ═══ FEATURE 2: VIEW INFLUENCER RATING ═══ */}
       <Modal open={modal==="infRating"} onClose={()=>setModal(null)} title={`Influencer Rating — ${sel?.inf}`} w={420}>
         {sel&&<>
-          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px"}}>
+          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px"}}>
             <div style={{fontSize:"12px",fontWeight:700}}>{sel.inf}</div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{sel.platform} · {sel.followers} followers</div>
           </div>
@@ -6044,7 +6044,7 @@ return (
                 <div style={{fontSize:"18px",fontWeight:700,color:T.gold}}>{typeof sel.rating==="object"?((sel.rating.timeliness+sel.rating.quality+sel.rating.communication+sel.rating.professionalism)/4).toFixed(1):sel.rating}/5</div>
               </div>
             </div>
-            <div style={{padding:"10px",background:T.bg,borderRadius:"6px",marginBottom:"12px",fontSize:"11px",lineHeight:1.5}}>
+            <div style={{padding:"10px",background:T.bg,borderRadius:"2px",marginBottom:"12px",fontSize:"11px",lineHeight:1.5}}>
               <div style={{fontWeight:700,marginBottom:"4px"}}>Feedback:</div>
               {sel.feedback||"No feedback provided"}
             </div>
@@ -6055,7 +6055,7 @@ return (
       {/* ═══ FEATURE 6: TAX CALCULATION MODAL ═══ */}
       <Modal open={modal==="taxCalculator"} onClose={()=>setModal(null)} title="Tax Calculator (GST/TDS)" w={460}>
         {sel&&<>
-          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"6px",marginBottom:"12px",fontSize:"12px"}}>
+          <div style={{padding:"10px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
             <div><b>{sel.inf}</b> · {sel.product}</div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>Base Amount: <b>{f(sel.amount)}</b></div>
           </div>
@@ -6065,7 +6065,7 @@ return (
           </div>
           {(() => {
             const tax = calculateTax(sel.amount);
-            return <div style={{padding:"10px",background:T.bg,borderRadius:"6px",marginBottom:"14px",fontSize:"13px"}}>
+            return <div style={{padding:"10px",background:T.bg,borderRadius:"2px",marginBottom:"14px",fontSize:"13px"}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:"4px"}}>
                 <span>Base Amount</span>
                 <span style={{fontWeight:700}}>{f(tax.base)}</span>

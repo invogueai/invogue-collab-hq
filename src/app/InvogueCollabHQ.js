@@ -276,22 +276,23 @@ const ContentPipeline = ({deals:dls, onClickDeal}) => {
   const nonEmpty = CONTENT_STAGES.filter(s=>grouped[s.key].length>0);
   if(nonEmpty.length===0) return null;
   return <div>
-    <div style={{display:"flex",gap:"3px",marginBottom:"12px",flexWrap:"wrap"}}>
-      {CONTENT_STAGES.map(s=>{const ct=grouped[s.key].length;return <div key={s.key} style={{flex:ct>0?"1 1 auto":"0 0 auto",minWidth:ct>0?"90px":"50px",padding:"6px 10px",borderRadius:"6px",background:ct>0?s.bg:"transparent",border:`1px solid ${ct>0?s.c+"33":T.border}`,textAlign:"center",opacity:ct>0?1:.45}}>
-        <div style={{fontSize:"18px",fontWeight:800,color:ct>0?s.c:T.sub}}>{ct}</div>
-        <div style={{fontSize:"9px",fontWeight:700,color:ct>0?s.c:T.sub,textTransform:"uppercase",letterSpacing:".3px",lineHeight:"1.2"}}>{s.label}</div>
+    <div style={{display:"flex",gap:"8px",marginBottom:"18px",flexWrap:"wrap"}}>
+      {CONTENT_STAGES.map(s=>{const ct=grouped[s.key].length;return <div key={s.key} style={{flex:"1 1 110px",padding:"14px 16px",borderRadius:"2px",background:T.surface,border:`1px solid ${T.border}`,opacity:ct>0?1:.55}}>
+        <div style={{fontFamily:T.display,fontSize:"28px",fontWeight:500,lineHeight:1,color:ct>0?s.c:T.sub}}>{ct}</div>
+        <div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:"1px",lineHeight:"1.3",marginTop:"6px"}}>{s.label}</div>
       </div>;})}
     </div>
-    {nonEmpty.map(s=><div key={s.key} style={{marginBottom:"10px"}}>
-      <div style={{fontSize:"11px",fontWeight:700,color:s.c,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",display:"flex",alignItems:"center",gap:"5px"}}>{s.i} {s.label} ({grouped[s.key].length})</div>
-      {grouped[s.key].map((dl,i)=><div key={dl.dealId+"-"+i} onClick={()=>onClickDeal&&onClickDeal(dl.deal)} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${s.c}`,borderRadius:"6px",padding:"7px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:onClickDeal?"pointer":"default"}} onMouseEnter={e=>{if(onClickDeal)e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
-        <div><b>{dl.inf}</b> <span style={{color:T.sub}}>· {dl.type}: {dl.desc||"—"}</span></div>
-        <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
-          {dl.link&&<a href={dl.link.startsWith("http")?dl.link:"https://"+dl.link} target="_blank" rel="noreferrer" style={{fontSize:"11px",color:T.info,fontWeight:600}} onClick={e=>e.stopPropagation()}>🔗</a>}
-          {dl.feedback&&<span style={{fontSize:"10px",color:T.err}} title={dl.feedback}>💬</span>}
-          <span style={{padding:"2px 8px",borderRadius:"4px",fontSize:"10px",fontWeight:700,color:s.c,background:s.bg}}>{s.i} {s.label}</span>
+    {nonEmpty.map(s=><div key={s.key} style={{marginBottom:"16px"}}>
+      <div style={{fontSize:"11px",fontWeight:700,color:T.text,textTransform:"uppercase",letterSpacing:"1.5px",marginBottom:"8px"}}>{s.label} <span style={{color:s.c}}>{grouped[s.key].length}</span></div>
+      <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
+      {grouped[s.key].map((dl,i,arr)=><div key={dl.dealId+"-"+i} onClick={()=>onClickDeal&&onClickDeal(dl.deal)} style={{padding:"12px 16px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:onClickDeal?"pointer":"default"}}>
+        <div><b style={{fontWeight:600}}>{dl.inf}</b> <span style={{color:T.sub}}>· {dl.type}: {dl.desc||"—"}</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+          {dl.link&&<a href={dl.link.startsWith("http")?dl.link:"https://"+dl.link} target="_blank" rel="noreferrer" style={{fontSize:"10px",letterSpacing:"0.5px",textTransform:"uppercase",color:T.info,fontWeight:700}} onClick={e=>e.stopPropagation()}>Link</a>}
+          <span style={{padding:"4px 9px",borderRadius:"2px",fontSize:"9px",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",color:s.c,background:s.bg}}>{s.label}</span>
         </div>
       </div>)}
+      </div>
     </div>)}
   </div>;
 };
@@ -3023,11 +3024,13 @@ return (
           </Section>}
 
           {/* DISPUTES */}
-          {disputed.length>0&&<Section title={`Disputes (${disputed.length})`} icon="⚠">
-            {disputed.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.errBg,border:`1px solid ${T.err}33`,borderRadius:"7px",padding:"10px 12px",marginBottom:"5px",cursor:"pointer"}}>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700}}>{d.inf}</span><span style={{fontSize:"13px",color:T.err,fontWeight:700}}>Invoice: {f(d.inv?.amount)} vs Approved: {f(d.amount)}</span></div>
-              <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{d.inv?.note||""} — by {d.by}</div>
-            </div>)}
+          {disputed.length>0&&<Section title="Disputes" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}}>{disputed.length} open</span>}>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
+              {disputed.map((d,i,arr)=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",cursor:"pointer"}}>
+                <div><div style={{fontSize:"13px",fontWeight:600}}>{d.inf}</div><div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{d.inv?.note||"Amount mismatch"} — by {d.by}</div></div>
+                <span style={{fontSize:"13px",color:T.err,fontWeight:600,fontFamily:T.display}}>{f(d.inv?.amount)} vs {f(d.amount)}</span>
+              </div>)}
+            </div>
           </Section>}
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"32px"}}>
@@ -3054,21 +3057,18 @@ return (
 
           {/* TEAM PERFORMANCE */}
           <Section title="Team Performance" action={<Btn v="ghost" sm onClick={()=>setView("users")}>Manage →</Btn>}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"8px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"10px"}}>
               {activeUsers.map(u=>{
                 const uDeals = deals.filter(d=>d.by===u.name||d.by===u.name.split(" ")[0]);
-                const uPending = uDeals.filter(d=>d.status==="pending"||d.status==="renegotiate").length;
                 const uDisputed = uDeals.filter(d=>d.status==="disputed").length;
                 const rc = ROLE_CFG[u.role]||ROLE_CFG.viewer;
-                return <div key={u.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"11px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:"7px"}}>
-                      <div style={{width:"28px",height:"28px",borderRadius:"50%",background:rc.bg,color:rc.c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",fontWeight:800}}>{u.avatar}</div>
-                      <div><div style={{fontWeight:700,fontSize:"12px"}}>{u.name}</div><div style={{fontSize:"11px",color:T.sub}}>{u.email}</div></div>
-                    </div>
+                return <div key={u.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"16px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px"}}>
+                    <div style={{width:"34px",height:"34px",borderRadius:"50%",background:T.goldSoft,color:T.brand,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",fontFamily:T.display,flex:"none"}}>{u.avatar}</div>
+                    <div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:"13px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{u.name}</div><div style={{fontSize:"10px",color:T.sub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{u.email}</div></div>
                   </div>
-                  <div style={{display:"flex",gap:"4px",alignItems:"center"}}>
-                    <span style={{padding:"2px 6px",borderRadius:"8px",fontSize:"10px",fontWeight:700,color:rc.c,background:rc.bg}}>{rc.i} {rc.l}</span>
+                  <div style={{display:"flex",gap:"8px",alignItems:"center",borderTop:`1px solid ${T.borderSoft}`,paddingTop:"10px"}}>
+                    <span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,color:T.brand,background:T.goldSoft,padding:"3px 8px",borderRadius:"2px"}}>{rc.l}</span>
                     <span style={{fontSize:"11px",color:T.sub}}>{uDeals.length} deals</span>
                     {uDisputed>0&&<span style={{fontSize:"11px",color:T.err,fontWeight:700}}>{uDisputed} disputes</span>}
                   </div>
@@ -3078,18 +3078,20 @@ return (
           </Section>
 
           {/* OVERDUE DELIVERABLES */}
-          {overdueDels.length>0&&<Section title={`Overdue Deliverables (${overdueDels.length})`} icon="🚨">
-            {overdueDels.map((d,i)=><div key={i} style={{background:T.errBg,border:`1px solid ${T.err}22`,borderRadius:"6px",padding:"7px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between"}}>
-              <span><b>{d.inf}</b> · {d.type}: {d.desc||"—"}</span><span style={{color:T.err,fontWeight:700}}>Due: {d.deadline}</span>
-            </div>)}
+          {overdueDels.length>0&&<Section title="Overdue Deliverables" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}}>{overdueDels.length} overdue</span>}>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
+              {overdueDels.map((d,i,arr)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",fontSize:"13px"}}>
+                <span><b style={{fontWeight:600}}>{d.inf}</b> <span style={{color:T.sub}}>· {d.type}: {d.desc||"—"}</span></span><span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.err,fontWeight:700}}>Due {d.deadline}</span>
+              </div>)}
+            </div>
           </Section>}
 
           {/* CAMPAIGN BUDGETS */}
           <Section title="Campaign Budgets" action={<Btn v="gold" sm onClick={()=>{setNCamp({name:"",budget:"",target:"",deadline:""});setModal("newCamp")}}>+ New Campaign</Btn>}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"8px"}}>
-              {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"11px",cursor:"pointer",transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}><span style={{fontWeight:700,fontSize:"12px"}}>{c.name}</span><span style={{fontSize:"11px",fontWeight:700,color:pct>90?T.err:T.ok}}>{pct}%</span></div>
-                <div style={{height:"4px",borderRadius:"3px",background:T.border,overflow:"hidden",marginBottom:"5px"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.warn:T.ok,borderRadius:"3px"}}/></div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"14px"}}>
+              {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"18px",cursor:"pointer"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"10px"}}><span style={{fontWeight:600,fontSize:"14px"}}>{c.name}</span><span style={{fontFamily:T.display,fontSize:"16px",fontWeight:600,color:pct>90?T.err:T.text}}>{pct}%</span></div>
+                <div style={{height:"6px",borderRadius:"3px",background:T.goldSoft,overflow:"hidden",marginBottom:"8px"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.gold:T.brand,borderRadius:"3px"}}/></div>
                 <div style={{fontSize:"11px",color:T.sub}}>{f(comm)} / {f(c.budget)} · {campLocked(c.id)}/{c.target} influencers</div>
               </div>;})}
             </div>
@@ -3554,18 +3556,20 @@ return (
           </Section>}
 
           {/* OVERDUE DELIVERABLES */}
-          {overdueDels.length>0&&<Section title={`Overdue Deliverables (${overdueDels.length})`} icon="🚨">
-            {overdueDels.map((d,i)=><div key={i} style={{background:T.errBg,border:`1px solid ${T.err}22`,borderRadius:"6px",padding:"7px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between"}}>
-              <span><b>{d.inf}</b> · {d.type}: {d.desc||"—"}</span><span style={{color:T.err,fontWeight:700}}>Due: {d.deadline}</span>
-            </div>)}
+          {overdueDels.length>0&&<Section title="Overdue Deliverables" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}}>{overdueDels.length} overdue</span>}>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
+              {overdueDels.map((d,i,arr)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",fontSize:"13px"}}>
+                <span><b style={{fontWeight:600}}>{d.inf}</b> <span style={{color:T.sub}}>· {d.type}: {d.desc||"—"}</span></span><span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.err,fontWeight:700}}>Due {d.deadline}</span>
+              </div>)}
+            </div>
           </Section>}
 
           {/* CAMPAIGNS SUMMARY */}
           <Section title="🎯 Campaign Overview" icon="" action={<Btn v="ghost" sm onClick={()=>setView("campaigns")}>Manage →</Btn>}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"8px"}}>
-              {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"7px",padding:"11px",cursor:"pointer",transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}><span style={{fontWeight:700,fontSize:"12px"}}>{c.name}</span><span style={{fontSize:"11px",fontWeight:700,color:pct>90?T.err:T.ok}}>{pct}%</span></div>
-                <div style={{height:"4px",borderRadius:"3px",background:T.border,overflow:"hidden",marginBottom:"5px"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.warn:T.ok,borderRadius:"3px"}}/></div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"14px"}}>
+              {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"18px",cursor:"pointer"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"10px"}}><span style={{fontWeight:600,fontSize:"14px"}}>{c.name}</span><span style={{fontFamily:T.display,fontSize:"16px",fontWeight:600,color:pct>90?T.err:T.text}}>{pct}%</span></div>
+                <div style={{height:"6px",borderRadius:"3px",background:T.goldSoft,overflow:"hidden",marginBottom:"8px"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.gold:T.brand,borderRadius:"3px"}}/></div>
                 <div style={{fontSize:"11px",color:T.sub}}>{f(comm)} / {f(c.budget)} · {campLocked(c.id)}/{c.target} influencers</div>
               </div>;})}
             </div>

@@ -4580,25 +4580,25 @@ return (
 
         {/* ═══ ALL COLLABORATIONS VIEW (shared, accessible from all roles) ═══ */}
         {view==="deals"&&<>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"8px",marginBottom:"14px"}}>
-            <StatBox l="Committed" v={f(stats.committed)} c={T.gold}/>
-            <StatBox l="Paid Out" v={f(stats.paid)} c={T.ok}/>
-            <StatBox l="Outstanding" v={f(stats.committed-stats.paid)} c={T.warn}/>
-            <StatBox l="Pending" v={stats.pendingN} c={stats.pendingN>0?T.warn:T.ok}/>
-            <StatBox l="Disputes" v={stats.disputed} c={stats.disputed>0?T.err:T.ok}/>
-            <StatBox l="Pending Content" v={stats.pendingDels} c={T.purple}/>
+          {/* Header */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:"24px",flexWrap:"wrap",gap:"12px"}}>
+            <div>
+              <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{deals.length} collaborations</div>
+              <div style={{fontFamily:T.display,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>All Collabs</div>
+            </div>
+            {(role==="negotiator"||role==="admin")&&<Btn v="primary" onClick={()=>{setEditingDealId(null);setNDeal({inf:"",email:"",platform:"Instagram",followers:"",products:[],usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},paymentTerms:"Net 15 days",cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>New Collab</Btn>}
           </div>
 
           {/* Campaign filter */}
-          <div style={{display:"flex",gap:"5px",marginBottom:"10px",flexWrap:"wrap",alignItems:"center"}}>
-            <span style={{fontSize:"10px",fontWeight:800,color:T.sub,textTransform:"uppercase",letterSpacing:".6px",marginRight:"2px"}}>Campaign:</span>
-            <button onClick={()=>setCampFilter("")} style={{padding:"4px 10px",border:`1px solid ${!campFilter?T.gold:T.border}`,borderRadius:"14px",background:!campFilter?T.goldSoft:"transparent",color:!campFilter?T.brand:T.sub,fontSize:"12px",fontWeight:!campFilter?700:500,cursor:"pointer",fontFamily:"inherit"}}>All</button>
-            {campaigns.map(c=><button key={c.id} onClick={()=>setCampFilter(c.id)} style={{padding:"4px 10px",border:`1px solid ${campFilter===c.id?T.gold:T.border}`,borderRadius:"14px",background:campFilter===c.id?T.goldSoft:"transparent",color:campFilter===c.id?T.brand:T.sub,fontSize:"12px",fontWeight:campFilter===c.id?700:500,cursor:"pointer",fontFamily:"inherit"}}>{c.name} ({campDeals(c.id).length})</button>)}
+          <div style={{display:"flex",gap:"7px",marginBottom:"12px",flexWrap:"wrap",alignItems:"center"}}>
+            <span style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:"1px",marginRight:"4px"}}>Campaign</span>
+            <button onClick={()=>setCampFilter("")} style={{padding:"5px 11px",border:`1px solid ${!campFilter?T.brand:T.border}`,borderRadius:"2px",background:!campFilter?T.brand:T.surface,color:!campFilter?"#fff":T.sub,fontSize:"10px",fontWeight:700,letterSpacing:"0.5px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui}}>All</button>
+            {campaigns.map(c=><button key={c.id} onClick={()=>setCampFilter(c.id)} style={{padding:"5px 11px",border:`1px solid ${campFilter===c.id?T.brand:T.border}`,borderRadius:"2px",background:campFilter===c.id?T.brand:T.surface,color:campFilter===c.id?"#fff":T.sub,fontSize:"10px",fontWeight:700,letterSpacing:"0.5px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui}}>{c.name} ({campDeals(c.id).length})</button>)}
           </div>
 
           {/* Feature 4: Filter Controls */}
-          <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"12px",marginBottom:"12px"}}>
-            <div style={{fontSize:"13px",fontWeight:700,marginBottom:"8px"}}>Filters</div>
+          <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"16px",marginBottom:"14px"}}>
+            <div style={{fontSize:"11px",fontWeight:700,marginBottom:"12px",textTransform:"uppercase",letterSpacing:"1.5px",color:T.sub}}>Filters</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"8px",marginBottom:"8px"}}>
               <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Date From</label><Inp type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)}/></div>
               <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Date To</label><Inp type="date" value={filterDateTo} onChange={e=>setFilterDateTo(e.target.value)}/></div>
@@ -4619,67 +4619,72 @@ return (
           </div>
 
           {/* Tabs + Action */}
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.border}`,marginBottom:"12px"}}>
-            <div style={{display:"flex",gap:"2px"}}>
-              {[{k:"all",l:"All"},{k:"pending",l:"Pending"},{k:"active",l:"Active"},{k:"payment",l:"Payments"}].map(t=>(
-                <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"7px 12px",border:"none",borderBottom:tab===t.k?`2px solid ${T.gold}`:"2px solid transparent",background:"none",color:tab===t.k?T.brand:T.sub,fontWeight:tab===t.k?800:500,fontSize:"13px",cursor:"pointer",fontFamily:"inherit"}}>{t.l}</button>
-              ))}
-            </div>
-            <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
-              {(role==="negotiator"||role==="admin")&&<Btn v="gold" sm onClick={()=>{setEditingDealId(null);setNDeal({inf:"",email:"",platform:"Instagram",followers:"",products:[],usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},paymentTerms:"Net 15 days",cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>+ New Deal</Btn>}
-              {bulkSelected.size>0&&<>
-                {(role==="approver"||role==="admin")&&<Btn v="ok" sm onClick={bulkApprove}>✓ Approve ({bulkSelected.size})</Btn>}
-                {(role==="approver"||role==="admin")&&<Btn v="danger" sm onClick={bulkReject}>✕ Reject ({bulkSelected.size})</Btn>}
-                <Btn v="gold" sm onClick={bulkExportCSV}>📥 Export ({bulkSelected.size})</Btn>
-              </>}
-            </div>
-          </div>
+          {(()=>{
+            const tc = {
+              all: deals.length,
+              pending: deals.filter(x=>["pending","renegotiate"].includes(x.status)).length,
+              active: deals.filter(x=>["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live","payment_details_received"].includes(x.status)).length,
+              payment: deals.filter(x=>["invoice_ok","disputed","partial_paid","paid","payment_details_received","payment_requested","payment_approved"].includes(x.status)).length,
+            };
+            return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.border}`,marginBottom:"20px",flexWrap:"wrap",gap:"8px"}}>
+              <div style={{display:"flex",gap:"28px"}}>
+                {[{k:"all",l:"All"},{k:"pending",l:"Pending"},{k:"active",l:"Active"},{k:"payment",l:"Payments"}].map(t=>(
+                  <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"12px 0",border:"none",borderBottom:tab===t.k?`2px solid ${T.brand}`:"2px solid transparent",background:"none",color:tab===t.k?T.brand:T.sub,fontWeight:700,fontSize:"12px",letterSpacing:"1px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui}}>{t.l} <span style={{color:tab===t.k?T.gold:T.faint,fontFamily:T.display}}>{tc[t.k]}</span></button>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+                {bulkSelected.size>0?<>
+                  {(role==="approver"||role==="admin")&&<Btn v="ok" sm onClick={bulkApprove}>Approve ({bulkSelected.size})</Btn>}
+                  {(role==="approver"||role==="admin")&&<Btn v="danger" sm onClick={bulkReject}>Reject ({bulkSelected.size})</Btn>}
+                  <Btn v="outline" sm onClick={bulkExportCSV}>Export ({bulkSelected.size})</Btn>
+                </>:<span style={{fontSize:"11px",color:T.sub,fontStyle:"italic",fontFamily:T.display,paddingBottom:"12px"}}>Bulk select · export CSV</span>}
+              </div>
+            </div>;
+          })()}
 
-          {/* Feature 3: Bulk Select Checkbox */}
-          <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px",padding:"8px",background:T.goldSoft,borderRadius:"6px"}}>
+          {/* Bulk Select */}
+          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"14px",padding:"10px 14px",background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
             <input type="checkbox" checked={bulkSelectAll} onChange={()=>toggleSelectAll(filtered)} style={{cursor:"pointer"}} title="Select all deals"/>
-            <span style={{fontSize:"11px",color:T.brand,fontWeight:700}}>{bulkSelectAll?`All ${filtered.length} selected`:`Select All (${filtered.length})`}</span>
-            {bulkSelected.size>0&&<span style={{fontSize:"11px",color:T.brand,marginLeft:"auto"}}>{bulkSelected.size} selected</span>}
+            <span style={{fontSize:"11px",color:T.sub,fontWeight:600,letterSpacing:"0.5px",textTransform:"uppercase"}}>{bulkSelectAll?`All ${filtered.length} selected`:`Select all (${filtered.length})`}</span>
+            {bulkSelected.size>0&&<span style={{fontSize:"11px",color:T.brand,fontWeight:700,marginLeft:"auto"}}>{bulkSelected.size} selected</span>}
           </div>
 
           {/* Cards */}
           {(()=>{
             const pagedDeals = filtered.slice(dealsPage * ITEMS_PER_PAGE, (dealsPage+1) * ITEMS_PER_PAGE);
             return <>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(295px,1fr))",gap:"9px"}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(265px,1fr))",gap:"16px"}}>
                 {pagedDeals.map(d=>{
                   const camp=getCamp(d.cid);
                   const paid=totalPaid(d);
                   const done=d.dels.filter(x=>x.st==="live").length;
-                  return <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:bulkSelected.has(d.id)?`2px solid ${T.gold}`:(`1px solid ${T.border}`),borderRadius:"9px",padding:"13px",cursor:"pointer",transition:"all .12s",animation:"fadeUp .3s ease"}}
-                    onMouseEnter={e=>{if(!bulkSelected.has(d.id)){e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow=T.cardShadowHover}}}
-                    onMouseLeave={e=>{if(!bulkSelected.has(d.id)){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"5px"}}>
-                      <div style={{display:"flex",alignItems:"flex-start",gap:"6px"}}>
-                        <input type="checkbox" checked={bulkSelected.has(d.id)} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();toggleBulkSelect(d.id)}} style={{cursor:"pointer",marginTop:"2px"}}/>
+                  return <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${bulkSelected.has(d.id)?T.brand:T.border}`,borderRadius:"2px",padding:"18px",cursor:"pointer",animation:"fadeUp .3s ease"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"14px"}}>
+                      <div style={{display:"flex",alignItems:"flex-start",gap:"8px"}}>
+                        <input type="checkbox" checked={bulkSelected.has(d.id)} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();toggleBulkSelect(d.id)}} style={{cursor:"pointer",marginTop:"4px"}}/>
                         <div>
-                          <div style={{fontWeight:800,fontSize:"14px"}}>{d.inf}</div>
-                          <div style={{fontSize:"11px",color:T.sub}}>{d.platform} · {d.followers}</div>
+                          <div style={{fontFamily:T.display,fontSize:"17px",fontWeight:600}}>{d.inf}</div>
+                          <div style={{fontSize:"10px",color:T.sub,marginTop:"3px"}}>{d.platform} · {d.followers}</div>
                         </div>
                       </div>
                       <Badge s={d.status} sm/>
                     </div>
-                    {camp&&<div style={{fontSize:"11px",color:T.gold,fontWeight:700,marginBottom:"3px"}}>🎯 {camp.name}</div>}
-                    <div style={{fontSize:"12px",color:T.sub,marginBottom:"6px"}}>{d.products?d.products.map(p=>p.name).join(", "):d.product}</div>
-                    <div style={{display:"flex",gap:"2px",marginBottom:"6px"}}>{d.dels.map((dl,i)=><div key={i} title={`${dl.type}: ${dl.st}`} style={{flex:1,height:"3px",borderRadius:"2px",background:dl.st==="live"?T.ok:T.border}}/>)}</div>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{f(d.amount)}</span>
-                      <span style={{fontSize:"11px",color:T.sub}}>{done}/{d.dels.length} content · {d.by}</span>
-                    </div>
-                    {paid>0&&paid<d.amount&&<div style={{marginTop:"4px",height:"2.5px",borderRadius:"2px",background:T.border,overflow:"hidden"}}><div style={{height:"100%",width:`${(paid/d.amount)*100}%`,background:T.ok,borderRadius:"2px"}}/></div>}
+                    <div style={{fontSize:"12px",color:T.text,borderTop:`1px solid ${T.borderSoft}`,paddingTop:"12px"}}>{d.products?d.products.map(p=>p.name).join(", "):d.product}{d.agencyManaged&&<span style={{fontSize:"9px",color:T.gold,textTransform:"uppercase",letterSpacing:"0.5px"}}> · Agency</span>}</div>
+                    <div style={{fontSize:"10px",color:T.sub,marginTop:"3px"}}>{camp?camp.name+" · ":""}{done}/{d.dels.length} live · {d.by}</div>
+                    <div style={{display:"flex",gap:"2px",marginTop:"12px"}}>{d.dels.map((dl,i)=><div key={i} title={`${dl.type}: ${dl.st}`} style={{flex:1,height:"3px",borderRadius:"2px",background:dl.st==="live"?T.ok:T.goldSoft}}/>)}</div>
+                    <div style={{fontFamily:T.display,fontSize:"20px",fontWeight:600,marginTop:"14px"}}>{f(d.amount)}</div>
+                    {paid>0&&paid<d.amount&&<div style={{marginTop:"6px",height:"2.5px",borderRadius:"2px",background:T.goldSoft,overflow:"hidden"}}><div style={{height:"100%",width:`${(paid/d.amount)*100}%`,background:T.ok}}/></div>}
                   </div>;
                 })}
               </div>
-              {filtered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.sub,fontSize:"12px"}}>No deals in this view</div>}
-              {filtered.length > ITEMS_PER_PAGE && <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:"8px",padding:"12px",marginTop:"12px"}}>
-                <Btn v="outline" sm disabled={dealsPage===0} onClick={()=>setDealsPage(p=>p-1)}>← Previous</Btn>
-                <span style={{fontSize:"11px",color:T.sub}}>Page {dealsPage+1} of {Math.ceil(filtered.length/ITEMS_PER_PAGE)}</span>
-                <Btn v="outline" sm disabled={(dealsPage+1)*ITEMS_PER_PAGE>=filtered.length} onClick={()=>setDealsPage(p=>p+1)}>Next →</Btn>
+              {filtered.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.sub,fontSize:"12px"}}>No collabs in this view</div>}
+              {filtered.length > ITEMS_PER_PAGE && <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:"24px"}}>
+                <span style={{fontSize:"11px",color:T.sub}}>Showing {dealsPage*ITEMS_PER_PAGE+1}–{Math.min(filtered.length,(dealsPage+1)*ITEMS_PER_PAGE)} of {filtered.length}</span>
+                <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                  <Btn v="outline" sm disabled={dealsPage===0} onClick={()=>setDealsPage(p=>p-1)}>‹</Btn>
+                  <span style={{fontSize:"11px",color:T.sub,fontFamily:T.display}}>Page {dealsPage+1} of {Math.ceil(filtered.length/ITEMS_PER_PAGE)}</span>
+                  <Btn v="outline" sm disabled={(dealsPage+1)*ITEMS_PER_PAGE>=filtered.length} onClick={()=>setDealsPage(p=>p+1)}>›</Btn>
+                </div>
               </div>}
             </>;
           })()}

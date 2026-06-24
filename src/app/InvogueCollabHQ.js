@@ -3654,28 +3654,36 @@ return (
         };
 
         return <>
-          <div style={{marginBottom:"14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div><span style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px"}}>Payment Center</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Payment scheduling, TDS tracking & batch exports</span></div>
-            <div style={{display:"flex",gap:"6px"}}>
-              {batchMode&&<Btn v="ok" sm onClick={exportBatchCSV}>📥 Export {Object.values(batchSelected).filter(Boolean).length} Selected</Btn>}
-              {batchMode&&<Btn v="primary" sm onClick={bulkGenerateInvoices}>🧾 Generate Invoices ({Object.values(batchSelected).filter(Boolean).length})</Btn>}
-              <Btn v={batchMode?"danger":"gold"} sm onClick={()=>{setBatchMode(!batchMode);if(batchMode)setBatchSelected({})}}>{batchMode?"✕ Exit Batch":"📋 Batch Export"}</Btn>
+          <div style={{marginBottom:"22px",display:"flex",justifyContent:"space-between",alignItems:"flex-end",flexWrap:"wrap",gap:"12px"}}>
+            <div>
+              <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{f(totalOutstanding)} outstanding · {pendingPayments.length} ready to pay</div>
+              <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Payment Center</div>
+            </div>
+            <div style={{display:"flex",gap:"8px"}}>
+              {batchMode&&<Btn v="ok" sm onClick={exportBatchCSV}>Export {Object.values(batchSelected).filter(Boolean).length} Selected</Btn>}
+              {batchMode&&<Btn v="primary" sm onClick={bulkGenerateInvoices}>Generate Invoices ({Object.values(batchSelected).filter(Boolean).length})</Btn>}
+              <Btn v={batchMode?"danger":"gold"} sm onClick={()=>{setBatchMode(!batchMode);if(batchMode)setBatchSelected({})}}>{batchMode?"Exit Batch":"Batch Export"}</Btn>
             </div>
           </div>
 
-          {/* Stats row */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"8px",marginBottom:"16px"}}>
-            <StatBox l="Total Outstanding" v={f(totalOutstanding)} c={T.err} sub="Across all deals"/>
-            <StatBox l="Ready to Pay" v={pendingPayments.length} c={pendingPayments.length>0?T.warn:T.ok} sub="Invoice matched"/>
-            <StatBox l="Disputes" v={disputed.length} c={disputed.length>0?T.err:T.ok} sub="Need resolution"/>
-            <StatBox l="TDS Applicable" v={tdsInfluencers.length} c={tdsInfluencers.length>0?"#7c3aed":T.ok} sub={`>${f(50000)} in ${fy.label}`}/>
-            <StatBox l="Overdue" v={overdueDates.reduce((s,k)=>s+byDueDate[k].length,0)} c={overdueDates.length>0?T.err:T.ok} sub="Past due date"/>
+          {/* Stat strip */}
+          <div style={{display:"flex",borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,marginBottom:"24px",flexWrap:"wrap"}}>
+            {[
+              {l:"Total Outstanding",v:f(totalOutstanding),c:T.err},
+              {l:"Ready to Pay",v:pendingPayments.length,c:pendingPayments.length>0?T.warn:"#C9C1B2"},
+              {l:"Disputes",v:disputed.length,c:disputed.length>0?T.err:"#C9C1B2"},
+              {l:`TDS · ${fy.label}`,v:tdsInfluencers.length,c:tdsInfluencers.length>0?T.purple:"#C9C1B2"},
+              {l:"Overdue",v:overdueDates.reduce((s,k)=>s+byDueDate[k].length,0),c:overdueDates.length>0?T.err:"#C9C1B2"},
+            ].map((m,i,arr)=><div key={i} style={{flex:"1 1 140px",padding:"18px 22px",borderRight:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+              <div style={{fontSize:"10px",letterSpacing:"2px",textTransform:"uppercase",color:T.sub,marginBottom:"8px"}}>{m.l}</div>
+              <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,lineHeight:1,color:m.c}}>{m.v}</div>
+            </div>)}
           </div>
 
           {/* Tab navigation */}
-          <div style={{display:"flex",gap:"4px",marginBottom:"14px",borderBottom:`2px solid ${T.border}`,paddingBottom:"6px"}}>
-            {[{k:"pay",l:"Ready to Pay",n:pendingPayments.length},{k:"schedule",l:"Payment Schedule",n:payableDeals.length},{k:"tds",l:"TDS Tracker",n:tdsInfluencers.length},{k:"disputes",l:"Disputes",n:disputed.length}].map(t=>
-              <div key={t.k} onClick={()=>setFinanceTab(t.k)} style={{padding:"6px 14px",borderRadius:"6px 6px 0 0",fontSize:"12px",fontWeight:700,cursor:"pointer",background:financeTab===t.k?T.gold+"18":"transparent",color:financeTab===t.k?T.gold:T.sub,borderBottom:financeTab===t.k?`2px solid ${T.gold}`:"2px solid transparent",marginBottom:"-8px"}}>{t.l}{t.n>0?` (${t.n})`:""}</div>
+          <div style={{display:"flex",gap:"24px",marginBottom:"22px",borderBottom:`1px solid ${T.border}`}}>
+            {[{k:"pay",l:"Pay",n:pendingPayments.length},{k:"schedule",l:"Schedule",n:payableDeals.length},{k:"tds",l:"TDS",n:tdsInfluencers.length},{k:"disputes",l:"Disputes",n:disputed.length}].map(t=>
+              <div key={t.k} onClick={()=>setFinanceTab(t.k)} style={{fontSize:"12px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,cursor:"pointer",color:financeTab===t.k?T.brand:T.sub,borderBottom:financeTab===t.k?`2px solid ${T.brand}`:"2px solid transparent",paddingBottom:"12px"}}>{t.l}{t.n>0?<span style={{color:T.gold,marginLeft:"5px"}}>{t.n}</span>:""}</div>
             )}
           </div>
 
@@ -3705,12 +3713,17 @@ return (
                     <Btn v="ok" sm onClick={()=>{setSel(d);setPayF({type:paid===0?"final":"final",amount:String(rem),note:"Paying on matched invoice"});setModal("payment")}}>💰 Pay {f(rem)}</Btn>
                   </div>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"6px",marginBottom:"8px"}}>
-                  <div style={{background:T.goldSoft,padding:"5px 7px",borderRadius:"2px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Locked</div><div style={{fontSize:"12px",fontWeight:800,color:T.gold}}>{f(d.amount)}</div></div>
-                  <div style={{background:d.inv?.match===false?T.errBg:T.infoBg,padding:"5px 7px",borderRadius:"2px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Invoice</div><div style={{fontSize:"12px",fontWeight:800,color:d.inv?.match===false?T.err:T.info}}>{f(d.inv?.amount||d.amount)}{d.inv?.match===false?" ⚠":" ✓"}</div></div>
-                  <div style={{background:T.okBg,padding:"5px 7px",borderRadius:"2px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Paid</div><div style={{fontSize:"12px",fontWeight:800,color:T.ok}}>{f(paid)}</div></div>
-                  <div style={{background:T.warnBg,padding:"5px 7px",borderRadius:"2px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>Due</div><div style={{fontSize:"12px",fontWeight:800,color:T.warn}}>{f(rem)}</div></div>
-                  <div style={{background:tdsApply?"#f5f3ff":"#f0fdf4",padding:"5px 7px",borderRadius:"2px"}}><div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>TDS</div><div style={{fontSize:"12px",fontWeight:800,color:tdsApply?"#7c3aed":T.ok}}>{tdsApply?`${f(tdsAmt)} (${d.tdsRate||10}%)`:"N/A"}</div></div>
+                <div style={{display:"flex",borderTop:`1px solid ${T.borderSoft}`,borderBottom:`1px solid ${T.borderSoft}`,marginBottom:"8px"}}>
+                  {[
+                    {l:"Locked",v:f(d.amount),c:T.text},
+                    {l:"Invoice",v:`${f(d.inv?.amount||d.amount)}${d.inv?.match===false?" ⚠":" ✓"}`,c:d.inv?.match===false?T.err:T.info},
+                    {l:"Paid",v:f(paid),c:T.ok},
+                    {l:"Due",v:f(rem),c:T.warn},
+                    {l:tdsApply?`TDS ${d.tdsRate||10}%`:"TDS",v:tdsApply?f(tdsAmt):"N/A",c:tdsApply?T.purple:"#C9C1B2"},
+                  ].map((m,mi,arr)=><div key={mi} style={{flex:1,padding:"9px 12px",borderRight:mi<arr.length-1?`1px solid ${T.borderSoft}`:"none"}}>
+                    <div style={{fontSize:"9px",letterSpacing:"1px",fontWeight:700,color:T.sub,textTransform:"uppercase",marginBottom:"3px"}}>{m.l}</div>
+                    <div style={{fontFamily:DISPLAY,fontSize:"16px",fontWeight:600,color:m.c}}>{m.v}</div>
+                  </div>)}
                 </div>
                 {d.agencyManaged&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",padding:"6px 8px",background:T.goldSoft,border:`1px solid ${T.gold}55`,borderRadius:"2px",marginBottom:"6px",fontSize:"11px"}}>
                   <span>🏢 <b>Agency-managed</b> · pay <b>{d.paymentDetails?.beneficiary||d.agencyName||"agency"}</b>{d.agencyGst?` · GST ${d.agencyGst}`:""}</span>
@@ -4100,23 +4113,24 @@ return (
           const liveLinks = (d.dels||[]).filter(dl=>dl.st==="live"&&dl.link);
           const isFresh = d.adStatus==="fresh"||!d.adStatus;
           const statusLabel = d.adStatus==="running"?"🏃 Running":d.adStatus==="tested"?"✅ Tested":"🆕 Fresh";
-          return <div onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${isExpired?T.err+"44":isExpiring?"#f59e0b44":T.border}`,borderLeft:`3px solid ${isExpired?T.err:isExpiring?"#f59e0b":d.adStatus==="running"?T.info:d.adStatus==="tested"?T.ok:"#0891b2"}`,borderRadius:"2px",padding:"14px",marginBottom:"8px",cursor:"pointer",transition:"all .15s"}}
+          const accentCol = isExpired?T.err:isExpiring?T.warn:d.adStatus==="running"?T.info:d.adStatus==="tested"?T.ok:T.gold;
+          return <div onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${isExpired?T.err+"44":isExpiring?T.warn+"44":T.border}`,borderLeft:`3px solid ${accentCol}`,borderRadius:"2px",padding:"14px",marginBottom:"8px",cursor:"pointer",transition:"all .15s"}}
             onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.08)"}}
             onMouseLeave={e=>{e.currentTarget.style.boxShadow="none"}}>
             {/* Header */}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"8px"}}>
               <div style={{flex:1}}>
                 <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
-                  <div style={{width:"32px",height:"32px",borderRadius:"50%",background:"linear-gradient(135deg,#ecfeff,#a5f3fc)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",fontWeight:800,color:"#0891b2"}}>{d.inf.split(" ").map(w=>w[0]).join("")}</div>
+                  <div style={{width:"32px",height:"32px",borderRadius:"50%",background:T.goldSoft,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:DISPLAY,fontSize:"14px",color:T.brand}}>{(d.inf||"?").trim()[0]}</div>
                   <div>
                     <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf}</div>
                     <div style={{fontSize:"11px",color:T.sub}}>{d.platform} · {d.followers}</div>
                   </div>
                 </div>
-                <div style={{fontSize:"12px",color:T.sub}}>📦 {d.product} · 🎯 {camp?.name||"—"}</div>
+                <div style={{fontSize:"12px",color:T.sub}}>{d.product} · {camp?.name||"—"}</div>
               </div>
               <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"4px"}}>
-                <span style={{padding:"3px 8px",borderRadius:"2px",fontSize:"10px",fontWeight:700,background:d.adStatus==="running"?T.infoBg:d.adStatus==="tested"?T.okBg:"#ecfeff",color:d.adStatus==="running"?T.info:d.adStatus==="tested"?T.ok:"#0891b2"}}>{statusLabel}</span>
+                <span style={{padding:"3px 8px",borderRadius:"2px",fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,background:d.adStatus==="running"?T.infoBg:d.adStatus==="tested"?T.okBg:T.goldSoft,color:d.adStatus==="running"?T.info:d.adStatus==="tested"?T.ok:T.gold}}>{statusLabel.replace(/^[^\w]+\s*/,"")}</span>
                 {daysLeft!==null&&<span style={{padding:"3px 8px",borderRadius:"2px",fontSize:"10px",fontWeight:700,background:isExpired?"#fef2f2":isExpiring?"#fef3c7":"#ecfdf5",color:isExpired?T.err:isExpiring?"#92400e":T.ok}}>{isExpired?`Expired ${Math.abs(daysLeft)}d ago`:daysLeft===0?"Expires today":`${daysLeft}d left`}</span>}
                 {d.reuseRequested&&<span style={{padding:"2px 6px",borderRadius:"2px",fontSize:"9px",fontWeight:700,background:T.infoBg,color:T.info}}>🔄 REUSE REQUESTED</span>}
               </div>
@@ -4146,9 +4160,12 @@ return (
             </div>}
 
             {/* Usage period info */}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"11px",color:T.sub,marginBottom:"8px",paddingTop:"6px",borderTop:`1px solid ${T.border}`}}>
-              <span>Usage: {d.usageDays?`${d.usageDays} days`:"Perpetual"}{d.usageEndDate?` · Ends: ${new Date(d.usageEndDate).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}`:""}</span>
-              <span>{f(d.amount)}</span>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:"8px",paddingTop:"10px",borderTop:`1px solid ${T.borderSoft}`}}>
+              <div>
+                <div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"3px"}}>Usage left</div>
+                <div style={{fontFamily:DISPLAY,fontSize:"16px",fontWeight:600,color:isExpired?T.err:isExpiring?T.warn:T.text}}>{daysLeft!==null?(isExpired?`Expired ${Math.abs(daysLeft)}d`:`${daysLeft} days`):(d.usageDays?`${d.usageDays} days`:"Perpetual")}</div>
+              </div>
+              <span style={{fontFamily:DISPLAY,fontSize:"15px",fontWeight:600,color:T.gold}}>{f(d.amount)}</span>
             </div>
 
             {/* Action buttons */}
@@ -4165,21 +4182,24 @@ return (
 
         return <>
           {/* Header */}
-          <div style={{background:"linear-gradient(135deg,#0e7490,#0891b2)",borderRadius:"2px",padding:"16px 20px",marginBottom:"16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <div style={{fontSize:"20px",fontWeight:800,color:"#ecfeff",fontFamily:"Bodoni Moda,serif",textTransform:"uppercase",letterSpacing:"1.5px"}}>📈 Creative Performance Hub</div>
-              <div style={{fontSize:"13px",color:"rgba(236,254,255,.6)",marginTop:"2px"}}>Manage influencer creatives for paid ad campaigns</div>
-            </div>
+          <div style={{marginBottom:"22px"}}>
+            <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{allCreatives.length} live creative{allCreatives.length===1?"":"s"} · {expiringCreatives.length} usage window{expiringCreatives.length===1?"":"s"} closing</div>
+            <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Creative Hub</div>
           </div>
 
-          {/* Stats */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"8px",marginBottom:"16px"}}>
-            <StatBox l="Total Creatives" v={allCreatives.length} c="#0891b2"/>
-            <StatBox l="Fresh" v={freshCreatives.length} c="#0891b2" sub="Ready to test"/>
-            <StatBox l="Running" v={runningCreatives.length} c={T.info} sub="In ad rotation"/>
-            <StatBox l="Tested" v={testedCreatives.length} c={T.ok} sub="Testing complete"/>
-            <StatBox l="Expiring Soon" v={expiringCreatives.length} c={expiringCreatives.length>0?"#f59e0b":T.ok} sub="Within 7 days"/>
-            <StatBox l="Expired" v={expiredCreatives.length} c={expiredCreatives.length>0?T.err:T.ok} sub="Usage ended"/>
+          {/* Stat strip */}
+          <div style={{display:"flex",borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,marginBottom:"24px",flexWrap:"wrap"}}>
+            {[
+              {l:"Total Creatives",v:allCreatives.length,c:T.text},
+              {l:"Fresh",v:freshCreatives.length,c:freshCreatives.length>0?T.ok:"#C9C1B2"},
+              {l:"Running",v:runningCreatives.length,c:runningCreatives.length>0?T.info:"#C9C1B2"},
+              {l:"Tested",v:testedCreatives.length,c:testedCreatives.length>0?T.text:"#C9C1B2"},
+              {l:"Expiring",v:expiringCreatives.length,c:expiringCreatives.length>0?T.warn:"#C9C1B2"},
+              {l:"Expired",v:expiredCreatives.length,c:expiredCreatives.length>0?T.err:"#C9C1B2"},
+            ].map((m,i,arr)=><div key={i} style={{flex:"1 1 120px",padding:"18px 22px",borderRight:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+              <div style={{fontSize:"10px",letterSpacing:"2px",textTransform:"uppercase",color:T.sub,marginBottom:"8px"}}>{m.l}</div>
+              <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,lineHeight:1,color:m.c}}>{m.v}</div>
+            </div>)}
           </div>
 
           {/* Expiring alerts */}
@@ -4199,12 +4219,13 @@ return (
           </div>}
 
           {/* Tab navigation */}
-          <div style={{display:"flex",gap:"4px",marginBottom:"12px",borderBottom:`1px solid ${T.border}`,paddingBottom:"6px"}}>
-            {[{k:"fresh",l:"🆕 Fresh",n:freshCreatives.length},{k:"running",l:"🏃 Running",n:runningCreatives.length},{k:"tested",l:"✅ Tested",n:testedCreatives.length},{k:"expiring",l:"⚠️ Expiring",n:expiringCreatives.length}].map(t=>(
-              <button key={t.k} onClick={()=>setAdTab(t.k)} style={{padding:"8px 14px",border:"none",borderBottom:adTab===t.k?"2px solid #0891b2":"2px solid transparent",background:"transparent",color:adTab===t.k?"#0891b2":T.sub,fontWeight:adTab===t.k?700:600,fontSize:"12px",cursor:"pointer",fontFamily:"Bodoni Moda,serif",textTransform:"uppercase",letterSpacing:".5px"}}>
-                {t.l} <span style={{background:adTab===t.k?"#0891b2":T.border,color:adTab===t.k?"#fff":T.sub,borderRadius:"50%",padding:"1px 5px",fontSize:"9px",fontWeight:800,marginLeft:"4px"}}>{t.n}</span>
-              </button>
-            ))}
+          <div style={{display:"flex",gap:"24px",marginBottom:"18px",borderBottom:`1px solid ${T.border}`}}>
+            {[{k:"fresh",l:"Fresh",n:freshCreatives.length,exp:false},{k:"running",l:"Running",n:runningCreatives.length,exp:false},{k:"tested",l:"Tested",n:testedCreatives.length,exp:false},{k:"expiring",l:"Expiring",n:expiringCreatives.length,exp:true}].map(t=>{
+              const active=adTab===t.k; const accent=t.exp?T.err:active?T.brand:T.sub;
+              return <button key={t.k} onClick={()=>setAdTab(t.k)} style={{padding:"0 0 12px",border:"none",borderBottom:active?`2px solid ${t.exp?T.err:T.brand}`:"2px solid transparent",background:"transparent",color:t.exp?T.err:active?T.brand:T.sub,fontWeight:700,fontSize:"12px",cursor:"pointer",fontFamily:T.ui,textTransform:"uppercase",letterSpacing:"1px"}}>
+                {t.l} <span style={{color:active?T.gold:(t.exp?T.err:"#C9C1B2"),marginLeft:"5px"}}>{t.n}</span>
+              </button>;
+            })}
           </div>
 
           {/* Quick filters */}
@@ -4885,15 +4906,25 @@ return (
           </Section>}
 
           {/* Pickups In Transit */}
-          {pickupsInTransit.length>0&&<Section title={`Return Pickups In Transit (${pickupsInTransit.length})`} icon="📮">
-            {pickupsInTransit.map(h=>{
-              const deal = deals.find(d=>d.id===h.dealId);
-              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.info,fontWeight:600}}>· Return In Transit</span></div><div style={{fontSize:"11px",color:T.sub}}>{h.returnCarrier}: <span style={{color:T.info,fontWeight:700}}>{h.returnTrack}</span></div></div>
-                {role==="logistics"&&<Btn v="ok" sm onClick={()=>markProductReturned(deal,h.histIdx)}>✓ Product Returned</Btn>}
-              </div>;
-            })}
-          </Section>}
+          {pickupsInTransit.length>0&&<div style={{marginBottom:"30px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"14px"}}>
+              <span style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700}}>Return Pickups in Transit</span>
+              <span style={{fontSize:"10px",fontWeight:700,color:T.brand,background:"#EDE7D6",padding:"2px 8px",borderRadius:"10px"}}>{pickupsInTransit.length}</span>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:"14px"}}>
+              {pickupsInTransit.map(h=>{
+                const deal = deals.find(d=>d.id===h.dealId);
+                return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"16px 18px",display:"flex",alignItems:"center",gap:"14px"}}>
+                  <span style={{width:"34px",height:"34px",borderRadius:"50%",background:T.infoBg,color:T.info,display:"flex",alignItems:"center",justifyContent:"center",flex:"none",fontSize:"16px"}}>↩</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}><span style={{fontSize:"13px",fontWeight:700}}>{h.inf}</span><span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.info,background:T.infoBg,padding:"3px 7px",borderRadius:"2px",fontWeight:700}}>Return in transit</span></div>
+                    <div style={{fontSize:"10px",color:T.sub,marginTop:"4px"}}>{h.returnCarrier} · <span style={{fontFamily:DISPLAY,letterSpacing:"0.5px",color:T.text}}>{h.returnTrack}</span></div>
+                  </div>
+                  {role==="logistics"&&<Btn v="ok" sm onClick={()=>markProductReturned(deal,h.histIdx)}>Returned</Btn>}
+                </div>;
+              })}
+            </div>
+          </div>}
 
           {/* Re-shipments Pending */}
           {reshipPending.length>0&&<Section title={`Re-shipments Pending (${reshipPending.length})`} icon="📦">
@@ -4917,19 +4948,40 @@ return (
             })}
           </Section>}
 
-          <Section title={`In Transit (${inTransit.length})`} icon="🚚">
-            {inTransit.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"12px"}}>None in transit</div>}
-            {inTransit.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} · {d.products?d.products.map(p=>p.name).join(", "):d.product}</div><div style={{fontSize:"11px",color:T.sub}}>📦 {d.ship.carrier}: <span style={{fontWeight:700,color:T.info}}>{d.ship.track}</span> · {d.ship.dispAt}</div></div>
-              {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(d);setDeliveryF({date:todayLocal(),note:""});setModal("markDelivered")}}>✓ Delivered</Btn>}
-            </div>)}
-          </Section>
-          <Section title="Delivered" icon="✓">
-            {deals.filter(d=>d.ship?.st==="delivered").map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"8px 12px",marginBottom:"4px",display:"flex",justifyContent:"space-between",alignItems:"center",opacity:.6}}>
-              <span style={{fontSize:"13px"}}><b>{d.inf}</b> · {d.products?d.products.map(p=>p.name).join(", "):d.product}</span>
-              <span style={{fontSize:"11px",color:T.ok}}>✓ {d.ship.delAt}</span>
-            </div>)}
-          </Section>
+          {/* In Transit */}
+          <div style={{marginBottom:"30px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"14px"}}>
+              <span style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700}}>In Transit</span>
+              <span style={{fontSize:"10px",fontWeight:700,color:inTransit.length>0?T.brand:T.sub,background:inTransit.length>0?"#EDE7D6":"#F2EEE4",padding:"2px 8px",borderRadius:"10px"}}>{inTransit.length}</span>
+            </div>
+            {inTransit.length===0
+              ? <div style={{background:T.surface,border:`1px dashed ${T.inputBorder}`,borderRadius:"2px",padding:"30px",textAlign:"center"}}>
+                  <div style={{fontSize:"13px",fontWeight:600,color:T.sub}}>Nothing in transit right now</div>
+                  <div style={{fontSize:"11px",color:T.faint,marginTop:"4px"}}>Dispatched orders will appear here with live tracking.</div>
+                </div>
+              : <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
+                  {inTransit.map((d,i,arr)=><div key={d.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none"}}>
+                    <div><div style={{fontWeight:700,fontSize:"13px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"10px",color:T.sub,marginTop:"3px"}}>{d.ship.carrier} · <span style={{fontFamily:DISPLAY,letterSpacing:"0.5px",color:T.text}}>{d.ship.track}</span> · {d.ship.dispAt}</div></div>
+                    {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(d);setDeliveryF({date:todayLocal(),note:""});setModal("markDelivered")}}>Delivered</Btn>}
+                  </div>)}
+                </div>}
+          </div>
+
+          {/* Delivered */}
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"14px"}}>
+              <span style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700}}>Delivered</span>
+              <span style={{fontSize:"10px",fontWeight:700,color:T.ok,background:T.okBg,padding:"2px 8px",borderRadius:"10px"}}>{deals.filter(d=>d.ship?.st==="delivered").length}</span>
+            </div>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
+              {deals.filter(d=>d.ship?.st==="delivered").length===0&&<div style={{padding:"20px",textAlign:"center",color:T.sub,fontSize:"12px"}}>No deliveries yet</div>}
+              {deals.filter(d=>d.ship?.st==="delivered").map((d,i,arr)=><div key={d.id} style={{display:"flex",alignItems:"center",gap:"13px",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none"}}>
+                <span style={{width:"22px",height:"22px",borderRadius:"50%",background:T.okBg,color:T.ok,display:"flex",alignItems:"center",justifyContent:"center",flex:"none",fontSize:"12px",fontWeight:800}}>✓</span>
+                <span style={{flex:1,fontSize:"13px"}}><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></span>
+                <span style={{fontSize:"11px",color:T.sub,fontFamily:DISPLAY}}>Delivered {d.ship.delAt}</span>
+              </div>)}
+            </div>
+          </div>
         </>}
       </div>
 

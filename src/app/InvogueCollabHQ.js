@@ -304,6 +304,8 @@ export default function InvogueCollabHQ() {
   const [users, setUsers] = useState([]);
   const [influencers, setInfluencers] = useState([]);
   const [infProfile, setInfProfile] = useState(null); // selected influencer for profile view
+  const [infSearch, setInfSearch] = useState("");
+  const [infFilter, setInfFilter] = useState("all"); // all | active
   const [loggedIn, setLoggedIn] = useState(null); // null = login screen, user object = app
   const [loginErr, setLoginErr] = useState("");
   const [authChecking, setAuthChecking] = useState(true); // true while resolving initial Supabase session
@@ -4233,48 +4235,62 @@ return (
           const getInfTotalSpend = (inf) => getInfDeals(inf).reduce((s,d)=>s+(d.pays||[]).reduce((ps,p)=>ps+p.amount,0),0);
           const getInfTotalCommitted = (inf) => getInfDeals(inf).filter(d=>!["rejected","pending","renegotiate"].includes(d.status)).reduce((s,d)=>s+d.amount,0);
 
+          const ACTIVE_NOT = ["rejected","paid","dropped","drop_requested","pending","renegotiate"];
           return <>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
-              <div><span style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px"}}>Influencer Database</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>{influencers.length} influencers</span></div>
-              {(role==="negotiator"||role==="admin")&&<Btn v="gold" sm onClick={()=>setModal("newInfluencer")}>+ Add Influencer</Btn>}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:"24px",flexWrap:"wrap",gap:"12px"}}>
+              <div>
+                <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{influencers.length} creators on the roster</div>
+                <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Influencer Database</div>
+              </div>
+              {(role==="negotiator"||role==="admin")&&<Btn v="primary" onClick={()=>setModal("newInfluencer")}>Add Influencer</Btn>}
             </div>
 
-            {/* Stats */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"8px",marginBottom:"14px"}}>
-              <StatBox l="Total Influencers" v={influencers.length} c={T.brand}/>
-              <StatBox l="Active Collabs" v={deals.filter(d=>!["rejected","paid"].includes(d.status)).length} c={T.info}/>
-              <StatBox l="Total Committed" v={f(influencers.reduce((s,inf)=>s+getInfTotalCommitted(inf),0))} c={T.gold}/>
-              <StatBox l="Total Paid" v={f(influencers.reduce((s,inf)=>s+getInfTotalSpend(inf),0))} c={T.ok}/>
+            {/* Stat strip */}
+            <div style={{display:"flex",borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,marginBottom:"24px",flexWrap:"wrap"}}>
+              {[
+                {l:"Total Influencers",v:influencers.length,c:T.text},
+                {l:"Active Collabs",v:deals.filter(d=>!ACTIVE_NOT.includes(d.status)).length,c:T.brand},
+                {l:"Total Committed",v:f(influencers.reduce((s,inf)=>s+getInfTotalCommitted(inf),0)),c:T.text},
+                {l:"Total Paid",v:f(influencers.reduce((s,inf)=>s+getInfTotalSpend(inf),0)),c:T.ok},
+              ].map((m,i,arr)=><div key={i} style={{flex:"1 1 160px",padding:"18px 22px",borderRight:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+                <div style={{fontSize:"10px",letterSpacing:"2px",textTransform:"uppercase",color:T.sub,marginBottom:"10px"}}>{m.l}</div>
+                <div style={{fontFamily:DISPLAY,fontSize:"34px",fontWeight:500,lineHeight:1,color:m.c}}>{m.v}</div>
+              </div>)}
             </div>
 
-            {/* Influencer Cards */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:"10px"}}>
-              {influencers.map(inf=>{
+            {/* Search + filters */}
+            <div style={{display:"flex",alignItems:"center",gap:"14px",marginBottom:"18px",flexWrap:"wrap"}}>
+              <div style={{flex:1,maxWidth:"320px",minWidth:"180px"}}><input value={infSearch} onChange={e=>setInfSearch(e.target.value)} placeholder="Search name, handle, POC…" style={{width:"100%",border:"none",borderBottom:`1px solid ${T.border}`,background:"transparent",padding:"7px 0",fontSize:"13px",fontFamily:T.ui,color:T.text,outline:"none"}}/></div>
+              <div style={{marginLeft:"auto",display:"flex",gap:"7px"}}>
+                {[{k:"all",l:"All"},{k:"active",l:"Active"}].map(t=><button key={t.k} onClick={()=>setInfFilter(t.k)} style={{fontSize:"10px",letterSpacing:"0.5px",textTransform:"uppercase",fontWeight:700,color:infFilter===t.k?"#fff":T.sub,background:infFilter===t.k?T.brand:T.surface,border:`1px solid ${infFilter===t.k?T.brand:T.border}`,padding:"6px 12px",borderRadius:"2px",cursor:"pointer",fontFamily:T.ui}}>{t.l}</button>)}
+              </div>
+            </div>
+
+            {/* Card grid */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:"16px"}}>
+              {influencers.filter(inf=>{
+                const q=infSearch.trim().toLowerCase();
+                if(q && !(`${inf.name} ${inf.handle||""} ${inf.poc||""}`.toLowerCase().includes(q))) return false;
+                if(infFilter==="active" && getInfDeals(inf).filter(d=>!ACTIVE_NOT.includes(d.status)).length===0) return false;
+                return true;
+              }).map(inf=>{
                 const infDeals = getInfDeals(inf);
                 const totalCollabs = infDeals.length;
-                const activeCollabs = infDeals.filter(d=>!["rejected","paid"].includes(d.status)).length;
+                const activeCollabs = infDeals.filter(d=>!ACTIVE_NOT.includes(d.status)).length;
                 const totalSpend = getInfTotalSpend(inf);
-                const ratingColor = inf.rating==="A+"?T.ok:inf.rating==="A"?T.info:inf.rating==="B+"?T.warn:T.sub;
-                return <div key={inf.id} onClick={()=>setInfProfile(inf)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"14px",cursor:"pointer",transition:"all .12s"}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow=T.cardShadowHover}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"8px"}}>
-                    <div style={{display:"flex",gap:"10px",alignItems:"center"}}>
-                      <div style={{width:"36px",height:"36px",borderRadius:"50%",background:`linear-gradient(135deg,${T.goldSoft},${T.goldMid})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",fontWeight:800,color:T.gold}}>{inf.name.split(" ").map(w=>w[0]).join("")}</div>
-                      <div>
-                        <div style={{fontWeight:800,fontSize:"13px"}}>{inf.name}</div>
-                        <div style={{fontSize:"11px",color:T.sub}}>{inf.platform} · {inf.followers} · {inf.city}</div>
-                      </div>
+                return <div key={inf.id} onClick={()=>setInfProfile(inf)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"18px",cursor:"pointer"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"16px"}}>
+                    <div style={{width:"42px",height:"42px",borderRadius:"50%",background:T.goldSoft,color:T.brand,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:DISPLAY,fontSize:"16px",flex:"none"}}>{(inf.name||"?").trim()[0]}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:"14px",fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{inf.name}</div>
+                      <div style={{fontSize:"10px",color:T.sub,marginTop:"1px"}}>{inf.platform} · {inf.followers} followers</div>
                     </div>
-                    <span style={{padding:"2px 7px",borderRadius:"2px",fontSize:"11px",fontWeight:800,color:ratingColor,background:ratingColor+"18"}}>{inf.rating}</span>
+                    <span title={activeCollabs>0?"active collab":"no active collab"} style={{width:"7px",height:"7px",borderRadius:"50%",background:activeCollabs>0?T.ok:"#C9C1B2",flex:"none"}}/>
                   </div>
-                  <div style={{fontSize:"11px",color:T.sub,marginBottom:"6px"}}>{inf.category} · POC: {inf.poc}</div>
-                  <div style={{display:"flex",gap:"4px",marginBottom:"8px",flexWrap:"wrap"}}>
-                    {(inf.tags||[]).slice(0,4).map((tag,i)=><span key={i} style={{padding:"1px 6px",borderRadius:"2px",fontSize:"10px",fontWeight:600,background:T.goldSoft,color:T.gold}}>#{tag}</span>)}
-                  </div>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:"6px",borderTop:`1px solid ${T.border}`,fontSize:"12px"}}>
-                    <span style={{color:T.sub}}>{totalCollabs} collabs ({activeCollabs} active)</span>
-                    <span style={{fontWeight:700,color:T.gold}}>{f(totalSpend)} paid</span>
+                  <div style={{fontSize:"10px",color:T.sub,borderTop:`1px solid ${T.borderSoft}`,paddingTop:"12px",marginBottom:"12px"}}>POC · {inf.poc||"—"}</div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+                    <span style={{fontSize:"11px",color:T.sub}}>{totalCollabs} collab{totalCollabs===1?"":"s"} <span style={{color:activeCollabs>0?T.ok:T.faint,fontWeight:activeCollabs>0?600:400}}>· {activeCollabs} active</span></span>
+                    <span style={{fontFamily:DISPLAY,fontSize:"14px",fontWeight:600,color:totalSpend>0?T.gold:T.faint}}>{f(totalSpend)}<span style={{fontSize:"9px",letterSpacing:"0.5px",textTransform:"uppercase",color:T.faint,fontFamily:T.ui,fontWeight:700}}> paid</span></span>
                   </div>
                 </div>;
               })}
@@ -4722,53 +4738,53 @@ return (
 
         {/* ═══ CAMPAIGNS ═══ */}
         {view==="campaigns"&&<>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
-            <span style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px"}}>Campaigns</span>
-            {(role==="approver"||role==="finance"||role==="admin")&&<Btn v="gold" sm onClick={()=>{setNCamp({name:"",budget:"",target:"",deadline:"",brief:""});setModal("newCamp")}}>+ New Campaign</Btn>}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:"24px",flexWrap:"wrap",gap:"12px"}}>
+            <div>
+              <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{campaigns.filter(c=>c.status==="active").length} active · {f(campaigns.reduce((s,c)=>s+campCommitted(c.id),0))} committed</div>
+              <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Campaigns</div>
+            </div>
+            {(role==="approver"||role==="finance"||role==="admin")&&<Btn v="gold" onClick={()=>{setNCamp({name:"",budget:"",target:"",deadline:"",brief:""});setModal("newCamp")}}>+ New Campaign</Btn>}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(330px,1fr))",gap:"10px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:"18px"}}>
             {campaigns.map(c=>{
               const comm=campCommitted(c.id),pd=campPaid(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0,lk=campLocked(c.id);
-              return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"16px",cursor:"pointer",transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold;e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.06)"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none"}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:"10px"}}>
-                  <div><div style={{fontWeight:800,fontSize:"14px"}}>{c.name}</div><div style={{fontSize:"11px",color:T.sub,marginTop:"1px"}}>Deadline: {c.deadline}</div></div>
-                  <span style={{padding:"2px 7px",borderRadius:"2px",fontSize:"11px",fontWeight:700,color:c.status==="active"?T.ok:T.warn,background:c.status==="active"?T.okBg:T.warnBg}}>{c.status}</span>
+              const over=comm>c.budget&&c.budget>0;
+              return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${over?"#E8C9C6":T.border}`,borderTop:over?`2px solid ${T.err}`:undefined,borderRadius:"2px",padding:"22px",cursor:"pointer"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
+                  <div style={{fontFamily:DISPLAY,fontSize:"20px",fontWeight:600,lineHeight:1.15}}>{c.name}</div>
+                  <span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,padding:"3px 8px",borderRadius:"2px",whiteSpace:"nowrap",color:c.status==="active"?T.ok:c.status==="planning"?T.warn:T.sub,background:c.status==="active"?T.okBg:c.status==="planning"?T.warnBg:"#F2EEE4"}}>{c.status}</span>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"10px"}}>
-                  <div><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>BUDGET</div><div style={{fontSize:"18px",fontWeight:800}}>{f(c.budget)}</div></div>
-                  <div><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>COMMITTED</div><div style={{fontSize:"18px",fontWeight:800,color:T.gold}}>{f(comm)}</div></div>
-                  <div><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>PAID</div><div style={{fontSize:"18px",fontWeight:800,color:T.ok}}>{f(pd)}</div></div>
+                <div style={{fontSize:"10px",color:c.deadline?T.sub:T.faint,marginBottom:"18px",fontStyle:c.deadline?"normal":"italic",fontFamily:c.deadline?T.ui:DISPLAY}}>{c.deadline?`Deadline · ${c.deadline}`:"No deadline set"}</div>
+                <div style={{display:"flex",borderTop:`1px solid ${T.borderSoft}`,borderBottom:`1px solid ${T.borderSoft}`,marginBottom:"14px"}}>
+                  <div style={{flex:1,padding:"12px 0"}}><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px"}}>Budget</div><div style={{fontFamily:DISPLAY,fontSize:"16px",fontWeight:600}}>{f(c.budget)}</div></div>
+                  <div style={{flex:1,padding:"12px 0"}}><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px"}}>Committed</div><div style={{fontFamily:DISPLAY,fontSize:"16px",fontWeight:600,color:over?T.err:comm>0?T.gold:T.faint}}>{f(comm)}</div></div>
+                  <div style={{flex:1,padding:"12px 0"}}><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px"}}>Paid</div><div style={{fontFamily:DISPLAY,fontSize:"16px",fontWeight:600,color:pd>0?T.ok:T.faint}}>{f(pd)}</div></div>
                 </div>
-                <div style={{marginBottom:"6px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:"10px",color:T.sub,marginBottom:"2px"}}><span>Budget used</span><span style={{color:pct>90?T.err:T.sub}}>{pct}%</span></div>
-                  <div style={{height:"4px",borderRadius:"3px",background:T.border,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.warn:T.ok,borderRadius:"3px"}}/></div>
-                </div>
-                <div style={{fontSize:"11px",color:T.sub}}>{lk}/{c.target} influencers locked · {campDeals(c.id).length} total deals</div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:"10px",marginBottom:"6px"}}><span style={{color:T.sub}}>Budget used</span><span style={{color:over?T.err:T.sub,fontWeight:700}}>{pct}%</span></div>
+                <div style={{height:"6px",background:T.goldSoft,borderRadius:"3px",overflow:"hidden",marginBottom:over?"12px":"24px"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:over?T.err:pct>70?T.gold:T.brand}}/></div>
+                {over&&<div style={{display:"flex",alignItems:"center",gap:"7px",background:T.errBg,borderRadius:"2px",padding:"7px 10px",marginBottom:"14px"}}><span style={{fontSize:"10px",color:"#8a1a12",fontWeight:600}}>Over budget by {f(comm-c.budget)} — review before locking more.</span></div>}
+                <div style={{fontSize:"11px",color:T.sub}}>{lk}/{c.target} influencers locked · <b style={{color:T.text}}>{campDeals(c.id).length} deals</b></div>
               </div>;})}
           </div>
         </>}
 
         {/* ═══ DELIVERABLES BANK ═══ */}
         {view==="deliverables"&&<>
-          <div style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px",marginBottom:"14px"}}>Deliverables Bank — <span style={{color:T.purple}}>{pendingDels.length} Active</span></div>
-          {/* Workflow summary cards */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"8px",marginBottom:"16px"}}>
-            <div style={{background:T.warnBg,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 14px"}}>
-              <div style={{fontSize:"11px",color:T.warn,fontWeight:700,textTransform:"uppercase"}}>Pending</div>
-              <div style={{fontSize:"20px",fontWeight:800,color:T.warn}}>{pendingDels.filter(d=>d.st==="pending").length}</div>
-            </div>
-            <div style={{background:T.infoBg,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 14px"}}>
-              <div style={{fontSize:"11px",color:T.info,fontWeight:700,textTransform:"uppercase"}}>Submitted</div>
-              <div style={{fontSize:"20px",fontWeight:800,color:T.info}}>{awaitingReview.length}</div>
-            </div>
-            <div style={{background:T.errBg,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 14px"}}>
-              <div style={{fontSize:"11px",color:T.err,fontWeight:700,textTransform:"uppercase"}}>Revision Needed</div>
-              <div style={{fontSize:"20px",fontWeight:800,color:T.err}}>{revisionNeeded.length}</div>
-            </div>
-            <div style={{background:T.okBg,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 14px"}}>
-              <div style={{fontSize:"11px",color:T.ok,fontWeight:700,textTransform:"uppercase"}}>Approved</div>
-              <div style={{fontSize:"20px",fontWeight:800,color:T.ok}}>{pendingDels.filter(d=>d.st==="approved").length}</div>
-            </div>
+          <div style={{marginBottom:"24px"}}>
+            <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{pendingDels.length} deliverable{pendingDels.length===1?"":"s"} in flight</div>
+            <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Deliverables Bank</div>
+          </div>
+          {/* Workflow summary strip */}
+          <div style={{display:"flex",borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,marginBottom:"26px",flexWrap:"wrap"}}>
+            {[
+              {l:"Pending",v:pendingDels.filter(d=>d.st==="pending").length,c:T.warn},
+              {l:"Submitted",v:awaitingReview.length,c:T.info},
+              {l:"Revision Needed",v:revisionNeeded.length,c:T.err},
+              {l:"Approved / Live",v:pendingDels.filter(d=>d.st==="approved").length,c:T.ok},
+            ].map((m,i,arr)=><div key={i} style={{flex:"1 1 150px",padding:"18px 22px",borderRight:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+              <div style={{fontSize:"10px",letterSpacing:"2px",textTransform:"uppercase",color:T.sub,marginBottom:"8px"}}>{m.l}</div>
+              <div style={{fontFamily:DISPLAY,fontSize:"34px",fontWeight:500,lineHeight:1,color:m.v>0?m.c:"#C9C1B2"}}>{m.v}</div>
+            </div>)}
           </div>
           <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",overflow:"hidden",marginBottom:"20px"}}>
             <div style={{display:"grid",gridTemplateColumns:"1.8fr 1.5fr 1.2fr 0.8fr 0.8fr 0.7fr",padding:"8px 12px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>
@@ -4840,7 +4856,10 @@ return (
 
         {/* ═══ SHIPMENTS (full view) ═══ */}
         {view==="shipments"&&<>
-          <div style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px",marginBottom:"14px"}}>All Shipments</div>
+          <div style={{marginBottom:"24px"}}>
+            <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{pickupsInTransit.length} return pickup{pickupsInTransit.length===1?"":"s"} · {inTransit.length} in transit · {deals.filter(d=>d.ship?.st==="delivered").length} delivered</div>
+            <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>All Shipments</div>
+          </div>
           {awaitingAck.length>0&&<Section title={`Awaiting Acknowledgement (${awaitingAck.length})`} icon="⏳">
             {awaitingAck.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:"3px solid #f59e0b",borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Email sent · Deadline: {d.deadline}</div></div>

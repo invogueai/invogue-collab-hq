@@ -4725,13 +4725,15 @@ return (
             return <>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(265px,1fr))",gap:"16px"}}>
                 {pagedDeals.map(d=>{
-                  const camp=getCamp(d.cid);
                   const paid=totalPaid(d);
-                  const done=d.dels.filter(x=>x.st==="live").length;
+                  // deliverables grouped by type → "1 Reel · 2 Stories"
+                  const delCounts={}; (d.dels||[]).forEach(x=>{const t=x.type||"Deliverable"; delCounts[t]=(delCounts[t]||0)+1;});
+                  const plural=(t,n)=> n===1?t:(t.endsWith("y")?t.slice(0,-1)+"ies":t+"s");
+                  const delSummary=Object.entries(delCounts).map(([t,n])=>`${n} ${plural(t,n)}`).join(" · ")||"No deliverables";
                   return <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${bulkSelected.has(d.id)?T.brand:T.border}`,borderRadius:"2px",padding:"18px",cursor:"pointer",animation:"fadeUp .3s ease"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"14px"}}>
-                      <div style={{display:"flex",alignItems:"flex-start",gap:"8px"}}>
-                        <input type="checkbox" checked={bulkSelected.has(d.id)} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();toggleBulkSelect(d.id)}} style={{cursor:"pointer",marginTop:"4px"}}/>
+                      <div style={{display:"flex",alignItems:"flex-start",gap:"9px"}}>
+                        <input type="checkbox" checked={bulkSelected.has(d.id)} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();toggleBulkSelect(d.id)}} style={{cursor:"pointer",marginTop:"5px",accentColor:T.brand}}/>
                         <div>
                           <div style={{fontFamily:T.display,fontSize:"17px",fontWeight:600}}>{d.inf}</div>
                           <div style={{fontSize:"10px",color:T.sub,marginTop:"3px"}}>{d.platform} · {d.followers}</div>
@@ -4739,11 +4741,10 @@ return (
                       </div>
                       <Badge s={d.status} sm/>
                     </div>
-                    <div style={{fontSize:"12px",color:T.text,borderTop:`1px solid ${T.borderSoft}`,paddingTop:"12px"}}>{d.products?d.products.map(p=>p.name).join(", "):d.product}{d.agencyManaged&&<span style={{fontSize:"9px",color:T.gold,textTransform:"uppercase",letterSpacing:"0.5px"}}> · Agency</span>}</div>
-                    <div style={{fontSize:"10px",color:T.sub,marginTop:"3px"}}>{camp?camp.name+" · ":""}{done}/{d.dels.length} live · {d.by}</div>
-                    <div style={{display:"flex",gap:"2px",marginTop:"12px"}}>{d.dels.map((dl,i)=><div key={i} title={`${dl.type}: ${dl.st}`} style={{flex:1,height:"3px",borderRadius:"2px",background:dl.st==="live"?T.ok:T.goldSoft}}/>)}</div>
+                    <div style={{fontSize:"12px",color:"#3a342c",borderTop:`1px solid ${T.borderSoft}`,paddingTop:"12px"}}>{d.products?d.products.map(p=>p.name).join(", "):d.product}{d.agencyManaged&&<span style={{fontSize:"9px",color:T.gold,textTransform:"uppercase",letterSpacing:"0.5px"}}> · Agency</span>}</div>
+                    <div style={{fontSize:"10px",color:T.sub,marginTop:"3px"}}>{delSummary}</div>
                     <div style={{fontFamily:T.display,fontSize:"20px",fontWeight:600,marginTop:"14px"}}>{f(d.amount)}</div>
-                    {paid>0&&paid<d.amount&&<div style={{marginTop:"6px",height:"2.5px",borderRadius:"2px",background:T.goldSoft,overflow:"hidden"}}><div style={{height:"100%",width:`${(paid/d.amount)*100}%`,background:T.ok}}/></div>}
+                    {paid>0&&paid<d.amount&&<div style={{marginTop:"8px",height:"2.5px",borderRadius:"2px",background:T.goldSoft,overflow:"hidden"}}><div style={{height:"100%",width:`${(paid/d.amount)*100}%`,background:T.ok}}/></div>}
                   </div>;
                 })}
               </div>

@@ -230,15 +230,17 @@ const Sel = ({value,onChange,options})=>(
 
 const Field = ({label,children,span,error,required})=>(<div style={{gridColumn:span?`span ${span}`:undefined,marginBottom:"14px"}}><div style={{fontSize:"10px",fontWeight:700,color:error?T.err:T.sub,textTransform:"uppercase",letterSpacing:"1.5px",marginBottom:"6px"}}>{label}{required&&<span style={{color:T.err}}> *</span>}{error&&<span style={{color:T.err,fontSize:"10px",marginLeft:"6px",textTransform:"none",fontWeight:600,letterSpacing:0}}>{error}</span>}</div>{children}</div>);
 
-const Modal = ({open,onClose,title,children,w=540})=>{
+const Modal = ({open,onClose,title,children,w=540,bare})=>{
   if(!open) return null;
   return <div role="presentation" style={{position:"fixed",inset:0,background:"rgba(26,20,14,.32)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"16px",animation:"fadeIn .2s ease"}} onClick={onClose}>
-    <div role="dialog" aria-modal="true" aria-label={title} onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:"2px",width:`${w}px`,maxWidth:"96vw",minWidth:"280px",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 10px 40px rgba(0,0,0,.20)",animation:"fadeUp .22s ease"}}>
-      <div style={{padding:"20px 24px",borderBottom:`1px solid ${T.borderHead}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-        <span style={{fontWeight:600,fontSize:"20px",color:T.text,fontFamily:T.display}}>{title}</span>
-        <button onClick={onClose} style={{background:"transparent",border:"none",fontSize:"20px",cursor:"pointer",color:T.faint,padding:"2px 4px",lineHeight:1}}>×</button>
-      </div>
-      <div style={{padding:"22px 24px",overflowY:"auto",flex:1}}>{children}</div>
+    <div role="dialog" aria-modal="true" aria-label={title} onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:"2px",width:`${w}px`,maxWidth:"96vw",minWidth:"280px",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 10px 40px rgba(0,0,0,.20)",animation:"fadeUp .22s ease",overflow:"hidden"}}>
+      {bare ? children : <>
+        <div style={{padding:"20px 24px",borderBottom:`1px solid ${T.borderHead}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <span style={{fontWeight:600,fontSize:"20px",color:T.text,fontFamily:T.display}}>{title}</span>
+          <button onClick={onClose} style={{background:"transparent",border:"none",fontSize:"20px",cursor:"pointer",color:T.faint,padding:"2px 4px",lineHeight:1}}>×</button>
+        </div>
+        <div style={{padding:"22px 24px",overflowY:"auto",flex:1}}>{children}</div>
+      </>}
     </div>
   </div>;
 };
@@ -306,6 +308,7 @@ export default function InvogueCollabHQ() {
   const [infProfile, setInfProfile] = useState(null); // selected influencer for profile view
   const [infSearch, setInfSearch] = useState("");
   const [infFilter, setInfFilter] = useState("all"); // all | active
+  const [dealTab, setDealTab] = useState("overview"); // overview|deliverables|shipment|payment|activity
   const [loggedIn, setLoggedIn] = useState(null); // null = login screen, user object = app
   const [loginErr, setLoginErr] = useState("");
   const [authChecking, setAuthChecking] = useState(true); // true while resolving initial Supabase session
@@ -318,6 +321,7 @@ export default function InvogueCollabHQ() {
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState(null);
   const [selCamp, setSelCamp] = useState(null); // selected campaign for detail modal
+  useEffect(()=>{ if(modal==="detail") setDealTab("overview"); }, [modal, sel?.id]);
 
   // Form states
   const [nDeal, setNDeal] = useState(null);
@@ -5424,42 +5428,79 @@ return (
       </Modal>
 
       {/* ═══════════════ DEAL DETAIL ═══════════════ */}
-      <Modal open={modal==="detail"&&!!sel} onClose={()=>{setModal(null);setSel(null)}} title={sel?.inf||""} w={680}>
+      <Modal open={modal==="detail"&&!!sel} onClose={()=>{setModal(null);setSel(null)}} title={sel?.inf||""} w={680} bare>
         {sel&&(()=>{
           const camp=getCamp(sel.cid), paid=totalPaid(sel), rem=remaining(sel), done=sel.dels.filter(x=>x.st==="live").length;
+          const infRec=influencers.find(x=>x.name===sel.inf);
+          const subline=[sel.platform, infRec?.handle, sel.followers, infRec?.city].filter(Boolean).join(" · ");
+          const lastLog=(sel.logs||[])[(sel.logs||[]).length-1];
+          const locked=["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","partial_paid","paid"].includes(sel.status);
+          const steps=[{label:"Content Live",done:isPaymentEligible(sel)},{label:sel.agencyManaged?"Agency Inv.":"Form Sent",done:sel.agencyManaged?!!sel.agencyInvoiceUrl:!!sel.paymentFormSent},{label:"Details In",done:!!sel.paymentDetailsAt},{label:"Paid",done:sel.status==="paid"}];
+          const commercials=[["Campaign",camp?.name||"—"],["Usage Rights",sel.usage||"—"],["Payment Terms",ptLabel(sel.paymentTerms||"next_15th")],["Deadline",sel.deadline||"—"],["Product",sel.products?sel.products.map(p=>p.name).join(", "):sel.product||"—"],["Platform",`${sel.platform||"—"}${sel.followers?` · ${sel.followers}`:""}`],["Phone",sel.phone||"—"],["Email",sel.email||"Not provided"]];
+          const TABS=[{k:"overview",l:"Overview"},{k:"deliverables",l:"Deliverables"},{k:"shipment",l:"Shipment"},{k:"payment",l:"Payment"},{k:"activity",l:"Activity"}];
           return <>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
-              <div style={{display:"flex",gap:"5px",alignItems:"center"}}><Badge s={sel.status}/>{camp&&<span style={{fontSize:"11px",color:T.gold,fontWeight:700}}>🎯 {camp.name}</span>}</div>
-              <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
-                {(()=>{const inf=influencers.find(x=>x.name===sel.inf); return inf?<Btn v="ghost" sm onClick={()=>{setModal(null);setSel(null);setInfProfile(inf)}}>⭐ View Profile</Btn>:null;})()}
-                <span style={{fontSize:"11px",fontWeight:700,color:T.brand,background:T.goldSoft,padding:"2px 8px",borderRadius:"2px",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>{sel.collabId||"—"}</span>
-                <span style={{fontSize:"10px",color:T.sub}}>{sel.by} · {sel.at}</span>
+            {/* Drawer header */}
+            <div style={{padding:"24px 28px 0",background:"#FBFAF7",borderBottom:`1px solid ${T.borderHead}`,flexShrink:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
+                  <span style={{fontSize:"10px",letterSpacing:"2.5px",textTransform:"uppercase",color:T.gold,fontWeight:600}}>Collab · {sel.collabId||"—"}</span>
+                  {infRec&&<span onClick={()=>{setModal(null);setSel(null);setInfProfile(infRec)}} style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,cursor:"pointer",fontWeight:700}}>★ Profile</span>}
+                </div>
+                <button onClick={()=>{setModal(null);setSel(null)}} style={{background:"transparent",border:"none",fontSize:"18px",cursor:"pointer",color:T.faint,lineHeight:1}}>×</button>
               </div>
-            </div>
-
-            {/* Info grid */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"12px"}}>
-              {[["Platform",`${sel.platform} · ${sel.followers}`],["Product",sel.products?sel.products.map(p=>p.name).join(", "):sel.product],["Usage",sel.usage],["Deadline",sel.deadline],["Profile",sel.profile],["Phone",sel.phone||"—"],["Email",sel.email||"Not provided"]].map(([l,v])=><div key={l}><div style={{fontSize:"10px",fontWeight:800,color:T.sub,textTransform:"uppercase"}}>{l}</div><div style={{fontSize:"13px",marginTop:"1px"}}>{v}</div></div>)}
-            </div>
-            {sel.paymentTerms&&<div style={{padding:"8px 10px",background:T.infoBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>💳 Payment Terms:</span> {ptLabel(sel.paymentTerms)}</div>}
-            {sel.address&&<div style={{padding:"8px 10px",background:T.infoBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>📍 Address:</span> {sel.address}</div>}
-            {sel.status==="renegotiate"&&sel.renegotiationNote&&<div style={{padding:"10px 12px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}><div style={{fontSize:"10px",fontWeight:800,color:T.warn,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"3px"}}>📝 Manager's Renegotiation Note</div><div style={{color:T.text,lineHeight:1.5}}>{sel.renegotiationNote}</div></div>}
-
-            {/* Amount box */}
-            <div style={{background:T.goldSoft,border:`1px dashed ${T.goldMid}`,borderRadius:"2px",padding:"12px",marginBottom:"12px"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:"16px",gap:"12px"}}>
                 <div>
-                  <div style={{fontSize:"10px",fontWeight:800,color:T.sub,textTransform:"uppercase"}}>{["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","partial_paid","paid"].includes(sel.status)?"🔒 Locked Amount":"Proposed Amount"}</div>
-                  <div style={{fontSize:"22px",fontWeight:900,color:T.gold}}>{f(sel.amount)}</div>
+                  <div style={{fontFamily:T.display,fontSize:"28px",fontWeight:500,letterSpacing:"-0.5px",lineHeight:1.1}}>{sel.inf}</div>
+                  <div style={{fontSize:"11px",color:T.sub,marginTop:"5px"}}>{subline}</div>
                 </div>
-                <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:"11px",color:T.ok,fontWeight:700}}>Paid: {f(paid)}</div>
-                  <div style={{fontSize:"11px",color:rem>0?T.warn:T.ok,fontWeight:700}}>Remaining: {f(rem)}</div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  <div style={{fontFamily:T.display,fontSize:"24px",fontWeight:600}}>{f(sel.amount)}</div>
+                  <div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginTop:"2px"}}>{locked?"Amount Locked":"Proposed"}{paid>0?` · ${f(paid)} paid`:""}</div>
                 </div>
               </div>
-              {paid>0&&<div style={{height:"4px",borderRadius:"3px",background:T.border,marginTop:"8px"}}><div style={{height:"100%",width:`${Math.min(paid/sel.amount*100,100)}%`,background:T.ok,borderRadius:"3px"}}/></div>}
-              {sel.inv&&!sel.inv.match&&<div style={{marginTop:"8px",padding:"6px 8px",background:T.errBg,borderRadius:"2px",fontSize:"11px",color:T.err}}>⚠ Invoice: {f(sel.inv.amount)} vs Locked: {f(sel.amount)} — Difference: {f(Math.abs(sel.inv.amount-sel.amount))}</div>}
+              <div style={{display:"flex",gap:"22px",flexWrap:"wrap"}}>
+                {TABS.map(t=><span key={t.k} onClick={()=>setDealTab(t.k)} style={{fontSize:"11px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:dealTab===t.k?700:400,color:dealTab===t.k?T.brand:T.sub,borderBottom:dealTab===t.k?`2px solid ${T.brand}`:"2px solid transparent",paddingBottom:"12px",cursor:"pointer"}}>{t.l}</span>)}
+              </div>
             </div>
+
+            {/* Scrollable content */}
+            <div style={{padding:"24px 28px",overflowY:"auto",flex:1,minHeight:0}}>
+
+            {dealTab==="overview"&&<>
+              <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"22px",flexWrap:"wrap"}}>
+                <Badge s={sel.status}/>
+                {lastLog&&<span style={{fontSize:"11px",color:T.sub,fontStyle:"italic",fontFamily:T.display}}>{lastLog.a} · {lastLog.u} · {lastLog.t}</span>}
+              </div>
+              {sel.status==="renegotiate"&&sel.renegotiationNote&&<div style={{padding:"10px 12px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"2px",marginBottom:"20px",fontSize:"13px"}}><div style={{fontSize:"10px",fontWeight:800,color:T.warn,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"3px"}}>Manager's Renegotiation Note</div><div style={{color:T.text,lineHeight:1.5}}>{sel.renegotiationNote}</div></div>}
+              <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"14px"}}>Commercials</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderTop:`1px solid ${T.border}`,marginBottom:"20px"}}>
+                {commercials.map(([l,v],i)=>{const left=i%2===0;return <div key={l} style={{padding:left?"14px 20px 14px 0":"14px 0 14px 20px",borderBottom:`1px solid ${T.borderSoft}`,borderRight:left?`1px solid ${T.borderSoft}`:"none"}}><div style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"5px"}}>{l}</div><div style={{fontSize:"13px",fontWeight:600,wordBreak:"break-word"}}>{v}</div></div>;})}
+              </div>
+              {sel.profile&&<div style={{fontSize:"12px",marginBottom:"12px"}}><span style={{color:T.sub}}>Profile · </span><a href={ensureUrl(sel.profile)} target="_blank" rel="noreferrer" style={{color:T.info,wordBreak:"break-all"}}>{sel.profile}</a></div>}
+              {sel.address&&<div style={{padding:"10px 12px",background:T.infoBg,borderRadius:"2px",marginBottom:"20px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>📍 Address:</span> {sel.address}</div>}
+              <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"18px"}}>Payment Workflow</div>
+              <div style={{display:"flex",alignItems:"flex-start",marginBottom:"28px"}}>
+                {steps.map((s,i)=><div key={i} style={{flex:1,textAlign:"center",position:"relative"}}>
+                  <div style={{width:"26px",height:"26px",borderRadius:"50%",margin:"0 auto 8px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",...(s.done?{background:T.brand,color:"#fff"}:{background:"#fff",border:`1.5px solid ${T.inputBorder}`,color:T.faint})}}>{s.done?"✓":i+1}</div>
+                  <div style={{fontSize:"10px",fontWeight:700,color:s.done?T.text:T.sub}}>{s.label}</div>
+                  {i<steps.length-1&&<div style={{position:"absolute",top:"13px",left:"62%",right:"-38%",height:"1px",background:T.border}}/>}
+                </div>)}
+              </div>
+              <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"14px"}}>Deliverables</div>
+              <div style={{borderTop:`1px solid ${T.border}`}}>
+                {sel.dels.map((dl,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"13px 0",borderBottom:i<sel.dels.length-1?`1px solid ${T.borderSoft}`:"none"}}><span style={{fontSize:"13px",fontWeight:600}}>{dl.type}{dl.desc&&<span style={{fontSize:"11px",color:T.sub,fontWeight:400}}> · {dl.desc}</span>}</span><DBadge s={dl.st}/></div>)}
+              </div>
+            </>}
+
+            {dealTab==="payment"&&<>
+              <div style={{background:T.goldSoft,border:`1px dashed ${T.goldMid}`,borderRadius:"2px",padding:"12px",marginBottom:"16px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+                  <div><div style={{fontSize:"10px",fontWeight:800,color:T.sub,textTransform:"uppercase"}}>{locked?"🔒 Locked Amount":"Proposed Amount"}</div><div style={{fontSize:"22px",fontWeight:900,color:T.gold,fontFamily:T.display}}>{f(sel.amount)}</div></div>
+                  <div style={{textAlign:"right"}}><div style={{fontSize:"11px",color:T.ok,fontWeight:700}}>Paid: {f(paid)}</div><div style={{fontSize:"11px",color:rem>0?T.warn:T.ok,fontWeight:700}}>Remaining: {f(rem)}</div></div>
+                </div>
+                {paid>0&&<div style={{height:"4px",borderRadius:"3px",background:T.border,marginTop:"8px"}}><div style={{height:"100%",width:`${Math.min(paid/sel.amount*100,100)}%`,background:T.ok,borderRadius:"3px"}}/></div>}
+                {sel.inv&&!sel.inv.match&&<div style={{marginTop:"8px",padding:"6px 8px",background:T.errBg,borderRadius:"2px",fontSize:"11px",color:T.err}}>⚠ Invoice: {f(sel.inv.amount)} vs Locked: {f(sel.amount)} — Difference: {f(Math.abs(sel.inv.amount-sel.amount))}</div>}
+              </div>
 
             {/* Payments */}
             {sel.pays.length>0&&<Section title="Payment History" icon="💰">
@@ -5469,26 +5510,9 @@ return (
               </div>)}
             </Section>}
 
-            {/* Payment Workflow Tracker */}
-            {["live","partial_live","payment_details_received","invoice_pending_approval","invoice_ok","disputed","payment_requested","payment_approved","partial_paid","paid"].includes(sel.status)&&(role==="negotiator"||role==="admin"||role==="approver"||role==="finance")&&<Section title="Payment Workflow" icon="💸">
-              <div style={{display:"flex",gap:"4px",alignItems:"center",marginBottom:"4px"}}>
-                {[
-                  {label:"Content Live",done:isPaymentEligible(sel)},
-                  {label:sel.agencyManaged?"Agency Invoice":"Form Sent",done:sel.agencyManaged?!!sel.agencyInvoiceUrl:!!sel.paymentFormSent},
-                  {label:"Details Received",done:!!sel.paymentDetailsAt},
-                  {label:"Paid",done:sel.status==="paid"},
-                ].map((step,si)=><div key={si} style={{display:"contents"}}>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",flex:1}}>
-                    <div style={{width:"28px",height:"28px",borderRadius:"50%",background:step.done?T.ok:T.border,color:step.done?"#fff":T.sub,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",fontWeight:700}}>{step.done?"✓":si+1}</div>
-                    <div style={{fontSize:"9px",fontWeight:700,color:step.done?T.ok:T.sub,textAlign:"center",marginTop:"3px",textTransform:"uppercase",letterSpacing:".3px"}}>{step.label}</div>
-                  </div>
-                  {si<3&&<div style={{flex:0,width:"20px",height:"2px",background:step.done?T.ok:T.border,marginBottom:"16px"}}/>}
-                </div>)}
-              </div>
-              {sel.agencyManaged&&<div style={{fontSize:"11px",color:T.sub,marginTop:"6px"}}>🏢 Agency-managed{sel.agencyName?` · ${sel.agencyName}`:""}{sel.agencyInvoiceUrl?<> · <a href={sel.agencyInvoiceUrl} target="_blank" rel="noopener noreferrer" style={{color:T.info,fontWeight:700}}>View invoice ↗</a></>:""}</div>}
-              {totalPaid(sel)>0&&sel.status!=="paid"&&<div style={{fontSize:"11px",color:T.sub,marginTop:"6px"}}>Paid {f(totalPaid(sel))} of {f(sel.amount)} · {f(remaining(sel))} remaining</div>}
-            </Section>}
+            </>}
 
+            {dealTab==="deliverables"&&<>
             {/* Deliverables — Content Approval Workflow */}
             <Section title={`Deliverables (${done}/${sel.dels.length})`} icon="📋">
               {sel.dels.map((dl,i)=>{
@@ -5621,7 +5645,9 @@ return (
                 <span style={{padding:"6px 12px",background:T.gold,color:"#1a1a22",borderRadius:"2px",fontSize:"12px",fontWeight:700}}>⬆ Upload Raw Clip(s)</span>
               </label>}
             </Section>}
+            </>}
 
+            {dealTab==="shipment"&&<>
             {/* Shipment & Logistics History */}
             {(sel.ship||(sel.shipHistory||[]).length>0)&&<Section title="Shipment & Logistics" icon="📦">
               {/* Original shipment */}
@@ -5686,7 +5712,9 @@ return (
             {(sel.status==="acknowledged"||(sel.ackAt&&sel.status!=="email_sent"))&&<div style={{background:"#ecfdf5",border:"1px solid #10b981",borderRadius:"2px",padding:"10px 14px",marginBottom:"10px",fontSize:"13px",color:"#065f46"}}>
               <b>🤝 Influencer Acknowledged</b> — {sel.inf} agreed to the collaboration terms on {sel.ackAt?new Date(sel.ackAt).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}):"—"}.{sel.status==="acknowledged"?" Logistics can now dispatch the products.":""}
             </div>}
+            </>}
 
+            {dealTab==="activity"&&<>
             {["email_sent","acknowledged","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","partial_paid","paid"].includes(sel.status)&&
             <Section title="Confirmation Email (System-Generated)" icon="✉">
               <div style={{background:T.surfaceAlt,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"12px",fontSize:"13px",lineHeight:1.7,color:T.text}}>
@@ -5717,9 +5745,11 @@ return (
                 </div>
               </div>)}
             </Section>
+            </>}
+            </div>
 
-            {/* Actions */}
-            <div style={{display:"flex",gap:"5px",flexWrap:"wrap",paddingTop:"10px",borderTop:`1px solid ${T.border}`}}>
+            {/* Actions footer */}
+            <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center",padding:"16px 28px",borderTop:`1px solid ${T.borderHead}`,background:"#FBFAF7",flexShrink:0,maxHeight:"34vh",overflowY:"auto"}}>
               {(role==="negotiator"||role==="admin")&&["pending","renegotiate"].includes(sel.status)&&<Btn v="outline" sm onClick={()=>openEditDeal(sel)}>✎ Edit Details</Btn>}
               {(role==="approver"||role==="admin")&&(sel.status==="pending"||sel.status==="renegotiate"||(sel.status==="manager_approved"&&role==="admin"))&&<>
                 <Btn v="ok" onClick={()=>approveDeal(sel)}>✓ Approve & Lock</Btn>

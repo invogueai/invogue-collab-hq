@@ -1027,7 +1027,8 @@ export default function InvogueCollabHQ() {
   };
 
   // ── Payment Due Date Calculation ──
-  const PAYMENT_TERMS_LABELS = {next_15th:"15th of Next Month","45_days":"45 Days from Live","60_days":"60 Days from Live",advance:"Advance (on approval)",immediate:"Immediate (on live)",custom:"Custom"};
+  const PAYMENT_TERMS_LABELS = {next_15th:"Next 15th after going live","45_days":"45 days after going live","60_days":"60 days after going live",advance:"Advance (before going live)",immediate:"Immediate (on going live)",custom:"Custom","Net 15 days":"Net 15 days","Net 30 days":"Net 30 days"};
+  const ptLabel = (v)=>PAYMENT_TERMS_LABELS[v]||v||"—";
   const calcPaymentDueDate = (deal, liveDate) => {
     // Resolve terms: deal override → influencer default → global default
     const inf = influencers.find(x=>x.name===deal.inf);
@@ -4443,35 +4444,92 @@ return (
         {/* ═══ FEATURE 1: ANALYTICS & REPORTS VIEW ═══ */}
         {view==="analytics"&&(()=>{
           const analytics = generateAnalyticsData();
-          const months = Object.keys(analytics.monthlySpend).sort().slice(-6);
-          const maxSpend = Math.max(...months.map(m => analytics.monthlySpend[m]||0));
+          // ── Maison analytics computations ──
+          const LIVE_SET = ["partial_live","live","invoice_ok","invoice_pending_approval","payment_details_received","payment_requested","payment_approved","partial_paid","paid"];
+          const NON_REJ = deals.filter(d=>!["rejected","dropped"].includes(d.status));
+          const totalSpend = deals.reduce((s,d)=>s+totalPaid(d),0);
+          const avgDeal = NON_REJ.length>0?Math.round(NON_REJ.reduce((s,d)=>s+d.amount,0)/NON_REJ.length):0;
+          const committedN = deals.filter(d=>!["rejected","dropped","pending","renegotiate"].includes(d.status)).length;
+          const liveN = deals.filter(d=>LIVE_SET.includes(d.status)).length;
+          const goLiveRate = committedN>0?Math.round(liveN/committedN*100):0;
+          // avg days to live (created → first live deliverable date), best-effort
+          const ttlArr = deals.map(d=>{
+            const liveDates=(d.dels||[]).filter(x=>x.st==="live"&&x.liveAt).map(x=>new Date(x.liveAt));
+            const start=d.at?new Date(d.at):null;
+            if(!start||liveDates.length===0) return null;
+            const first=new Date(Math.min(...liveDates.map(x=>x.getTime())));
+            const days=Math.round((first-start)/(1000*60*60*24));
+            return days>=0?days:null;
+          }).filter(x=>x!==null);
+          const avgTTL = ttlArr.length>0?Math.round(ttlArr.reduce((s,x)=>s+x,0)/ttlArr.length):null;
+          const inrC = (n)=> n>=1e7?["₹"+(n/1e7).toFixed(1),"Cr"]:n>=1e5?["₹"+(n/1e5).toFixed(1),"L"]:n>=1e3?["₹"+Math.round(n/1e3),"k"]:["₹"+n,""];
+          const [tsMain,tsUnit]=inrC(totalSpend); const [adMain,adUnit]=inrC(avgDeal);
+          const statCells=[
+            {l:"Total spend",main:tsMain,unit:tsUnit},
+            {l:"Avg deal value",main:adMain,unit:adUnit},
+            {l:"Go-live rate",main:String(goLiveRate),unit:"%"},
+            {l:"Avg time to live",main:avgTTL!==null?String(avgTTL):"—",unit:avgTTL!==null?" days":""},
+          ];
+          // monthly "gone live" counts — last 6 months
+          const now=new Date(); const monthKeys=[];
+          for(let i=5;i>=0;i--){const dt=new Date(now.getFullYear(),now.getMonth()-i,1);monthKeys.push(dt.toISOString().slice(0,7));}
+          const liveByMonth={}; deals.forEach(d=>{ if(LIVE_SET.includes(d.status)&&d.at){const k=d.at.slice(0,7); if(monthKeys.includes(k)) liveByMonth[k]=(liveByMonth[k]||0)+1;} });
+          const monthVals=monthKeys.map(k=>liveByMonth[k]||0);
+          const maxMonth=Math.max(1,...monthVals);
+          const peakIdx=monthVals.indexOf(Math.max(...monthVals.slice(0,5)));
+          // pipeline buckets
+          const pipe=[
+            {l:"Live",c:T.brand,statuses:["live","partial_live","paid"]},
+            {l:"In production",c:T.gold,statuses:["approved","email_sent","acknowledged","shipped","delivered_prod"]},
+            {l:"Awaiting payment",c:T.teal,statuses:["invoice_ok","invoice_pending_approval","payment_details_received","payment_requested","payment_approved","partial_paid","disputed"]},
+            {l:"Pending approval",c:"#EDE7D6",bd:true,statuses:["pending","renegotiate","under_review","manager_review"]},
+          ].map(b=>({...b,n:deals.filter(d=>b.statuses.includes(d.status)).length}));
+          const pipeTotal=pipe.reduce((s,b)=>s+b.n,0)||1;
           return <>
-            <h2 style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px",marginBottom:"14px"}}>Analytics & Reports</h2>
-
-            {/* ROI Metrics Section */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"8px",marginBottom:"16px"}}>
-              <StatBox l="Total Deal Value" v={f(deals.reduce((s,d)=>s+d.amount,0))} c={T.gold}/>
-              <StatBox l="Total Paid Out" v={f(deals.reduce((s,d)=>s+totalPaid(d),0))} c={T.ok}/>
-              <StatBox l="Avg Deal Size" v={f(deals.length>0?Math.round(deals.reduce((s,d)=>s+d.amount,0)/deals.length):0)} c={T.info}/>
-              <StatBox l="Completion Rate" v={deals.length>0?Math.round(deals.filter(d=>d.status==="paid").length/deals.length*100)+"%":"0%"} c={T.purple}/>
-              <StatBox l="Active Deals" v={deals.filter(d=>!["rejected","dropped","paid"].includes(d.status)).length} c={T.warn}/>
-              <StatBox l="Dispute Rate" v={deals.length>0?Math.round(deals.filter(d=>d.status==="disputed").length/deals.length*100)+"%":"0%"} c={T.err}/>
+            {/* Header */}
+            <div style={{marginBottom:"24px"}}>
+              <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{getCurrentFY().label} · to date</div>
+              <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Analytics</div>
             </div>
 
-            {/* Monthly Spend Chart */}
-            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"14px",marginBottom:"14px"}}>
-              <div style={{fontSize:"12px",fontWeight:700,marginBottom:"10px"}}>Monthly Spend Trend</div>
-              <div style={{display:"flex",alignItems:"flex-end",gap:"6px",height:"160px",justifyContent:"space-around",paddingBottom:"8px"}}>
-                {months.map(m => {
-                  const val = analytics.monthlySpend[m]||0;
-                  const h = (val/maxSpend)*120 || 10;
-                  const monthLabel = m.slice(5);
-                  return <div key={m} style={{display:"flex",flexDirection:"column",alignItems:"center",flex:1,justifyContent:"flex-end",gap:"0"}}>
-                    <div style={{fontSize:"8px",color:T.faint,marginBottom:"2px",height:"12px",lineHeight:"12px"}}>{f(val)}</div>
-                    <div style={{background:T.gold,width:"100%",height:`${h}px`,borderRadius:"3px",transition:"all .2s",minHeight:"8px"}}/>
-                    <div style={{fontSize:"11px",fontWeight:600,color:T.sub,marginTop:"6px",textAlign:"center"}}>{monthLabel}</div>
-                  </div>;
-                })}
+            {/* Stat strip */}
+            <div style={{display:"flex",borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,marginBottom:"28px",flexWrap:"wrap"}}>
+              {statCells.map((m,i,arr)=><div key={i} style={{flex:"1 1 150px",padding:"18px 22px",borderRight:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+                <div style={{fontSize:"10px",letterSpacing:"2px",textTransform:"uppercase",color:T.sub,marginBottom:"8px"}}>{m.l}</div>
+                <div style={{fontFamily:DISPLAY,fontSize:"34px",fontWeight:500,lineHeight:1}}>{m.main}<span style={{fontSize:"18px"}}>{m.unit}</span></div>
+              </div>)}
+            </div>
+
+            {/* Charts */}
+            <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:"28px",marginBottom:"28px"}}>
+              {/* Monthly gone-live bars */}
+              <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"22px"}}>
+                <div style={{fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:"24px"}}>Collabs gone live · monthly</div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:"18px",height:"150px",borderBottom:`1px solid ${T.border}`}}>
+                  {monthVals.map((v,i)=>{
+                    const h=Math.round(v/maxMonth*100); const isLast=i===monthVals.length-1;
+                    const col=isLast?T.brand:(i===peakIdx&&v>0)?T.gold:"#EDE7D6";
+                    return <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}} title={`${v} live`}>
+                      <div style={{width:"100%",maxWidth:"46px",height:`${Math.max(h,2)}%`,background:col,borderRadius:"2px 2px 0 0"}}/>
+                    </div>;
+                  })}
+                </div>
+                <div style={{display:"flex",gap:"18px",marginTop:"10px"}}>
+                  {monthKeys.map((k,i)=><span key={k} style={{flex:1,textAlign:"center",fontSize:"10px",letterSpacing:"1px",color:i===monthKeys.length-1?T.text:T.sub,fontWeight:i===monthKeys.length-1?700:400}}>{new Date(k+"-01").toLocaleDateString("en-US",{month:"short"}).toUpperCase()}</span>)}
+                </div>
+              </div>
+              {/* Pipeline by status */}
+              <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"22px"}}>
+                <div style={{fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:"20px"}}>Pipeline by status</div>
+                <div style={{display:"flex",height:"14px",borderRadius:"2px",overflow:"hidden",marginBottom:"20px"}}>
+                  {pipe.filter(b=>b.n>0).map((b,i)=><div key={i} style={{width:`${b.n/pipeTotal*100}%`,background:b.c}}/>)}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:"11px"}}>
+                  {pipe.map((b,i)=><div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <span style={{display:"flex",alignItems:"center",gap:"8px",fontSize:"12px"}}><span style={{width:"10px",height:"10px",borderRadius:"2px",background:b.c,border:b.bd?`1px solid ${T.border}`:"none"}}/>{b.l}</span>
+                    <span style={{fontFamily:DISPLAY,fontSize:"13px"}}>{b.n}</span>
+                  </div>)}
+                </div>
               </div>
             </div>
 
@@ -4598,7 +4656,7 @@ return (
               <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{deals.length} collaborations</div>
               <div style={{fontFamily:T.display,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>All Collabs</div>
             </div>
-            {(role==="negotiator"||role==="admin")&&<Btn v="primary" onClick={()=>{setEditingDealId(null);setNDeal({inf:"",email:"",platform:"Instagram",followers:"",products:[],usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},paymentTerms:"Net 15 days",cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>New Collab</Btn>}
+            {(role==="negotiator"||role==="admin")&&<Btn v="primary" onClick={()=>{setEditingDealId(null);setNDeal({inf:"",email:"",platform:"Instagram",followers:"",products:[],usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},paymentTerms:"next_15th",cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>New Collab</Btn>}
           </div>
 
           {/* Campaign filter */}
@@ -5021,7 +5079,7 @@ return (
           </div>
 
           <Field label="Amount (INR) *"><Inp value={nDeal.amount} onChange={e=>setNDeal({...nDeal,amount:e.target.value})} type="number" prefix="₹"/></Field>
-          <Field label="Payment Terms"><Sel value={nDeal.paymentTerms||"Net 15 days"} onChange={e=>setNDeal({...nDeal,paymentTerms:e.target.value})} options={[{v:"Net 15 days",l:"Net 15 days"},{v:"Net 30 days",l:"Net 30 days"},{v:"50% Advance + 50% on delivery",l:"50% Advance + 50% on delivery"},{v:"100% Advance",l:"100% Advance"},{v:"100% Post Content",l:"100% Post Content"},{v:"Custom",l:"Custom"}]}/></Field>
+          <Field label="Payment Terms"><Sel value={nDeal.paymentTerms||"next_15th"} onChange={e=>setNDeal({...nDeal,paymentTerms:e.target.value})} options={[{v:"next_15th",l:"Next 15th after going live"},{v:"45_days",l:"45 days after going live"},{v:"60_days",l:"60 days after going live"},{v:"immediate",l:"Immediate (on going live)"},{v:"advance",l:"Advance (before going live)"},{v:"custom",l:"Custom"}]}/></Field>
 
           {/* Deliverables */}
           <div style={{marginTop:"12px",padding:"12px",background:formErrors.dels?T.errBg:T.goldSoft,borderRadius:"2px",border:formErrors.dels?`1px solid ${T.err}`:"none"}}>
@@ -5173,7 +5231,7 @@ return (
               <div><span style={{color:T.sub}}>Product:</span> <b>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product}</b></div>
               <div><span style={{color:T.sub}}>Usage:</span> <b>{sel.usage}</b></div>
               <div><span style={{color:T.sub}}>Deadline:</span> <b>{sel.deadline}</b></div>
-              <div><span style={{color:T.sub}}>Payment Terms:</span> <b>{sel.paymentTerms||"Net 15 days"}</b></div>
+              <div><span style={{color:T.sub}}>Payment Terms:</span> <b>{ptLabel(sel.paymentTerms||"next_15th")}</b></div>
             </div>
             {(sel.pan||sel.pan_number)&&<div style={{marginTop:"4px",padding:"4px 6px",background:T.infoBg,borderRadius:"2px"}}><span style={{color:T.info,fontWeight:600}}>PAN:</span> {sel.pan?.number||sel.pan_number} ({sel.pan?.name||sel.pan_name})</div>}
             <div style={{marginTop:"6px",fontWeight:700,fontSize:"11px",color:T.sub}}>Deliverables:</div>
@@ -5382,7 +5440,7 @@ return (
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"12px"}}>
               {[["Platform",`${sel.platform} · ${sel.followers}`],["Product",sel.products?sel.products.map(p=>p.name).join(", "):sel.product],["Usage",sel.usage],["Deadline",sel.deadline],["Profile",sel.profile],["Phone",sel.phone||"—"],["Email",sel.email||"Not provided"]].map(([l,v])=><div key={l}><div style={{fontSize:"10px",fontWeight:800,color:T.sub,textTransform:"uppercase"}}>{l}</div><div style={{fontSize:"13px",marginTop:"1px"}}>{v}</div></div>)}
             </div>
-            {sel.paymentTerms&&<div style={{padding:"8px 10px",background:T.infoBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>💳 Payment Terms:</span> {sel.paymentTerms}</div>}
+            {sel.paymentTerms&&<div style={{padding:"8px 10px",background:T.infoBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>💳 Payment Terms:</span> {ptLabel(sel.paymentTerms)}</div>}
             {sel.address&&<div style={{padding:"8px 10px",background:T.infoBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>📍 Address:</span> {sel.address}</div>}
             {sel.status==="renegotiate"&&sel.renegotiationNote&&<div style={{padding:"10px 12px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}><div style={{fontSize:"10px",fontWeight:800,color:T.warn,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"3px"}}>📝 Manager's Renegotiation Note</div><div style={{color:T.text,lineHeight:1.5}}>{sel.renegotiationNote}</div></div>}
 
@@ -5954,7 +6012,7 @@ return (
               <div>🔒 Locked Amount: <b style={{fontSize:"20px",color:T.gold}}>{f(sel.amount)}</b></div>
               <span style={{fontSize:"12px",fontWeight:700,color:T.brand,fontFamily:"Bodoni Moda,serif"}}>{sel.collabId||"—"}</span>
             </div>
-            <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product} · {sel.dels.length} deliverables · {sel.paymentTerms||"Net 15 days"}</div>
+            <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product} · {sel.dels.length} deliverables · {ptLabel(sel.paymentTerms||"next_15th")}</div>
           </div>
 
           <div style={{padding:"10px",background:T.infoBg,borderRadius:"2px",marginBottom:"14px",fontSize:"12px",color:T.info,lineHeight:1.5}}>

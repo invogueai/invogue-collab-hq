@@ -3690,54 +3690,51 @@ return (
           {/* ── TAB: READY TO PAY ── */}
           {financeTab==="pay"&&<>
             {pendingPayments.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"20px 0",textAlign:"center"}}>No invoices pending payment</div>}
-            {batchMode&&pendingPayments.length>0&&<div style={{marginBottom:"8px"}}><Btn v="outline" sm onClick={()=>selectAllInGroup(pendingPayments)}>Select All ({pendingPayments.length})</Btn></div>}
-            {pendingPayments.map(d=>{
-              const paid=totalPaid(d),rem=remaining(d);
-              const rawLink=d.inv?.link||d.inv?.note||d.invoice_note||"";
-              const invLink=rawLink.includes("LINK: ")?rawLink.split("LINK: ")[1]:rawLink;
-              const inf = influencers.find(x=>x.name===d.inf);
-              const fyTotal = getFYTotalForInfluencer(d.inf);
-              const tdsApply = isTDSApplicable(d.inf, rem);
-              const tdsAmt = tdsApply ? calcTDSAmount(rem, d.tdsRate||10) : 0;
-              return <div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderLeft:`3px solid ${tdsApply?"#7c3aed":T.ok}`,borderRadius:"2px",padding:"14px 16px",marginBottom:"10px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
-                  <div style={{display:"flex",alignItems:"flex-start",gap:"8px"}}>
-                    {batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={()=>toggleBatch(d.id)} style={{marginTop:"4px",cursor:"pointer"}}/>}
-                    <div>
-                      <div style={{fontWeight:800,fontSize:"15px",color:T.text}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"12px",marginLeft:"4px"}}>· {d.platform||""}</span></div>
-                      <div style={{fontSize:"11px",color:T.sub,marginTop:"1px"}}>{getCamp(d.cid)?.name||"—"} · {d.collabId||d.id.slice(0,8)}{d.paymentDueDate?` · Due: ${new Date(d.paymentDueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}`:""}</div>
+            {batchMode&&pendingPayments.length>0&&<div style={{marginBottom:"12px"}}><Btn v="outline" sm onClick={()=>selectAllInGroup(pendingPayments)}>Select All ({pendingPayments.length})</Btn></div>}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(360px,1fr))",gap:"18px"}}>
+              {pendingPayments.map(d=>{
+                const paid=totalPaid(d),rem=remaining(d);
+                const inf = influencers.find(x=>x.name===d.inf);
+                const tdsApply = isTDSApplicable(d.inf, rem);
+                const tdsAmt = tdsApply ? calcTDSAmount(rem, d.tdsRate||10) : 0;
+                const net = rem - tdsAmt;
+                const isAgency = d.agencyManaged;
+                const overdue = d.paymentDueDate && d.paymentDueDate < today;
+                const panOk = !!((isAgency?d.paymentDetails?.pan:null)||inf?.panNumber||d.pan_number);
+                const method = inf?.upiId?`UPI · ${inf.upiId}`:inf?.bankHolder?`Bank · ${inf.bankHolder}`:"Payment details pending";
+                return <div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderRadius:"2px",padding:"22px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"16px"}}>
+                    <div onClick={()=>{setSel(d);setModal("detail")}} style={{cursor:"pointer",display:"flex",gap:"8px",alignItems:"flex-start"}}>
+                      {batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{marginTop:"6px",cursor:"pointer"}}/>}
+                      <div>
+                        <div style={{fontFamily:DISPLAY,fontSize:"19px",fontWeight:600}}>{d.inf}</div>
+                        <div style={{fontSize:"10px",color:T.sub,marginTop:"3px"}}>{d.products?d.products.map(p=>p.name).join(", "):d.product}{isAgency?<> · <span style={{color:T.gold}}>Agency: {d.paymentDetails?.beneficiary||d.agencyName||"agency"}</span></>:` · ${inf?.upiId?"UPI":"Bank"} · ${panOk?"PAN verified":"PAN missing"}`}</div>
+                      </div>
                     </div>
+                    <span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,padding:"3px 8px",borderRadius:"2px",flex:"none",...(isAgency?{color:T.gold,background:"#F6DFC1"}:overdue?{color:"#B42318",background:"#FDE8E8"}:{color:T.sub,background:"#F2EEE4"})}}>{isAgency?"Agency":overdue?"Overdue":"Due"}</span>
                   </div>
-                  <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
-                    <Btn v="outline" sm onClick={()=>{setSel(d);setModal("detail")}}>View</Btn>
-                    <Btn v="ok" sm onClick={()=>{setSel(d);setPayF({type:paid===0?"final":"final",amount:String(rem),note:"Paying on matched invoice"});setModal("payment")}}>💰 Pay {f(rem)}</Btn>
+                  <div style={{display:"flex",borderTop:`1px solid ${T.borderSoft}`,borderBottom:`1px solid ${T.borderSoft}`,marginBottom:"16px"}}>
+                    <div style={{flex:1,padding:"12px 0",borderRight:`1px solid ${T.borderSoft}`}}><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px"}}>Locked</div><div style={{fontFamily:DISPLAY,fontSize:"18px",fontWeight:600}}>{f(d.amount)}</div></div>
+                    {isAgency
+                      ? <div style={{flex:1,padding:"12px 0 12px 14px",borderRight:`1px solid ${T.borderSoft}`}}><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px"}}>GST inv.</div>{d.agencyInvoiceUrl?<a href={d.agencyInvoiceUrl} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:"11px",fontWeight:600,color:"#0F5BA7",textDecoration:"none"}}>View invoice</a>:<span style={{fontSize:"11px",color:T.faint}}>—</span>}</div>
+                      : <div style={{flex:1,padding:"12px 0 12px 14px",borderRight:`1px solid ${T.borderSoft}`}}><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px"}}>{tdsApply?`TDS ${d.tdsRate||10}%`:"TDS"}</div><div style={{fontFamily:DISPLAY,fontSize:"18px",fontWeight:600,color:tdsApply?T.text:T.faint}}>{tdsApply?f(tdsAmt):"—"}</div></div>}
+                    {isAgency
+                      ? <div style={{flex:1,padding:"12px 0 12px 14px"}}><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px"}}>Pay to</div><div style={{fontSize:"11px",fontWeight:600,marginTop:"4px"}}>{d.paymentDetails?.beneficiary||d.agencyName||"Agency"}</div></div>
+                      : <div style={{flex:1,padding:"12px 0 12px 14px"}}><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px"}}>Net payable</div><div style={{fontFamily:DISPLAY,fontSize:"18px",fontWeight:600,color:T.brand}}>{f(net)}</div></div>}
                   </div>
-                </div>
-                <div style={{display:"flex",borderTop:`1px solid ${T.borderSoft}`,borderBottom:`1px solid ${T.borderSoft}`,marginBottom:"8px"}}>
-                  {[
-                    {l:"Locked",v:f(d.amount),c:T.text},
-                    {l:"Invoice",v:`${f(d.inv?.amount||d.amount)}${d.inv?.match===false?" ⚠":" ✓"}`,c:d.inv?.match===false?T.err:T.info},
-                    {l:"Paid",v:f(paid),c:T.ok},
-                    {l:"Due",v:f(rem),c:T.warn},
-                    {l:tdsApply?`TDS ${d.tdsRate||10}%`:"TDS",v:tdsApply?f(tdsAmt):"N/A",c:tdsApply?T.purple:"#C9C1B2"},
-                  ].map((m,mi,arr)=><div key={mi} style={{flex:1,padding:"9px 12px",borderRight:mi<arr.length-1?`1px solid ${T.borderSoft}`:"none"}}>
-                    <div style={{fontSize:"9px",letterSpacing:"1px",fontWeight:700,color:T.sub,textTransform:"uppercase",marginBottom:"3px"}}>{m.l}</div>
-                    <div style={{fontFamily:DISPLAY,fontSize:"16px",fontWeight:600,color:m.c}}>{m.v}</div>
-                  </div>)}
-                </div>
-                {d.agencyManaged&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",padding:"6px 8px",background:T.goldSoft,border:`1px solid ${T.gold}55`,borderRadius:"2px",marginBottom:"6px",fontSize:"11px"}}>
-                  <span>🏢 <b>Agency-managed</b> · pay <b>{d.paymentDetails?.beneficiary||d.agencyName||"agency"}</b>{d.agencyGst?` · GST ${d.agencyGst}`:""}</span>
-                  {d.agencyInvoiceUrl&&<a href={d.agencyInvoiceUrl} target="_blank" rel="noopener noreferrer" style={{color:T.brand,fontWeight:700,textDecoration:"none"}}>View invoice ↗</a>}
-                </div>}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 12px",fontSize:"11px",color:T.sub}}>
-                  <div>PAN: <b style={{fontFamily:"monospace"}}>{(d.agencyManaged?d.paymentDetails?.pan:null)||inf?.panNumber||d.pan_number||"—"}</b></div>
-                  <div>Bank: <b>{(d.agencyManaged?d.paymentDetails?.beneficiary:null)||inf?.bankHolder||"—"}</b>{(d.agencyManaged?d.paymentDetails?.ifsc:inf?.bankIfsc)?` · ${d.agencyManaged?d.paymentDetails?.ifsc:inf?.bankIfsc}`:""}</div>
-                  <div>FY Total Paid: <b style={{color:fyTotal>50000?"#7c3aed":T.text}}>{f(fyTotal)}</b></div>
-                  <div>Terms: <b>{PAYMENT_TERMS_LABELS[d.payment_terms||inf?.defaultPaymentTerms||"next_15th"]||"—"}</b></div>
-                </div>
-                {paid>0&&<div style={{height:"3px",borderRadius:"2px",background:T.border,marginTop:"8px"}}><div style={{height:"100%",width:`${(paid/d.amount)*100}%`,background:T.ok,borderRadius:"2px"}}/></div>}
-              </div>;
-            })}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"10px"}}>
+                    <span style={{fontSize:"11px",color:T.sub,fontFamily:DISPLAY}}>{isAgency?`Due ${d.paymentDueDate?new Date(d.paymentDueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"}):"—"} · skips form`:method}</span>
+                    <span onClick={()=>{setSel(d);setPayF({type:"final",amount:String(rem),note:isAgency?"Paying agency":"Paying on matched invoice"});setModal("payment")}} style={{fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,color:"#fff",background:T.brand,padding:"9px 22px",borderRadius:"2px",cursor:"pointer",flex:"none"}}>{isAgency?"Pay Agency":`Pay ${f(net)}`}</span>
+                  </div>
+                </div>;
+              })}
+            </div>
+
+            {/* TDS watch banner */}
+            {tdsInfluencers.length>0&&<div style={{background:"#FBF7F0",border:"1px solid #E6D9C2",borderRadius:"2px",padding:"16px 20px",marginTop:"18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"12px",flexWrap:"wrap"}}>
+              <div style={{fontSize:"12px",color:"#3a342c"}}><b style={{fontFamily:DISPLAY}}>TDS watch · </b>{tdsInfluencers.length} creator{tdsInfluencers.length===1?" has":"s have"} crossed {f(50000)} cumulative this FY — 10% deducted automatically.</div>
+              <span onClick={()=>setFinanceTab("tds")} style={{fontSize:"10px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,color:T.gold,cursor:"pointer"}}>View TDS tracker →</span>
+            </div>}
 
             {/* Advances Due */}
             {advanceDue.length>0&&<Section title={`Advance Payments Pending (${advanceDue.length})`} icon="⏰">
@@ -4105,77 +4102,53 @@ return (
         const campIds = [...new Set(allCreatives.map(d=>d.cid).filter(Boolean))];
 
         const CreativeCard = ({d}) => {
-          const camp = getCamp(d.cid);
           const daysLeft = getDaysLeft(d);
           const isExpiring = daysLeft!==null && daysLeft<=7;
           const isExpired = daysLeft!==null && daysLeft<=0;
           const isEditing = editingAdNotes===d.id;
-          const liveLinks = (d.dels||[]).filter(dl=>dl.st==="live"&&dl.link);
-          const isFresh = d.adStatus==="fresh"||!d.adStatus;
-          const statusLabel = d.adStatus==="running"?"🏃 Running":d.adStatus==="tested"?"✅ Tested":"🆕 Fresh";
-          const accentCol = isExpired?T.err:isExpiring?T.warn:d.adStatus==="running"?T.info:d.adStatus==="tested"?T.ok:T.gold;
-          return <div onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${isExpired?T.err+"44":isExpiring?T.warn+"44":T.border}`,borderLeft:`3px solid ${accentCol}`,borderRadius:"2px",padding:"14px",marginBottom:"8px",cursor:"pointer",transition:"all .15s"}}
-            onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.08)"}}
-            onMouseLeave={e=>{e.currentTarget.style.boxShadow="none"}}>
-            {/* Header */}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"8px"}}>
-              <div style={{flex:1}}>
-                <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
-                  <div style={{width:"32px",height:"32px",borderRadius:"50%",background:T.goldSoft,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:DISPLAY,fontSize:"14px",color:T.brand}}>{(d.inf||"?").trim()[0]}</div>
-                  <div>
-                    <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf}</div>
-                    <div style={{fontSize:"11px",color:T.sub}}>{d.platform} · {d.followers}</div>
+          // status pill (exact mockup palette)
+          const st = isExpired?{l:"Expired",c:"#B42318",bg:"#FDE8E8"}
+            : isExpiring?{l:"Expiring",c:"#B42318",bg:"#FDE8E8"}
+            : d.adStatus==="running"?{l:"Running",c:"#0F5BA7",bg:"#E0EDFA"}
+            : d.adStatus==="tested"?{l:"Tested",c:T.teal,bg:T.tealBg}
+            : {l:"Fresh",c:"#1B7A3D",bg:"#E2F3E8"};
+          const fmt = d.platform==="YouTube"?"video · 16:9":"reel · vertical 9:16";
+          const usageStr = daysLeft!==null?(isExpired?`Expired ${Math.abs(daysLeft)}d`:`${daysLeft} day${daysLeft===1?"":"s"}`):(d.usageDays?`${d.usageDays} days`:"Perpetual");
+          // single contextual action (preserves existing handlers)
+          const action = d.reuseRequested ? {l:"Reuse sent",fill:false,fn:null}
+            : isExpiring ? {l:"Request reuse",fill:true,fn:()=>requestReuse(d)}
+            : d.adStatus==="running" ? {l:"Ad notes",fill:false,fn:()=>{setEditingAdNotes(d.id);setAdNotesF({notes:d.adNotes||"",link:d.adPlatformLink||""})}}
+            : d.adStatus==="tested" ? {l:"Re-run",fill:false,fn:()=>updateAdStatus(d,"running")}
+            : {l:"Start running",fill:false,fn:()=>updateAdStatus(d,"running")};
+          return <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",overflow:"hidden"}}>
+            {/* Preview band */}
+            <div onClick={()=>{setSel(d);setModal("detail")}} style={{height:"120px",background:"repeating-linear-gradient(135deg,#EDE7D6,#EDE7D6 9px,#F4EFE3 9px,#F4EFE3 18px)",display:"flex",alignItems:"center",justifyContent:"center",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}>
+              <span style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",color:T.faint,fontFamily:"monospace"}}>{fmt}</span>
+            </div>
+            <div style={{padding:"16px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div style={{fontSize:"13px",fontWeight:700}}>{d.inf}</div>
+                <span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:st.c,background:st.bg,padding:"3px 7px",borderRadius:"2px",fontWeight:700}}>{st.l}</span>
+              </div>
+              <div style={{fontSize:"10px",color:T.sub,margin:"4px 0 12px"}}>{d.platform} · {d.product}</div>
+              {isEditing
+                ? <div onClick={e=>e.stopPropagation()} style={{borderTop:`1px solid ${T.borderSoft}`,paddingTop:"12px"}}>
+                    <Inp value={adNotesF.link} onChange={e=>setAdNotesF({...adNotesF,link:e.target.value})} placeholder="Meta/Google ad link..." />
+                    <textarea value={adNotesF.notes} onChange={e=>setAdNotesF({...adNotesF,notes:e.target.value})} placeholder="Performance notes, ROAS, observations..." rows={2} style={{width:"100%",padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:"2px",fontSize:"12px",marginTop:"4px",fontFamily:T.ui,resize:"vertical",boxSizing:"border-box"}}/>
+                    <div style={{display:"flex",gap:"4px",marginTop:"6px"}}>
+                      <Btn v="ok" sm onClick={()=>saveAdNotes(d,adNotesF.notes,adNotesF.link)}>Save</Btn>
+                      <Btn v="ghost" sm onClick={()=>setEditingAdNotes(null)}>Cancel</Btn>
+                    </div>
                   </div>
-                </div>
-                <div style={{fontSize:"12px",color:T.sub}}>{d.product} · {camp?.name||"—"}</div>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"4px"}}>
-                <span style={{padding:"3px 8px",borderRadius:"2px",fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,background:d.adStatus==="running"?T.infoBg:d.adStatus==="tested"?T.okBg:T.goldSoft,color:d.adStatus==="running"?T.info:d.adStatus==="tested"?T.ok:T.gold}}>{statusLabel.replace(/^[^\w]+\s*/,"")}</span>
-                {daysLeft!==null&&<span style={{padding:"3px 8px",borderRadius:"2px",fontSize:"10px",fontWeight:700,background:isExpired?"#fef2f2":isExpiring?"#fef3c7":"#ecfdf5",color:isExpired?T.err:isExpiring?"#92400e":T.ok}}>{isExpired?`Expired ${Math.abs(daysLeft)}d ago`:daysLeft===0?"Expires today":`${daysLeft}d left`}</span>}
-                {d.reuseRequested&&<span style={{padding:"2px 6px",borderRadius:"2px",fontSize:"9px",fontWeight:700,background:T.infoBg,color:T.info}}>🔄 REUSE REQUESTED</span>}
-              </div>
-            </div>
-
-            {/* Live content links */}
-            {liveLinks.length>0&&<div style={{background:T.surfaceAlt,borderRadius:"2px",padding:"6px 8px",marginBottom:"6px",fontSize:"11px"}}>
-              <span style={{fontWeight:700,color:T.text}}>📎 Live Content:</span>
-              {liveLinks.map((dl,i)=><span key={i} style={{marginLeft:"6px"}}><a href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{color:T.info,textDecoration:"none",fontWeight:600}}>{dl.type}: {dl.desc}</a>{i<liveLinks.length-1?", ":""}</span>)}
-            </div>}
-
-            {/* Ad platform link & notes (read mode) */}
-            {!isEditing&&(d.adPlatformLink||d.adNotes)&&<div style={{background:"#f0f9ff",borderRadius:"2px",padding:"6px 8px",marginBottom:"6px",fontSize:"11px"}}>
-              {d.adPlatformLink&&<div>🔗 <a href={ensureUrl(d.adPlatformLink)} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{color:T.info,textDecoration:"none",fontWeight:600}}>Ad Platform Link</a></div>}
-              {d.adNotes&&<div style={{marginTop:"2px",color:T.sub}}>📝 {d.adNotes}</div>}
-            </div>}
-
-            {/* Edit mode for notes */}
-            {isEditing&&<div onClick={e=>e.stopPropagation()} style={{background:"#f0f9ff",border:"1px dashed #0891b2",borderRadius:"2px",padding:"8px",marginBottom:"6px"}}>
-              <div style={{fontSize:"10px",fontWeight:700,color:"#0891b2",marginBottom:"4px"}}>AD NOTES & LINK</div>
-              <Inp value={adNotesF.link} onChange={e=>setAdNotesF({...adNotesF,link:e.target.value})} placeholder="Meta/Google ad link..." />
-              <textarea value={adNotesF.notes} onChange={e=>setAdNotesF({...adNotesF,notes:e.target.value})} placeholder="Performance notes, ROAS, observations..." rows={2} style={{width:"100%",padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:"2px",fontSize:"12px",marginTop:"4px",fontFamily:"Archivo,sans-serif",resize:"vertical",boxSizing:"border-box"}}/>
-              <div style={{display:"flex",gap:"4px",marginTop:"4px"}}>
-                <Btn v="ok" sm onClick={()=>saveAdNotes(d,adNotesF.notes,adNotesF.link)}>Save</Btn>
-                <Btn v="ghost" sm onClick={()=>setEditingAdNotes(null)}>Cancel</Btn>
-              </div>
-            </div>}
-
-            {/* Usage period info */}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:"8px",paddingTop:"10px",borderTop:`1px solid ${T.borderSoft}`}}>
-              <div>
-                <div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"3px"}}>Usage left</div>
-                <div style={{fontFamily:DISPLAY,fontSize:"16px",fontWeight:600,color:isExpired?T.err:isExpiring?T.warn:T.text}}>{daysLeft!==null?(isExpired?`Expired ${Math.abs(daysLeft)}d`:`${daysLeft} days`):(d.usageDays?`${d.usageDays} days`:"Perpetual")}</div>
-              </div>
-              <span style={{fontFamily:DISPLAY,fontSize:"15px",fontWeight:600,color:T.gold}}>{f(d.amount)}</span>
-            </div>
-
-            {/* Action buttons */}
-            <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
-              {isFresh&&<Btn v="primary" sm onClick={()=>updateAdStatus(d,"running")}>▶ Start Running</Btn>}
-              {d.adStatus==="running"&&<Btn v="ok" sm onClick={()=>updateAdStatus(d,"tested")}>✓ Mark Tested</Btn>}
-              {d.adStatus==="tested"&&<Btn v="primary" sm onClick={()=>updateAdStatus(d,"running")}>▶ Re-run</Btn>}
-              {d.adStatus==="running"&&<Btn v="outline" sm onClick={()=>updateAdStatus(d,"fresh")}>← Back to Fresh</Btn>}
-              <Btn v="outline" sm onClick={()=>{setEditingAdNotes(d.id);setAdNotesF({notes:d.adNotes||"",link:d.adPlatformLink||""})}}>{d.adNotes||d.adPlatformLink?"✏ Edit Notes":"+ Add Notes"}</Btn>
-              {!d.reuseRequested&&isExpiring&&<Btn v="gold" sm onClick={()=>requestReuse(d)}>🔄 Request Reuse</Btn>}
+                : <div style={{display:"flex",justifyContent:"space-between",borderTop:`1px solid ${T.borderSoft}`,paddingTop:"12px"}}>
+                    <div>
+                      <div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub}}>Usage left</div>
+                      <div style={{fontFamily:DISPLAY,fontSize:"16px",fontWeight:600,color:(isExpired||isExpiring)?"#B42318":T.text}}>{usageStr}</div>
+                    </div>
+                    {action.fill
+                      ? <span onClick={action.fn} style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,color:"#fff",background:T.brand,padding:"7px 12px",borderRadius:"2px",alignSelf:"flex-end",cursor:"pointer"}}>{action.l}</span>
+                      : <span onClick={action.fn||undefined} style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,color:action.fn?T.brand:T.faint,alignSelf:"flex-end",cursor:action.fn?"pointer":"default"}}>{action.l}</span>}
+                  </div>}
             </div>
           </div>;
         };
@@ -4246,7 +4219,9 @@ return (
           {filtered.length===0&&<div style={{padding:"30px 20px",textAlign:"center",color:T.sub,fontSize:"13px"}}>
             {adTab==="fresh"?"No fresh creatives — they'll appear here when collabs go live.":adTab==="running"?"No creatives currently running. Move fresh creatives here when you start testing.":adTab==="tested"?"No tested creatives yet.":"No creatives expiring soon — all good!"}
           </div>}
-          {filtered.map(d=><CreativeCard key={d.id} d={d}/>)}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"18px"}}>
+            {filtered.map(d=><CreativeCard key={d.id} d={d}/>)}
+          </div>
         </>;
       })()}
 
@@ -4915,12 +4890,14 @@ return (
               {pickupsInTransit.map(h=>{
                 const deal = deals.find(d=>d.id===h.dealId);
                 return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"16px 18px",display:"flex",alignItems:"center",gap:"14px"}}>
-                  <span style={{width:"34px",height:"34px",borderRadius:"50%",background:T.infoBg,color:T.info,display:"flex",alignItems:"center",justifyContent:"center",flex:"none",fontSize:"16px"}}>↩</span>
+                  <span style={{width:"34px",height:"34px",borderRadius:"50%",background:"#E0EDFA",color:"#0F5BA7",display:"flex",alignItems:"center",justifyContent:"center",flex:"none"}}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></span>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}><span style={{fontSize:"13px",fontWeight:700}}>{h.inf}</span><span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.info,background:T.infoBg,padding:"3px 7px",borderRadius:"2px",fontWeight:700}}>Return in transit</span></div>
-                    <div style={{fontSize:"10px",color:T.sub,marginTop:"4px"}}>{h.returnCarrier} · <span style={{fontFamily:DISPLAY,letterSpacing:"0.5px",color:T.text}}>{h.returnTrack}</span></div>
+                    <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}><span style={{fontSize:"13px",fontWeight:700}}>{h.inf}</span><span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:"#0F5BA7",background:"#E0EDFA",padding:"3px 7px",borderRadius:"2px",fontWeight:700}}>Return in transit</span></div>
+                    <div style={{fontSize:"10px",color:T.sub,marginTop:"4px"}}>{h.returnCarrier} · <span style={{fontFamily:DISPLAY,letterSpacing:"0.5px",color:"#3a342c"}}>{h.returnTrack}</span></div>
                   </div>
-                  {role==="logistics"&&<Btn v="ok" sm onClick={()=>markProductReturned(deal,h.histIdx)}>Returned</Btn>}
+                  {role==="logistics"
+                    ? <span onClick={()=>markProductReturned(deal,h.histIdx)} style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,color:T.brand,flex:"none",cursor:"pointer"}}>Mark returned →</span>
+                    : <span style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,color:T.brand,flex:"none"}}>Track →</span>}
                 </div>;
               })}
             </div>
@@ -4971,12 +4948,12 @@ return (
           <div>
             <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"14px"}}>
               <span style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700}}>Delivered</span>
-              <span style={{fontSize:"10px",fontWeight:700,color:T.ok,background:T.okBg,padding:"2px 8px",borderRadius:"10px"}}>{deals.filter(d=>d.ship?.st==="delivered").length}</span>
+              <span style={{fontSize:"10px",fontWeight:700,color:T.teal,background:T.tealBg,padding:"2px 8px",borderRadius:"10px"}}>{deals.filter(d=>d.ship?.st==="delivered").length}</span>
             </div>
             <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
               {deals.filter(d=>d.ship?.st==="delivered").length===0&&<div style={{padding:"20px",textAlign:"center",color:T.sub,fontSize:"12px"}}>No deliveries yet</div>}
               {deals.filter(d=>d.ship?.st==="delivered").map((d,i,arr)=><div key={d.id} style={{display:"flex",alignItems:"center",gap:"13px",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none"}}>
-                <span style={{width:"22px",height:"22px",borderRadius:"50%",background:T.okBg,color:T.ok,display:"flex",alignItems:"center",justifyContent:"center",flex:"none",fontSize:"12px",fontWeight:800}}>✓</span>
+                <span style={{width:"22px",height:"22px",borderRadius:"50%",background:T.tealBg,color:T.teal,display:"flex",alignItems:"center",justifyContent:"center",flex:"none"}}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
                 <span style={{flex:1,fontSize:"13px"}}><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></span>
                 <span style={{fontSize:"11px",color:T.sub,fontFamily:DISPLAY}}>Delivered {d.ship.delAt}</span>
               </div>)}

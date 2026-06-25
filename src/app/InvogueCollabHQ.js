@@ -3039,9 +3039,9 @@ return (
       {view==="dashboard"&&role==="admin"&&(()=>{
         const pendingApproval = deals.filter(d=>d.status==="pending"||d.status==="manager_approved");
         const disputed = deals.filter(d=>d.status==="disputed");
-        const needPayment = deals.filter(d=>!["rejected","pending","renegotiate","paid"].includes(d.status)&&remaining(d)>0);
+        const needPayment = deals.filter(d=>!["rejected","pending","renegotiate","paid","dropped","drop_requested"].includes(d.status)&&remaining(d)>0);
         const overdueDels = pendingDels.filter(d=>new Date(d.deadline)<new Date());
-        const totalOutstanding = deals.filter(d=>!["rejected","pending","renegotiate","paid"].includes(d.status)).reduce((s,d)=>s+remaining(d),0);
+        const totalOutstanding = deals.filter(d=>!["rejected","pending","renegotiate","paid","dropped","drop_requested"].includes(d.status)).reduce((s,d)=>s+remaining(d),0);
         const activeUsers = users.filter(u=>u.status==="active");
         const byCreator = {};
         deals.forEach(d=>{ byCreator[d.by] = (byCreator[d.by]||0)+1; });
@@ -3517,7 +3517,7 @@ return (
       {view==="dashboard"&&role==="approver"&&(()=>{
         const pendingApproval = deals.filter(d=>d.status==="pending"||d.status==="manager_approved");
         const disputed = deals.filter(d=>d.status==="disputed");
-        const needPayment = deals.filter(d=>!["rejected","pending","renegotiate","paid"].includes(d.status)&&remaining(d)>0);
+        const needPayment = deals.filter(d=>!["rejected","pending","renegotiate","paid","dropped","drop_requested"].includes(d.status)&&remaining(d)>0);
         const overdueDels = pendingDels.filter(d=>new Date(d.deadline)<new Date());
         return <>
           <div style={{marginBottom:"14px"}}><span style={{fontSize:"20px",fontWeight:800}}>✅ Command Center</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Full operational overview</span></div>
@@ -3670,10 +3670,10 @@ return (
         const disputed = deals.filter(d=>d.status==="disputed");
         const advanceDue = deals.filter(d=>["approved","email_sent","acknowledged","shipped","delivered_prod"].includes(d.status)&&totalPaid(d)===0);
         const recentPaid = deals.filter(d=>d.status==="paid").slice(0,5);
-        const totalOutstanding = deals.filter(d=>!["rejected","pending","renegotiate","paid"].includes(d.status)).reduce((s,d)=>s+remaining(d),0);
+        const totalOutstanding = deals.filter(d=>!["rejected","pending","renegotiate","paid","dropped","drop_requested"].includes(d.status)).reduce((s,d)=>s+remaining(d),0);
 
         // Payment schedule: group payable deals by due date
-        const payableDeals = deals.filter(d=>!["rejected","pending","renegotiate","paid","dropped"].includes(d.status)&&remaining(d)>0);
+        const payableDeals = deals.filter(d=>!["rejected","pending","renegotiate","paid","dropped","drop_requested"].includes(d.status)&&remaining(d)>0);
         const today = new Date().toISOString().slice(0,10);
         const byDueDate = {};
         payableDeals.forEach(d=>{

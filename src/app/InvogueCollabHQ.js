@@ -104,7 +104,7 @@ async function loadFromSupabase() {
   const campaigns = (campaignsRes.data||[]).map(c => ({
     id:c.id, name:c.name, budget:c.budget, target:c.target_influencers,
     status:c.status, created:c.created_at?.slice(0,10)||'', deadline:c.deadline,
-    brief:c.brief||"",
+    brief:c.brief||"", deleted:c.deleted||false,
   }));
 
   const influencers = (influencersRes.data||[]).map(i => ({
@@ -161,6 +161,7 @@ async function loadFromSupabase() {
     inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
     shipHistory:d.ship_history||[],
     renegotiationNote:d.renegotiation_note||"",
+    deleted:d.deleted||false,
     dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
     ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
   }));
@@ -303,6 +304,8 @@ export default function InvogueCollabHQ() {
   const [loaded, setLoaded] = useState(false);
   const [campaigns, setCampaigns] = useState([]);
   const [deals, setDeals] = useState([]);
+  const [deletedDeals, setDeletedDeals] = useState([]);
+  const [deletedCampaigns, setDeletedCampaigns] = useState([]);
   const [users, setUsers] = useState([]);
   const [influencers, setInfluencers] = useState([]);
   const [infProfile, setInfProfile] = useState(null); // selected influencer for profile view
@@ -452,8 +455,10 @@ export default function InvogueCollabHQ() {
         console.log("[AUTH-DEBUG] Loading data from Supabase...");
         const d = await loadFromSupabase();
         console.log("[AUTH-DEBUG] Data loaded — users:", d.users.length, "deals:", d.deals.length);
-        setCampaigns(d.campaigns);
-        setDeals(d.deals);
+        setCampaigns(d.campaigns.filter(c=>!c.deleted));
+        setDeletedCampaigns(d.campaigns.filter(c=>c.deleted));
+        setDeals(d.deals.filter(x=>!x.deleted));
+        setDeletedDeals(d.deals.filter(x=>x.deleted));
         setUsers(d.users.length>0?d.users:SEED_USERS);
         setInfluencers(d.influencers);
       } catch(e) {
@@ -519,19 +524,25 @@ export default function InvogueCollabHQ() {
             inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
             shipHistory:d.ship_history||[],
             renegotiationNote:d.renegotiation_note||"",
+            deleted:d.deleted||false,
             dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
             ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
           }));
-          setDeals(deals);
+          setDeals(deals.filter(x=>!x.deleted));
+          setDeletedDeals(deals.filter(x=>x.deleted));
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns' }, async () => {
         const {data} = await supabase.from('campaigns').select('*');
-        if(data) setCampaigns(data.map(c => ({
-          id:c.id, name:c.name, budget:c.budget, target:c.target_influencers,
-          status:c.status, created:c.created_at?.slice(0,10)||'', deadline:c.deadline,
-          brief:c.brief||"",
-        })));
+        if(data){
+          const mapped = data.map(c => ({
+            id:c.id, name:c.name, budget:c.budget, target:c.target_influencers,
+            status:c.status, created:c.created_at?.slice(0,10)||'', deadline:c.deadline,
+            brief:c.brief||"", deleted:c.deleted||false,
+          }));
+          setCampaigns(mapped.filter(c=>!c.deleted));
+          setDeletedCampaigns(mapped.filter(c=>c.deleted));
+        }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, async () => {
         const {data} = await supabase.from('users').select('*');
@@ -700,6 +711,57 @@ export default function InvogueCollabHQ() {
     setDeals(ds=>ds.map(d=>d.id===id?{...d,logs:[...d.logs,{t:ts,u:user,a:action,d:detail}]}:d));
     supabase.from('audit_log').insert({deal_id:id,user_name:user,action,detail,created_at:ts}).then(({error})=>{if(error) console.error("Audit log insert failed:",error);});
   },[]);
+
+  // ── Admin soft-delete (collabs & campaigns) — hidden from all budgets/analytics, restorable ──
+  const deleteCollab = (d) => {
+    if(role!=="admin") return;
+    setConfirmAction({
+      title:"Delete Collab",
+      msg:`Remove ${d.inf}'s collab ${d.collabId||""} from all lists, budgets and analytics? It stays restorable from Admin → Deleted.`,
+      onConfirm: () => {
+        const ts=new Date().toISOString();
+        supabase.from('deals').update({deleted:true}).eq('id',d.id).then(({error})=>{if(error){console.error("Delete collab failed:",error);notify("Failed to delete","err");}});
+        supabase.from('audit_log').insert({deal_id:d.id,user_name:loggedIn?.name||"Admin",action:"Collab deleted",detail:"",created_at:ts}).then(()=>{});
+        setDeals(prev=>prev.filter(x=>x.id!==d.id));
+        setDeletedDeals(prev=>[{...d,deleted:true},...prev.filter(x=>x.id!==d.id)]);
+        setConfirmAction(null); setModal(null); setSel(null);
+        notify("Collab deleted");
+      }
+    });
+  };
+  const restoreCollab = (d) => {
+    supabase.from('deals').update({deleted:false}).eq('id',d.id).then(({error})=>{if(error){console.error("Restore failed:",error);notify("Failed to restore","err");}});
+    setDeletedDeals(prev=>prev.filter(x=>x.id!==d.id));
+    setDeals(prev=>[{...d,deleted:false},...prev.filter(x=>x.id!==d.id)]);
+    notify("Collab restored");
+  };
+  const deleteCampaignAdmin = (c) => {
+    if(role!=="admin") return;
+    const its = deals.filter(d=>d.cid===c.id);
+    setConfirmAction({
+      title:"Delete Campaign",
+      msg:`Delete campaign "${c.name}"${its.length?` and its ${its.length} collab${its.length>1?"s":""}`:""}? Everything is removed from budgets and analytics, and stays restorable from Admin → Deleted.`,
+      onConfirm: () => {
+        supabase.from('campaigns').update({deleted:true}).eq('id',c.id).then(({error})=>{if(error)console.error("Delete campaign failed:",error);});
+        if(its.length) supabase.from('deals').update({deleted:true}).eq('campaign_id',c.id).then(({error})=>{if(error)console.error("Cascade delete collabs failed:",error);});
+        setCampaigns(prev=>prev.filter(x=>x.id!==c.id));
+        setDeletedCampaigns(prev=>[{...c,deleted:true},...prev.filter(x=>x.id!==c.id)]);
+        setDeals(prev=>prev.filter(d=>d.cid!==c.id));
+        setDeletedDeals(prev=>[...its.map(d=>({...d,deleted:true})),...prev]);
+        setConfirmAction(null);
+        notify(`Campaign deleted${its.length?` with ${its.length} collab${its.length>1?"s":""}`:""}`);
+      }
+    });
+  };
+  const restoreCampaign = (c) => {
+    supabase.from('campaigns').update({deleted:false}).eq('id',c.id).then(({error})=>{if(error)console.error("Restore campaign failed:",error);});
+    const its = deletedDeals.filter(d=>d.cid===c.id);
+    if(its.length) supabase.from('deals').update({deleted:false}).eq('campaign_id',c.id).then(({error})=>{if(error)console.error(error);});
+    setDeletedCampaigns(prev=>prev.filter(x=>x.id!==c.id));
+    setCampaigns(prev=>[...prev,{...c,deleted:false}]);
+    if(its.length){ setDeletedDeals(prev=>prev.filter(d=>d.cid!==c.id)); setDeals(prev=>[...its.map(d=>({...d,deleted:false})),...prev]); }
+    notify(its.length?`Campaign + ${its.length} collab${its.length>1?"s":""} restored`:"Campaign restored");
+  };
 
   // ── Google Drive: resource management layer ──
   // Loads all files uploaded for a given deal, grouped as { deliverables: {[delId]: [rows]}, raw: [rows] }
@@ -2934,7 +2996,7 @@ return (
       const unreads = recentNotifs.filter(n => new Date(n.time) > new Date(lastSeenTime)).length;
 
       const navItems = {
-        admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"creatives",l:"Creative Hub",i:"📈"},{k:"analytics",l:"Analytics",i:"📊"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"payments",l:"Payments",i:"💰",n:deals.filter(d=>["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0).length},{k:"audit",l:"Audit Log",i:"📜"}],
+        admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"creatives",l:"Creative Hub",i:"📈"},{k:"analytics",l:"Analytics",i:"📊"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"payments",l:"Payments",i:"💰",n:deals.filter(d=>["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0).length},{k:"audit",l:"Audit Log",i:"📜"},{k:"deleted",l:"Deleted",i:"🗑",n:deletedDeals.length+deletedCampaigns.length}],
         negotiator: [{k:"dashboard",l:"My Dashboard",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"dropped",l:"Dropped Collabs",i:"🚫",n:stats.dropped},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
         approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.awaitingReview||stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
         finance: [{k:"dashboard",l:"Payment Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"}],
@@ -4833,9 +4895,39 @@ return (
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:"10px",marginBottom:"6px"}}><span style={{color:T.sub}}>Budget used</span><span style={{color:over?T.err:T.sub,fontWeight:700}}>{pct}%</span></div>
                 <div style={{height:"6px",background:T.goldSoft,borderRadius:"3px",overflow:"hidden",marginBottom:over?"12px":"24px"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:over?T.err:pct>70?T.gold:T.brand}}/></div>
                 {over&&<div style={{display:"flex",alignItems:"center",gap:"7px",background:T.errBg,borderRadius:"2px",padding:"7px 10px",marginBottom:"14px"}}><span style={{fontSize:"10px",color:"#8a1a12",fontWeight:600}}>Over budget by {f(comm-c.budget)} — review before locking more.</span></div>}
-                <div style={{fontSize:"11px",color:T.sub}}>{lk}/{c.target} influencers locked · <b style={{color:T.text}}>{campDeals(c.id).length} deals</b></div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px"}}>
+                  <div style={{fontSize:"11px",color:T.sub}}>{lk}/{c.target} influencers locked · <b style={{color:T.text}}>{campDeals(c.id).length} deals</b></div>
+                  {role==="admin"&&<span onClick={(e)=>{e.stopPropagation();deleteCampaignAdmin(c)}} style={{fontSize:"10px",letterSpacing:"0.5px",textTransform:"uppercase",fontWeight:700,color:T.err,cursor:"pointer",flex:"none"}}>🗑 Delete</span>}
+                </div>
               </div>;})}
           </div>
+        </>}
+
+        {/* ═══ DELETED (admin restore) ═══ */}
+        {view==="deleted"&&role==="admin"&&<>
+          <div style={{marginBottom:"24px"}}>
+            <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{deletedCampaigns.length} campaign{deletedCampaigns.length===1?"":"s"} · {deletedDeals.length} collab{deletedDeals.length===1?"":"s"} archived</div>
+            <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Deleted</div>
+            <div style={{fontSize:"12px",color:T.sub,marginTop:"6px"}}>Hidden from every budget, analytic and list. Restore brings an item back exactly as it was.</div>
+          </div>
+
+          <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"14px"}}>Campaigns</div>
+          {deletedCampaigns.length===0&&<div style={{fontSize:"12px",color:T.sub,marginBottom:"30px"}}>No deleted campaigns.</div>}
+          {deletedCampaigns.length>0&&<div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",marginBottom:"30px"}}>
+            {deletedCampaigns.map((c,i,arr)=><div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none"}}>
+              <div><div style={{fontFamily:DISPLAY,fontSize:"16px",fontWeight:600}}>{c.name}</div><div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{f(c.budget)} budget · {deletedDeals.filter(d=>d.cid===c.id).length} collab(s) archived with it</div></div>
+              <Btn v="outline" sm onClick={()=>restoreCampaign(c)}>↩ Restore</Btn>
+            </div>)}
+          </div>}
+
+          <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"14px"}}>Collabs</div>
+          {deletedDeals.length===0&&<div style={{fontSize:"12px",color:T.sub}}>No deleted collabs.</div>}
+          {deletedDeals.length>0&&<div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
+            {deletedDeals.map((d,i,arr)=>{const camp=[...campaigns,...deletedCampaigns].find(c=>c.id===d.cid);const campGone=camp&&camp.deleted;return <div key={d.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none"}}>
+              <div><div style={{fontSize:"13px",fontWeight:700}}>{d.inf} <span style={{fontSize:"11px",color:T.sub,fontWeight:400}}>· {d.collabId||""}</span></div><div style={{fontSize:"11px",color:T.sub,marginTop:"3px",display:"flex",alignItems:"center",gap:"6px"}}>{f(d.amount)} · {camp?.name||"—"} <Badge s={d.status} sm/>{campGone&&<span style={{color:T.faint,fontStyle:"italic"}}>· restore its campaign first</span>}</div></div>
+              <Btn v="outline" sm disabled={campGone} onClick={()=>restoreCollab(d)}>↩ Restore</Btn>
+            </div>;})}
+          </div>}
         </>}
 
         {/* ═══ DELIVERABLES BANK ═══ */}
@@ -5791,7 +5883,8 @@ return (
               {["paid","live"].includes(sel.status)&&(role==="negotiator"||role==="admin")&&<Btn v="gold" sm onClick={()=>{setRatingF({stars:{timeliness:0,quality:0,communication:0,professionalism:0},feedback:"",influencerId:sel.id});setModal("rate")}}>⭐ Rate Influencer</Btn>}
               {role==="finance"&&<Btn v="purple" sm onClick={()=>{setGstRate("0");setTdsRate("0");setModal("taxCalculator")}}>🧮 Tax Info</Btn>}
               {sel.status==="pending"&&role==="negotiator"&&<div style={{fontSize:"12px",color:T.sub,fontStyle:"italic",padding:"4px 0"}}>⏳ Awaiting manager approval</div>}
-              {role==="admin"&&<div style={{fontSize:"11px",color:T.sub,fontStyle:"italic",padding:"4px 0",borderTop:`1px dashed ${T.border}`,marginTop:"4px",paddingTop:"6px",width:"100%"}}>⚙ Admin: All actions available regardless of status</div>}
+              {role==="admin"&&<Btn v="danger" sm onClick={()=>deleteCollab(sel)}>🗑 Delete Collab</Btn>}
+              {role==="admin"&&<div style={{fontSize:"11px",color:T.sub,fontStyle:"italic",padding:"4px 0",borderTop:`1px dashed ${T.border}`,marginTop:"4px",paddingTop:"6px",width:"100%"}}>⚙ Admin: All actions available regardless of status · deleting moves the collab to Admin → Deleted</div>}
             </div>
           </>;
         })()}

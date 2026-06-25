@@ -10,15 +10,21 @@ export async function POST(req) {
     const roleBlock = requireRole(auth.role, ['admin','negotiator']);
     if (roleBlock) return roleBlock;
 
-    const { to, subject, html, replyTo } = await req.json();
+    const { to, subject, html, replyTo, cc } = await req.json();
 
     if (!to || !subject || !html) {
       return Response.json({ ok: false, error: 'Missing to/subject/html' }, { status: 400 });
     }
 
+    // Normalise CC list (dedupe against `to`, drop blanks/invalids)
+    const toList = Array.isArray(to) ? to : [to];
+    const ccList = (Array.isArray(cc) ? cc : (cc ? [cc] : []))
+      .filter(Boolean)
+      .map(e => String(e).trim())
+      .filter(e => /.+@.+\..+/.test(e) && !toList.includes(e));
+
     // Validate recipients — prevent spam/phishing
-    const recipients = Array.isArray(to) ? to : [to];
-    if (recipients.length > 5) {
+    if (toList.length + ccList.length > 6) {
       return Response.json({ ok: false, error: 'Too many recipients' }, { status: 400 });
     }
 
@@ -37,9 +43,10 @@ export async function POST(req) {
       },
       body: JSON.stringify({
         from,
-        to: Array.isArray(to) ? to : [to],
+        to: toList,
         subject,
         html,
+        ...(ccList.length ? { cc: ccList } : {}),
         ...(replyTo ? { reply_to: replyTo } : {}),
       }),
     });

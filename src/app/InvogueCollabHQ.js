@@ -1585,6 +1585,17 @@ export default function InvogueCollabHQ() {
 </body></html>`;
   };
 
+  // Resolve the creator's POC into an email so we can CC them on creator emails.
+  // POC may be stored as a team-member name (looked up in users) or already an email.
+  const resolvePocEmail = (deal) => {
+    const inf = influencers.find(x=>x.name===deal?.inf);
+    const poc = (inf?.poc||"").trim();
+    if(!poc) return null;
+    if(poc.includes("@")) return poc;
+    const u = users.find(x=>x.name && x.name.trim().toLowerCase()===poc.toLowerCase());
+    return u?.email || null;
+  };
+
   const sendEmail = async (d, isResend=false, overrideEmail=null) => {
     const toEmail = (overrideEmail || d.email || "").trim();
     if(!toEmail) return notify("Influencer email is missing. Add it to the deal first.","err");
@@ -1606,7 +1617,7 @@ export default function InvogueCollabHQ() {
       const resp = await apiFetch('/api/send-email', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ to:toEmail, subject, html })
+        body:JSON.stringify({ to:toEmail, subject, html, cc:resolvePocEmail(d) })
       });
       const data = await resp.json();
       if(!resp.ok || !data.ok) {
@@ -1715,7 +1726,7 @@ export default function InvogueCollabHQ() {
       const resp = await apiFetch('/api/send-email', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ to:d.email, subject, html })
+        body:JSON.stringify({ to:d.email, subject, html, cc:resolvePocEmail(d) })
       });
       const data = await resp.json();
       if(!resp.ok || !data.ok) { console.error("Delivery email failed:", data); return; }
@@ -1775,7 +1786,7 @@ export default function InvogueCollabHQ() {
     const subject = `Your Invogue Package is on the Way — ${d.collabId||"Deal"}`;
     const html = buildDispatchEmailHTML(d, ship);
     try {
-      const resp = await apiFetch('/api/send-email', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ to:d.email, subject, html }) });
+      const resp = await apiFetch('/api/send-email', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ to:d.email, subject, html, cc:resolvePocEmail(d) }) });
       const data = await resp.json();
       if(!resp.ok || !data.ok) { console.error("Dispatch email failed:", data); return; }
       addLog(d.id, loggedIn?.name||"System", "Dispatch notification email sent", `Sent to ${d.email}`);
@@ -2304,7 +2315,7 @@ export default function InvogueCollabHQ() {
       if(!deal.email) return notify("Influencer email is missing. Add it to the deal first.","err");
       notify("Sending payment form…","info");
       try {
-        const resp = await apiFetch('/api/send-email', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:deal.email,subject:`Invogue × ${deal.inf} — Submit Your Payment Details (${deal.collabId||""})`,html:buildPaymentFormEmailHTML(deal,url)})});
+        const resp = await apiFetch('/api/send-email', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:deal.email,subject:`Invogue × ${deal.inf} — Submit Your Payment Details (${deal.collabId||""})`,html:buildPaymentFormEmailHTML(deal,url),cc:resolvePocEmail(deal)})});
         const data = await resp.json();
         if(!resp.ok || !data.ok) { console.error("Payment form email failed:", data); return notify("Email failed: "+(data.error||"Unknown error"),"err"); }
       } catch(e) { console.error("Payment form email error:",e); return notify("Network error while sending email","err"); }

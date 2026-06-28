@@ -65,6 +65,8 @@ const STATUS_CFG = {
 
 const now = () => new Date().toISOString().slice(0,16).replace("T"," ");
 const f = n => "₹"+Number(n||0).toLocaleString("en-IN");
+// Deal commercial amount: a 0 amount means the collab is a barter (product-only) deal.
+const fAmt = n => (Number(n||0)===0 ? "Barter" : f(n));
 // Returns today's date in the user's LOCAL timezone as YYYY-MM-DD.
 // Never use new Date().toISOString().slice(0,10) for dispatch/delivery dates — it gives UTC date.
 const todayLocal = () => {
@@ -161,6 +163,7 @@ async function loadFromSupabase() {
     inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
     shipHistory:d.ship_history||[],
     renegotiationNote:d.renegotiation_note||"",
+    managerNote:d.manager_note||"",
     deleted:d.deleted||false,
     dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
     ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
@@ -312,6 +315,8 @@ export default function InvogueCollabHQ() {
   const [infSearch, setInfSearch] = useState("");
   const [infFilter, setInfFilter] = useState("all"); // all | active
   const [dealTab, setDealTab] = useState("overview"); // overview|deliverables|shipment|payment|activity
+  const [mgrNoteEdit, setMgrNoteEdit] = useState(null); // dealId being edited
+  const [mgrNoteF, setMgrNoteF] = useState("");
   const [loggedIn, setLoggedIn] = useState(null); // null = login screen, user object = app
   const [loginErr, setLoginErr] = useState("");
   const [authChecking, setAuthChecking] = useState(true); // true while resolving initial Supabase session
@@ -524,6 +529,7 @@ export default function InvogueCollabHQ() {
             inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
             shipHistory:d.ship_history||[],
             renegotiationNote:d.renegotiation_note||"",
+            managerNote:d.manager_note||"",
             deleted:d.deleted||false,
             dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
             ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
@@ -761,6 +767,17 @@ export default function InvogueCollabHQ() {
     setCampaigns(prev=>[...prev,{...c,deleted:false}]);
     if(its.length){ setDeletedDeals(prev=>prev.filter(d=>d.cid!==c.id)); setDeals(prev=>[...its.map(d=>({...d,deleted:false})),...prev]); }
     notify(its.length?`Campaign + ${its.length} collab${its.length>1?"s":""} restored`:"Campaign restored");
+  };
+
+  // ── Manager directive note (admin/manager) — shown prominently to the executive ──
+  const saveManagerNote = (deal, text) => {
+    const note = (text||"").trim();
+    supabase.from('deals').update({manager_note:note||null}).eq('id',deal.id).then(({error})=>{if(error){console.error("Manager note save failed:",error);notify("Failed to save note","err");}});
+    upDeal(deal.id,{managerNote:note});
+    if(sel&&sel.id===deal.id) setSel(s=>s?{...s,managerNote:note}:s);
+    addLog(deal.id, loggedIn?.name||"Manager", note?"Manager note updated":"Manager note cleared", note);
+    setMgrNoteEdit(null);
+    notify(note?"Manager note saved":"Manager note cleared");
   };
 
   // ── Google Drive: resource management layer ──
@@ -1402,7 +1419,7 @@ export default function InvogueCollabHQ() {
     const camp = getCamp(d.cid);
     const committed = campCommitted(d.cid);
     if(camp && (committed + d.amount) > camp.budget) {
-      return notify(`Budget exceeded — campaign budget is ${f(camp.budget)}, already committed ${f(committed)}, this deal would add ${f(d.amount)} (total ${f(committed + d.amount)})`,"err");
+      return notify(`Budget exceeded — campaign budget is ${f(camp.budget)}, already committed ${f(committed)}, this deal would add ${fAmt(d.amount)} (total ${f(committed + d.amount)})`,"err");
     }
 
     // Dual approval: deals > ₹50K need both manager AND admin approval
@@ -1411,20 +1428,20 @@ export default function InvogueCollabHQ() {
       // Manager is first approver — move to intermediate state
       supabase.from('deals').update({status:'manager_approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error){console.error("Manager approve save failed:",error);notify("Failed to save approval","err");}});
       upDeal(d.id,{status:"manager_approved",appBy:userName,appAt:ts});
-      addLog(d.id,userName,"Manager approved — awaiting admin approval (₹50K+ dual approval)",f(d.amount));
+      addLog(d.id,userName,"Manager approved — awaiting admin approval (₹50K+ dual approval)",fAmt(d.amount));
       setSel(null);
       setModal(null);
-      notify("Manager approved! Awaiting admin approval for "+f(d.amount));
+      notify("Manager approved! Awaiting admin approval for "+fAmt(d.amount));
       return;
     }
 
     // Admin final approval (or single approval for ≤₹50K)
     supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error){console.error("Approve save failed:",error);notify("Failed to save approval","err");}});
     upDeal(d.id,{status:"approved",appBy:userName,appAt:ts});
-    addLog(d.id,userName,needsDualApproval?"Admin approved (dual approval complete) & amount locked":"Approved & amount locked",f(d.amount));
+    addLog(d.id,userName,needsDualApproval?"Admin approved (dual approval complete) & amount locked":"Approved & amount locked",fAmt(d.amount));
     setSel(null);
     setModal(null);
-    notify("Approved! "+f(d.amount)+" locked");
+    notify("Approved! "+fAmt(d.amount)+" locked");
   };
 
   const rejectDeal = (d, reason) => {
@@ -1445,7 +1462,7 @@ export default function InvogueCollabHQ() {
   const confirmAndApprove = d => {
     setConfirmAction({
       title:"Approve Deal",
-      msg:`Approve and lock ${f(d.amount)} for ${d.inf}?`,
+      msg:`Approve and lock ${fAmt(d.amount)} for ${d.inf}?`,
       onConfirm:()=>{approveDeal(d);setConfirmAction(null);}
     });
   };
@@ -1482,7 +1499,7 @@ export default function InvogueCollabHQ() {
 
   const renegDeal = d => {
     // Open renegotiation modal pre-filled with current deal data
-    setRenegF({ dealId:d.id, amount:String(d.amount), note:"", dels:d.dels.map(dl=>({...dl,keep:true})) });
+    setRenegF({ dealId:d.id, amount:String(d.amount), note:"", cid:d.cid, products:(d.products&&d.products.length?d.products.map(p=>({...p})):[{name:d.product||"",color:"",size:"",qty:"1"}]), dels:d.dels.map(dl=>({...dl,keep:true})) });
     setSel(d);
     setModal("renegotiate");
   };
@@ -1544,8 +1561,10 @@ export default function InvogueCollabHQ() {
     if(!renegF.note) return notify("Add a note explaining changes","err");
 
     const newDels = keptDels.map(({keep,isNew,...rest})=>rest);
+    const rnProducts = (renegF.products||[]).filter(p=>p.name&&p.name.trim());
+    const rnProductStr = rnProducts.map(p=>p.name.trim()).join(", ");
 
-    supabase.from('deals').update({status:'renegotiate',amount:+renegF.amount,renegotiation_note:renegF.note}).eq('id',renegF.dealId).then(({error})=>{if(error) console.error("Renegotiate save failed:",error);});
+    supabase.from('deals').update({status:'renegotiate',amount:+renegF.amount,renegotiation_note:renegF.note,campaign_id:renegF.cid||null,product:rnProductStr,products_json:JSON.stringify(rnProducts)}).eq('id',renegF.dealId).then(({error})=>{if(error) console.error("Renegotiate save failed:",error);});
 
     // Insert new deliverables to Supabase
     const brandNewDels = keptDels.filter(d=>d.isNew);
@@ -1561,8 +1580,8 @@ export default function InvogueCollabHQ() {
     const removedIds = (currentDeal?.dels||[]).map(d=>d.id).filter(id=>!keptIds.includes(id));
     if(removedIds.length>0) supabase.from('deliverables').delete().in('id',removedIds).then(({error})=>{if(error) console.error("Deliverables delete failed:",error);});
 
-    upDeal(renegF.dealId,{status:"renegotiate",amount:+renegF.amount,dels:newDels});
-    addLog(renegF.dealId, loggedIn?.name||"Manager", "Sent back for renegotiation", `New amount: ${f(renegF.amount)} | ${newDels.length} deliverables | Note: ${renegF.note}`);
+    upDeal(renegF.dealId,{status:"renegotiate",amount:+renegF.amount,dels:newDels,cid:renegF.cid,products:rnProducts,product:rnProductStr});
+    addLog(renegF.dealId, loggedIn?.name||"Manager", "Sent back for renegotiation", `New amount: ${fAmt(renegF.amount)} | ${rnProductStr||"—"} | ${newDels.length} deliverables | Note: ${renegF.note}`);
     setSel(null);
     setModal(null);
     setRenegF(null);
@@ -1598,7 +1617,7 @@ export default function InvogueCollabHQ() {
     <table style="width:100%;border-collapse:collapse;margin:8px 0 18px;">
       <tr><td style="padding:9px 0;font-size:12px;color:#777;width:150px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Collab ID</td><td style="padding:9px 0;font-size:14px;font-weight:700;color:#770A1C;border-bottom:1px solid #f1ece3;">${d.collabId||"—"}</td></tr>
       <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Product</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${productList}</td></tr>
-      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Commercials</td><td style="padding:9px 0;font-size:16px;font-weight:700;color:#770A1C;border-bottom:1px solid #f1ece3;">${f(d.amount)}</td></tr>
+      <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Commercials</td><td style="padding:9px 0;font-size:16px;font-weight:700;color:#770A1C;border-bottom:1px solid #f1ece3;">${fAmt(d.amount)}</td></tr>
       <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Content Deadline</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${d.deadline||"—"}</td></tr>
       <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Usage Rights</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${d.usage||"—"}</td></tr>
       <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Payment Terms</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${paymentTermsLabel}</td></tr>
@@ -2123,7 +2142,7 @@ export default function InvogueCollabHQ() {
     const newStatus = match?"invoice_ok":"disputed";
     supabase.from('deals').update({status:newStatus,invoice_amount:+invF,invoice_match:match,invoice_at:ts,invoice_note:match?null:"Invoice mismatch detected by system"}).eq('id',deal.id).then(({error})=>{if(error) console.error("Invoice save failed:",error);});
     upDeal(deal.id,{status:newStatus,inv:{amount:+invF,match,at:ts,note:match?"":"Invoice mismatch detected by system"}});
-    addLog(deal.id,loggedIn?.name||"You","Invoice submitted",`${f(invF)} ${match?"— matched ✓":"— MISMATCH ⚠ (approved: "+f(deal.amount)+")"}`);
+    addLog(deal.id,loggedIn?.name||"You","Invoice submitted",`${f(invF)} ${match?"— matched ✓":"— MISMATCH ⚠ (approved: "+fAmt(deal.amount)+")"}`);
     setSel(null);
     setModal(null);
     setInvF("");
@@ -2218,7 +2237,7 @@ export default function InvogueCollabHQ() {
     });
 
     addLog(deal.id,userName,match?"Invoice sent to Finance":"Invoice flagged as DISPUTE",
-      `${invNum} · ${f(invoiceF.amount)}${match?" ✓ matched":" ⚠ MISMATCH (locked: "+f(deal.amount)+")"} · PAN: ${panUpper}`);
+      `${invNum} · ${f(invoiceF.amount)}${match?" ✓ matched":" ⚠ MISMATCH (locked: "+fAmt(deal.amount)+")"} · PAN: ${panUpper}`);
 
     setSel(null);
     setModal(null);
@@ -2349,7 +2368,7 @@ export default function InvogueCollabHQ() {
   </div>
   <div style="padding:32px;">
     <p style="font-size:15px;line-height:1.6;margin:0 0 16px;">Hi <b>${d.inf}</b>,</p>
-    <p style="font-size:14px;line-height:1.65;color:#444;margin:0 0 18px;">Your content for collaboration <b>${d.collabId||""}</b> is live — thank you! To process your payment of <b style="color:#770A1C;">${f(d.amount)}</b>, please submit your bank and PAN details securely using the button below.</p>
+    <p style="font-size:14px;line-height:1.65;color:#444;margin:0 0 18px;">Your content for collaboration <b>${d.collabId||""}</b> is live — thank you! To process your payment of <b style="color:#770A1C;">${fAmt(d.amount)}</b>, please submit your bank and PAN details securely using the button below.</p>
     <div style="margin:26px 0;text-align:center;">
       <a href="${url}" target="_blank" style="display:inline-block;background:#770A1C;color:#fff;font-size:15px;font-weight:700;text-decoration:none;padding:14px 36px;border-radius:6px;letter-spacing:.3px;">Submit Payment Details</a>
       <p style="font-size:11px;color:#999;margin:10px 0 0;">This is a private, secure link unique to your collaboration. Please don't share it.</p>
@@ -2755,11 +2774,11 @@ ${bodies}</body></html>`);
             // Manager first approval
             supabase.from('deals').update({status:'manager_approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error) console.error("Bulk manager-approve failed for "+d.id+":",error);});
             upDeal(d.id, {status:"manager_approved",appBy:userName,appAt:ts});
-            addLog(d.id, userName, "Manager approved (bulk) — awaiting admin", f(d.amount));
+            addLog(d.id, userName, "Manager approved (bulk) — awaiting admin", fAmt(d.amount));
           } else {
             supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error) console.error("Bulk approve save failed for "+d.id+":",error);});
             upDeal(d.id, {status:"approved",appBy:userName,appAt:ts});
-            addLog(d.id, userName, "Bulk approved", f(d.amount));
+            addLog(d.id, userName, "Bulk approved", fAmt(d.amount));
           }
         });
         setBulkSelected(new Set());
@@ -3090,13 +3109,13 @@ return (
             {pendingApproval.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"22px 24px",marginBottom:"16px",cursor:"pointer"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div><div style={{fontFamily:T.display,fontSize:"19px",fontWeight:600}}>{d.inf}</div><div style={{fontSize:"11px",color:T.sub,marginTop:"3px"}}>{d.platform} · {d.followers}</div></div>
-                <div style={{textAlign:"right"}}><div style={{fontFamily:T.display,fontSize:"24px",fontWeight:600}}>{f(d.amount)}</div><div style={{marginTop:"6px"}}><Badge s={d.status} sm/></div></div>
+                <div style={{textAlign:"right"}}><div style={{fontFamily:T.display,fontSize:"24px",fontWeight:600}}>{fAmt(d.amount)}</div><div style={{marginTop:"6px"}}><Badge s={d.status} sm/></div></div>
               </div>
               <div style={{fontSize:"12px",color:T.text,margin:"14px 0 12px",borderTop:`1px solid ${T.borderSoft}`,paddingTop:"12px"}}>{getCamp(d.cid)?.name||"—"} · <span style={{color:T.sub}}>{d.product} · {d.dels.length} deliverables · by {d.by}</span></div>
               {d.amount>50000&&d.status==="pending"&&<div style={{display:"flex",alignItems:"center",background:"#FBF3F2",border:"1px solid #F2DAD7",borderRadius:"2px",padding:"8px 12px",marginBottom:"16px"}}><span style={{fontSize:"11px",color:T.brand,fontWeight:600}}>Dual approval — exceeds ₹50,000, manager sign-off required.</span></div>}
               {d.status==="manager_approved"&&<div style={{display:"flex",alignItems:"center",background:T.infoBg,borderRadius:"2px",padding:"8px 12px",marginBottom:"16px"}}><span style={{fontSize:"11px",color:T.info,fontWeight:600}}>Manager approved — admin final sign-off needed.</span></div>}
               <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:"10px"}}>
-                <Btn v="primary" sm onClick={()=>setConfirmAction({title:"Approve Deal",msg:"Approve and lock "+f(d.amount)+" for "+d.inf+"?",onConfirm:()=>{approveDeal(d);setConfirmAction(null)}})}>Approve</Btn>
+                <Btn v="primary" sm onClick={()=>setConfirmAction({title:"Approve Deal",msg:"Approve and lock "+fAmt(d.amount)+" for "+d.inf+"?",onConfirm:()=>{approveDeal(d);setConfirmAction(null)}})}>Approve</Btn>
                 <Btn v="outline" sm onClick={()=>setConfirmAction({title:"Request Renegotiation",msg:"Renegotiate "+d.inf+" deal?",onConfirm:()=>{renegDeal(d);setConfirmAction(null)}})}>Renegotiate</Btn>
                 <Btn v="danger" sm onClick={()=>openRejectModal(d)}>Reject</Btn>
               </div>
@@ -3108,7 +3127,7 @@ return (
             <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
               {disputed.map((d,i,arr)=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",cursor:"pointer"}}>
                 <div><div style={{fontSize:"13px",fontWeight:600}}>{d.inf}</div><div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{d.inv?.note||"Amount mismatch"} — by {d.by}</div></div>
-                <span style={{fontSize:"13px",color:T.err,fontWeight:600,fontFamily:T.display}}>{f(d.inv?.amount)} vs {f(d.amount)}</span>
+                <span style={{fontSize:"13px",color:T.err,fontWeight:600,fontFamily:T.display}}>{f(d.inv?.amount)} vs {fAmt(d.amount)}</span>
               </div>)}
             </div>
           </Section>}
@@ -3441,7 +3460,7 @@ return (
           {/* Pending Approval */}
           {myPending.length>0&&<Section title={`Awaiting Manager Approval (${myPending.length})`} icon="⏳">
             {myPending.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"5px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div><span style={{fontWeight:700,fontSize:"12px"}}>{d.inf}</span> <span style={{color:T.sub,fontSize:"13px"}}>· {f(d.amount)} · {d.dels.length} deliverables</span></div>
+              <div><span style={{fontWeight:700,fontSize:"12px"}}>{d.inf}</span> <span style={{color:T.sub,fontSize:"13px"}}>· {fAmt(d.amount)} · {d.dels.length} deliverables</span></div>
               <Badge s={d.status} sm/>
             </div>)}
           </Section>}
@@ -3450,7 +3469,7 @@ return (
           {myRenegotiations.length>0&&<Section title={`Renegotiation Requests (${myRenegotiations.length})`} icon="🔄" action={<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Action Required</span>}>
             {myRenegotiations.map(d=><div key={d.id} style={{background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:d.renegotiationNote?"6px":"0"}}>
-                <div><span style={{fontWeight:700,fontSize:"13px"}}>{d.inf}</span> <span style={{color:T.sub,fontSize:"12px"}}>· {f(d.amount)} · {d.dels.length} deliverables</span></div>
+                <div><span style={{fontWeight:700,fontSize:"13px"}}>{d.inf}</span> <span style={{color:T.sub,fontSize:"12px"}}>· {fAmt(d.amount)} · {d.dels.length} deliverables</span></div>
                 <Badge s={d.status} sm/>
               </div>
               {d.renegotiationNote&&<div style={{fontSize:"12px",color:T.warn,fontStyle:"italic",marginBottom:"6px",padding:"4px 8px",background:"rgba(255,255,255,.5)",borderRadius:"2px"}}>💬 "{d.renegotiationNote}"</div>}
@@ -3485,7 +3504,7 @@ return (
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:"4px"}}><span style={{fontWeight:700,fontSize:"12px"}}>{d.inf}</span><Badge s={d.status} sm/></div>
                   <div style={{fontSize:"11px",color:T.sub,marginBottom:"5px"}}>{d.product} · {getCamp(d.cid)?.name||""}</div>
                   <div style={{display:"flex",gap:"2px",marginBottom:"4px"}}>{d.dels.map((dl,i)=><div key={i} style={{flex:1,height:"3px",borderRadius:"2px",background:dl.st==="live"?T.ok:T.border}}/>)}</div>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:"11px"}}><span style={{fontWeight:800,color:T.gold}}>{f(d.amount)}</span><span style={{color:T.sub}}>{done}/{d.dels.length} content</span></div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:"11px"}}><span style={{fontWeight:800,color:T.gold}}>{fAmt(d.amount)}</span><span style={{color:T.sub}}>{done}/{d.dels.length} content</span></div>
                 </div>;
               })}
             </div>
@@ -3542,8 +3561,8 @@ return (
                 <div style={{display:"flex",gap:"3px",marginTop:"4px"}}>{d.dels.map((dl,i)=><span key={i} style={{padding:"1px 5px",borderRadius:"2px",fontSize:"10px",fontWeight:600,background:d.status==="manager_approved"?T.infoBg:T.warnBg,color:d.status==="manager_approved"?T.info:T.warn}}>{dl.type}</span>)}</div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:"6px"}} onClick={e=>e.stopPropagation()}>
-                <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{f(d.amount)}</span>
-                <Btn v="ok" sm onClick={()=>setConfirmAction({title:"Approve Deal",msg:"Approve and lock "+f(d.amount)+" for "+d.inf+"?",onConfirm:()=>{approveDeal(d);setConfirmAction(null)}})}>✓</Btn>
+                <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{fAmt(d.amount)}</span>
+                <Btn v="ok" sm onClick={()=>setConfirmAction({title:"Approve Deal",msg:"Approve and lock "+fAmt(d.amount)+" for "+d.inf+"?",onConfirm:()=>{approveDeal(d);setConfirmAction(null)}})}>✓</Btn>
                 <Btn v="outline" sm onClick={()=>setConfirmAction({title:"Request Renegotiation",msg:"Renegotiate "+d.inf+" deal?",onConfirm:()=>{renegDeal(d);setConfirmAction(null)}})}>↩</Btn>
                 <Btn v="danger" sm onClick={()=>openRejectModal(d)}>✕</Btn>
               </div>
@@ -3557,7 +3576,7 @@ return (
                 <div>
                   <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.platform}</span></div>
                   <div style={{fontSize:"11px",color:T.sub,marginTop:"1px"}}>{d.product} · Invoice: {f(d.inv?.amount||d.amount)} · by {d.by}</div>
-                  <div style={{fontSize:"12px",color:T.ok,marginTop:"4px",fontWeight:600}}>✓ Amount matches locked: {f(d.amount)}</div>
+                  <div style={{fontSize:"12px",color:T.ok,marginTop:"4px",fontWeight:600}}>✓ Amount matches locked: {fAmt(d.amount)}</div>
                   {d.invoiceNumber&&<div style={{fontSize:"11px",color:T.sub}}>Invoice #: {d.invoiceNumber}</div>}
                 </div>
                 <div style={{display:"flex",gap:"6px"}}>
@@ -3574,7 +3593,7 @@ return (
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div>
                   <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.platform}</span></div>
-                  <div style={{fontSize:"11px",color:T.sub,marginTop:"1px"}}>{d.product} · {f(d.amount)} · by {d.by}</div>
+                  <div style={{fontSize:"11px",color:T.sub,marginTop:"1px"}}>{d.product} · {fAmt(d.amount)} · by {d.by}</div>
                   {(d.dropReason||d.renegotiation_note)&&<div style={{fontSize:"12px",color:T.err,marginTop:"4px",padding:"4px 8px",background:"rgba(180,35,24,.08)",borderRadius:"2px"}}>Reason: {d.dropReason||d.renegotiation_note}</div>}
                 </div>
                 <div style={{display:"flex",gap:"6px"}}>
@@ -3600,7 +3619,7 @@ return (
           {/* DISPUTES */}
           {disputed.length>0&&<Section title={`Active Disputes (${disputed.length})`} icon="⚠">
             {disputed.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.errBg,border:`1px solid ${T.err}33`,borderRadius:"2px",padding:"10px 12px",marginBottom:"5px",cursor:"pointer"}}>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700,fontSize:"12px"}}>{d.inf}</span><span style={{fontSize:"13px",color:T.err,fontWeight:700}}>Invoice: {f(d.inv?.amount)} vs Approved: {f(d.amount)}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700,fontSize:"12px"}}>{d.inf}</span><span style={{fontSize:"13px",color:T.err,fontWeight:700}}>Invoice: {f(d.inv?.amount)} vs Approved: {fAmt(d.amount)}</span></div>
               <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{d.inv?.note||"Mismatch detected"}</div>
             </div>)}
           </Section>}
@@ -3612,7 +3631,7 @@ return (
               <div style={{fontSize:"11px",color:T.sub,padding:"4px 0 8px",fontStyle:"italic"}}>These are from the old flow. They're now visible to Finance directly.</div>
               {payReqs.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.info}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
                 <div>
-                  <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"13px"}}>· {f(d.amount)}</span></div>
+                  <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"13px"}}>· {fAmt(d.amount)}</span></div>
                   <div style={{fontSize:"11px",color:T.sub}}>{d.product} · PAN: {d.pan?.number||d.pan_number||"N/A"}</div>
                 </div>
                 <span style={{fontSize:"11px",color:T.ok,fontWeight:700}}>✓ In Finance Queue</span>
@@ -3631,7 +3650,7 @@ return (
           {needPayment.length>0&&<Section title={`Outstanding Payments (${needPayment.length})`} icon="💰" action={<span style={{fontSize:"11px",color:T.sub}}>{f(needPayment.reduce((s,d)=>s+remaining(d),0))} total outstanding</span>}>
             {needPayment.slice(0,8).map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
               <div><b>{d.inf}</b> <span style={{color:T.sub}}>· {getCamp(d.cid)?.name||""}</span></div>
-              <div><span style={{color:T.ok}}>{f(totalPaid(d))}</span> / <b>{f(d.amount)}</b> <span style={{color:T.warn,fontWeight:700,marginLeft:"4px"}}>Due: {f(remaining(d))}</span></div>
+              <div><span style={{color:T.ok}}>{f(totalPaid(d))}</span> / <b>{fAmt(d.amount)}</b> <span style={{color:T.warn,fontWeight:700,marginLeft:"4px"}}>Due: {f(remaining(d))}</span></div>
             </div>)}
           </Section>}
 
@@ -3792,7 +3811,7 @@ return (
                     <span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,padding:"3px 8px",borderRadius:"2px",flex:"none",...(isAgency?{color:T.gold,background:"#F6DFC1"}:overdue?{color:"#B42318",background:"#FDE8E8"}:{color:T.sub,background:"#F2EEE4"})}}>{isAgency?"Agency":overdue?"Overdue":"Due"}</span>
                   </div>
                   <div style={{display:"flex",borderTop:`1px solid ${T.borderSoft}`,borderBottom:`1px solid ${T.borderSoft}`,marginBottom:"16px"}}>
-                    <div style={{flex:1,padding:"12px 0",borderRight:`1px solid ${T.borderSoft}`}}><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px"}}>Locked</div><div style={{fontFamily:DISPLAY,fontSize:"18px",fontWeight:600}}>{f(d.amount)}</div></div>
+                    <div style={{flex:1,padding:"12px 0",borderRight:`1px solid ${T.borderSoft}`}}><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px"}}>Locked</div><div style={{fontFamily:DISPLAY,fontSize:"18px",fontWeight:600}}>{fAmt(d.amount)}</div></div>
                     {isAgency
                       ? <div style={{flex:1,padding:"12px 0 12px 14px",borderRight:`1px solid ${T.borderSoft}`}}><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px"}}>GST inv.</div>{d.agencyInvoiceUrl?<a href={d.agencyInvoiceUrl} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:"11px",fontWeight:600,color:"#0F5BA7",textDecoration:"none"}}>View invoice</a>:<span style={{fontSize:"11px",color:T.faint}}>—</span>}</div>
                       : <div style={{flex:1,padding:"12px 0 12px 14px",borderRight:`1px solid ${T.borderSoft}`}}><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px"}}>{tdsApply?`TDS ${d.tdsRate||10}%`:"TDS"}</div><div style={{fontFamily:DISPLAY,fontSize:"18px",fontWeight:600,color:tdsApply?T.text:T.faint}}>{tdsApply?f(tdsAmt):"—"}</div></div>}
@@ -3817,7 +3836,7 @@ return (
             {/* Advances Due */}
             {advanceDue.length>0&&<Section title={`Advance Payments Pending (${advanceDue.length})`} icon="⏰">
               {advanceDue.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-                <div><b>{d.inf}</b> <span style={{color:T.sub}}>· {f(d.amount)} · {d.status==="approved"?"Just approved":d.status==="shipped"?"Product shipped":"In progress"}</span></div>
+                <div><b>{d.inf}</b> <span style={{color:T.sub}}>· {fAmt(d.amount)} · {d.status==="approved"?"Just approved":d.status==="shipped"?"Product shipped":"In progress"}</span></div>
                 <Btn v="outline" sm onClick={(e)=>{e.stopPropagation();setSel(d);setPayF({type:"advance",amount:"",note:""});setModal("payment")}}>Record Advance</Btn>
               </div>)}
             </Section>}
@@ -3827,7 +3846,7 @@ return (
               {recentPaid.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>No completed payments yet</div>}
               {recentPaid.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"3px",fontSize:"13px",display:"flex",justifyContent:"space-between",opacity:.85,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.opacity="1"}} onMouseLeave={e=>{e.currentTarget.style.opacity=".85"}}>
                 <span><b>{d.inf}</b> · {getCamp(d.cid)?.name||""}</span>
-                <span style={{color:T.ok,fontWeight:700}}>⭐ {f(d.amount)} paid</span>
+                <span style={{color:T.ok,fontWeight:700}}>⭐ {fAmt(d.amount)} paid</span>
               </div>)}
             </Section>
           </>}
@@ -3902,7 +3921,7 @@ return (
                 </div>
                 <div style={{textAlign:"right"}}>
                   <div style={{fontSize:"11px",color:T.err,fontWeight:700}}>Invoice: {f(d.inv?.amount)}</div>
-                  <div style={{fontSize:"11px",color:T.ok,fontWeight:700}}>Approved: {f(d.amount)}</div>
+                  <div style={{fontSize:"11px",color:T.ok,fontWeight:700}}>Approved: {fAmt(d.amount)}</div>
                   <div style={{fontSize:"11px",color:T.err}}>Δ {f(Math.abs((d.inv?.amount||0)-d.amount))}</div>
                 </div>
               </div>
@@ -4458,7 +4477,7 @@ return (
                     </div>
                     <div style={{display:"flex",gap:"2px",marginBottom:"4px"}}>{d.dels.map((dl,i)=><div key={i} style={{flex:1,height:"3px",borderRadius:"2px",background:dl.st==="live"?T.ok:T.border}}/>)}</div>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:"11px",color:T.sub}}>
-                      <span>{f(d.amount)} · {delDone}/{d.dels.length} content · {d.at.split(" ")[0]}</span>
+                      <span>{fAmt(d.amount)} · {delDone}/{d.dels.length} content · {d.at.split(" ")[0]}</span>
                       <span style={{color:T.ok,fontWeight:600}}>{paid>0?f(paid)+" paid":"Unpaid"}</span>
                     </div>
                   </div>;
@@ -4812,7 +4831,7 @@ return (
                       <div style={{display:"flex",alignItems:"flex-start",gap:"9px"}}>
                         <input type="checkbox" checked={bulkSelected.has(d.id)} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();toggleBulkSelect(d.id)}} style={{cursor:"pointer",marginTop:"5px",accentColor:T.brand}}/>
                         <div>
-                          <div style={{fontFamily:T.display,fontSize:"17px",fontWeight:600}}>{d.inf}</div>
+                          <div style={{fontFamily:T.display,fontSize:"17px",fontWeight:600}}>{d.inf}{d.managerNote&&<span title="Management note" style={{marginLeft:"6px",fontSize:"12px",verticalAlign:"middle"}}>📌</span>}</div>
                           <div style={{fontSize:"10px",color:T.sub,marginTop:"3px"}}>{d.platform} · {d.followers}</div>
                         </div>
                       </div>
@@ -4820,7 +4839,7 @@ return (
                     </div>
                     <div style={{fontSize:"12px",color:"#3a342c",borderTop:`1px solid ${T.borderSoft}`,paddingTop:"12px"}}>{d.products?d.products.map(p=>p.name).join(", "):d.product}{d.agencyManaged&&<span style={{fontSize:"9px",color:T.gold,textTransform:"uppercase",letterSpacing:"0.5px"}}> · Agency</span>}</div>
                     <div style={{fontSize:"10px",color:T.sub,marginTop:"3px"}}>{delSummary}</div>
-                    <div style={{fontFamily:T.display,fontSize:"20px",fontWeight:600,marginTop:"14px"}}>{f(d.amount)}</div>
+                    <div style={{fontFamily:T.display,fontSize:"20px",fontWeight:600,marginTop:"14px",color:Number(d.amount)===0?T.gold:undefined}}>{fAmt(d.amount)}</div>
                     {paid>0&&paid<d.amount&&<div style={{marginTop:"8px",height:"2.5px",borderRadius:"2px",background:T.goldSoft,overflow:"hidden"}}><div style={{height:"100%",width:`${(paid/d.amount)*100}%`,background:T.ok}}/></div>}
                   </div>;
                 })}
@@ -4858,7 +4877,7 @@ return (
                   <div style={{fontSize:"12px",color:T.sub,marginBottom:"6px"}}>{d.product}</div>
                   <div style={{fontSize:"11px",color:T.err,fontWeight:600,padding:"6px",background:"rgba(180,35,24,.1)",borderRadius:"2px",marginBottom:"6px"}}>Dropped by {d.logs?.find(l=>l.a==="Collab dropped")?.u||"Unknown"}</div>
                   <div style={{display:"flex",justifyContent:"space-between"}}>
-                    <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{f(d.amount)}</span>
+                    <span style={{fontWeight:800,fontSize:"14px",color:T.gold}}>{fAmt(d.amount)}</span>
                     <span style={{fontSize:"11px",color:T.sub}}>{d.dels.length} deliverables</span>
                   </div>
                 </div>
@@ -4924,7 +4943,7 @@ return (
           {deletedDeals.length===0&&<div style={{fontSize:"12px",color:T.sub}}>No deleted collabs.</div>}
           {deletedDeals.length>0&&<div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
             {deletedDeals.map((d,i,arr)=>{const camp=[...campaigns,...deletedCampaigns].find(c=>c.id===d.cid);const campGone=camp&&camp.deleted;return <div key={d.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none"}}>
-              <div><div style={{fontSize:"13px",fontWeight:700}}>{d.inf} <span style={{fontSize:"11px",color:T.sub,fontWeight:400}}>· {d.collabId||""}</span></div><div style={{fontSize:"11px",color:T.sub,marginTop:"3px",display:"flex",alignItems:"center",gap:"6px"}}>{f(d.amount)} · {camp?.name||"—"} <Badge s={d.status} sm/>{campGone&&<span style={{color:T.faint,fontStyle:"italic"}}>· restore its campaign first</span>}</div></div>
+              <div><div style={{fontSize:"13px",fontWeight:700}}>{d.inf} <span style={{fontSize:"11px",color:T.sub,fontWeight:400}}>· {d.collabId||""}</span></div><div style={{fontSize:"11px",color:T.sub,marginTop:"3px",display:"flex",alignItems:"center",gap:"6px"}}>{fAmt(d.amount)} · {camp?.name||"—"} <Badge s={d.status} sm/>{campGone&&<span style={{color:T.faint,fontStyle:"italic"}}>· restore its campaign first</span>}</div></div>
               <Btn v="outline" sm disabled={campGone} onClick={()=>restoreCollab(d)}>↩ Restore</Btn>
             </div>;})}
           </div>}
@@ -5280,7 +5299,7 @@ return (
                   return <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{display:"grid",gridTemplateColumns:"1.6fr 1fr 0.8fr 0.8fr 1.2fr",padding:"8px 12px",borderBottom:`1px solid ${T.border}`,fontSize:"12px",cursor:"pointer",transition:"background .1s",alignItems:"center"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceAlt} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     <div><div style={{fontWeight:700}}>{d.inf}</div><div style={{fontSize:"10px",color:T.sub}}>{d.collabId}</div></div>
                     <div style={{color:T.sub}}>{d.platform}</div>
-                    <div style={{fontWeight:700}}>{f(d.amount)}</div>
+                    <div style={{fontWeight:700}}>{fAmt(d.amount)}</div>
                     <div style={{color:paidAmt>0?T.ok:T.sub,fontWeight:paidAmt>0?700:400}}>{paidAmt>0?f(paidAmt):"—"}</div>
                     <div><span style={{padding:"2px 8px",borderRadius:"2px",fontSize:"10px",fontWeight:700,background:sc.bg,color:sc.c}}>{sc.i} {sc.l}</span></div>
                   </div>;
@@ -5327,7 +5346,7 @@ return (
               <div><span style={{color:T.sub}}>Invoice #:</span> <b>{sel.invoiceNumber||"—"}</b></div>
               <div><span style={{color:T.sub}}>Date:</span> <b>{sel.invoiceDate||"—"}</b></div>
               <div><span style={{color:T.sub}}>Invoice Amt:</span> <b style={{color:sel.inv.match===false?T.err:T.ok}}>{f(sel.inv.amount)}{sel.inv.match===false?" ⚠":" ✓"}</b></div>
-              <div><span style={{color:T.sub}}>Locked Amt:</span> <b>{f(sel.amount)}</b></div>
+              <div><span style={{color:T.sub}}>Locked Amt:</span> <b>{fAmt(sel.amount)}</b></div>
             </div>
             {(sel.inv.link||sel.inv.note)&&<div style={{marginTop:"4px"}}><span style={{color:T.sub}}>Link:</span> <a href={ensureUrl(sel.inv.link||sel.inv.note)} target="_blank" rel="noopener noreferrer" style={{color:T.info,fontWeight:700,wordBreak:"break-all"}}>🔗 {sel.inv.link||sel.inv.note}</a></div>}
           </div>}
@@ -5347,7 +5366,7 @@ return (
           </div>
 
           <div style={{padding:"10px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"13px"}}>
-            <div style={{display:"flex",justifyContent:"space-between"}}><span>Locked:</span><b>{f(sel.amount)}</b></div>
+            <div style={{display:"flex",justifyContent:"space-between"}}><span>Locked:</span><b>{fAmt(sel.amount)}</b></div>
             <div style={{display:"flex",justifyContent:"space-between"}}><span>Paid:</span><b style={{color:T.ok}}>{f(totalPaid(sel))}</b></div>
             <div style={{display:"flex",justifyContent:"space-between",borderTop:`1px solid ${T.border}`,marginTop:"4px",paddingTop:"4px"}}><b>Remaining:</b><b style={{color:remaining(sel)>0?T.err:T.ok}}>{f(remaining(sel))}</b></div>
           </div>
@@ -5363,11 +5382,11 @@ return (
       <Modal open={modal==="invoice"} onClose={()=>setModal("detail")} title={`Submit Invoice — ${sel?.inf}`} w={420}>
         {sel&&<>
           <div style={{padding:"10px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
-            <div>🔒 <b>Approved amount:</b> <span style={{fontSize:"20px",fontWeight:800,color:T.gold}}>{f(sel.amount)}</span></div>
+            <div>🔒 <b>Approved amount:</b> <span style={{fontSize:"20px",fontWeight:800,color:T.gold}}>{fAmt(sel.amount)}</span></div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>Enter the exact amount shown on the influencer's invoice. The system will compare it to the locked amount.</div>
           </div>
           <Field label="Invoice Amount *"><Inp value={invF} onChange={e=>setInvF(e.target.value)} type="number" prefix="₹" placeholder={String(sel.amount)}/></Field>
-          {invF&&+invF!==sel.amount&&<div style={{padding:"6px 8px",background:T.errBg,borderRadius:"2px",fontSize:"11px",color:T.err,marginTop:"4px"}}>⚠ MISMATCH: Invoice {f(invF)} ≠ Approved {f(sel.amount)}. This will be flagged as a dispute.</div>}
+          {invF&&+invF!==sel.amount&&<div style={{padding:"6px 8px",background:T.errBg,borderRadius:"2px",fontSize:"11px",color:T.err,marginTop:"4px"}}>⚠ MISMATCH: Invoice {f(invF)} ≠ Approved {fAmt(sel.amount)}. This will be flagged as a dispute.</div>}
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"10px"}}><Btn v="outline" onClick={()=>{setModal("detail");setInvF("")}}>Back</Btn><Btn v="gold" onClick={()=>submitInvoice(sel)} disabled={!invF}>Submit Invoice</Btn></div>
         </>}
       </Modal>
@@ -5416,13 +5435,29 @@ return (
       <Modal open={modal==="renegotiate"&&!!renegF} onClose={()=>{setModal(null);setRenegF(null)}} title={`Renegotiate — ${sel?.inf}`} w={540}>
         {renegF&&sel&&<>
           <div style={{padding:"10px 12px",background:T.warnBg,borderRadius:"2px",marginBottom:"14px",fontSize:"13px",color:T.warn}}>
-            <b>Current terms:</b> {f(sel.amount)} · {sel.dels.length} deliverables · by {sel.by}
+            <b>Current terms:</b> {fAmt(sel.amount)} · {sel.dels.length} deliverables · by {sel.by}
           </div>
 
           <Field label="Revised Commercial Amount *">
             <Inp value={renegF.amount} onChange={e=>setRenegF({...renegF,amount:e.target.value})} type="number" prefix="₹"/>
           </Field>
-          {+renegF.amount!==sel.amount&&<div style={{fontSize:"11px",color:T.info,marginBottom:"8px",marginTop:"-2px"}}>Changed from {f(sel.amount)} → {f(renegF.amount)} ({+renegF.amount>sel.amount?"↑ increase":"↓ decrease"})</div>}
+          {+renegF.amount!==sel.amount&&<div style={{fontSize:"11px",color:T.info,marginBottom:"8px",marginTop:"-2px"}}>Changed from {fAmt(sel.amount)} → {f(renegF.amount)} ({+renegF.amount>sel.amount?"↑ increase":"↓ decrease"})</div>}
+
+          <Field label="Campaign">
+            <Sel value={renegF.cid} onChange={e=>setRenegF({...renegF,cid:e.target.value})} options={campaigns.map(c=>({v:c.id,l:c.name}))}/>
+          </Field>
+
+          <div style={{marginBottom:"14px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}}>
+              <span style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px"}}>Products</span>
+              <Btn v="outline" sm onClick={()=>setRenegF({...renegF,products:[...(renegF.products||[]),{name:"",color:"",size:"",qty:"1"}]})}>+ Add Product</Btn>
+            </div>
+            {(renegF.products||[]).map((p,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"1fr 24px",gap:"6px",marginBottom:"4px",alignItems:"center"}}>
+              <Inp value={p.name} onChange={e=>{const ps=[...renegF.products];ps[i]={...ps[i],name:e.target.value};setRenegF({...renegF,products:ps})}} placeholder="Product name"/>
+              <button onClick={()=>setRenegF({...renegF,products:renegF.products.filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:T.err,cursor:"pointer",fontSize:"14px",padding:0}}>✕</button>
+            </div>)}
+            {(renegF.products||[]).length===0&&<div style={{fontSize:"11px",color:T.sub}}>No products set.</div>}
+          </div>
 
           <div style={{marginBottom:"14px"}}>
             <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px"}}>Select Deliverables to Keep</div>
@@ -5482,7 +5517,7 @@ return (
           <Field label="Revised Commercial Amount *">
             <Inp value={resubmitF.amount} onChange={e=>setResubmitF({...resubmitF,amount:e.target.value})} type="number" prefix="₹"/>
           </Field>
-          {+resubmitF.amount!==sel.amount&&<div style={{fontSize:"11px",color:T.info,marginBottom:"8px",marginTop:"-2px"}}>Changed from {f(sel.amount)} → {f(resubmitF.amount)} ({+resubmitF.amount>sel.amount?"↑ increase":"↓ decrease"})</div>}
+          {+resubmitF.amount!==sel.amount&&<div style={{fontSize:"11px",color:T.info,marginBottom:"8px",marginTop:"-2px"}}>Changed from {fAmt(sel.amount)} → {f(resubmitF.amount)} ({+resubmitF.amount>sel.amount?"↑ increase":"↓ decrease"})</div>}
 
           <div style={{marginBottom:"14px"}}>
             <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px"}}>Deliverables</div>
@@ -5557,8 +5592,8 @@ return (
                   <div style={{fontSize:"11px",color:T.sub,marginTop:"5px"}}>{subline}</div>
                 </div>
                 <div style={{textAlign:"right",flexShrink:0}}>
-                  <div style={{fontFamily:T.display,fontSize:"24px",fontWeight:600}}>{f(sel.amount)}</div>
-                  <div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginTop:"2px"}}>{locked?"Amount Locked":"Proposed"}{paid>0?` · ${f(paid)} paid`:""}</div>
+                  <div style={{fontFamily:T.display,fontSize:"24px",fontWeight:600,color:Number(sel.amount)===0?T.gold:undefined}}>{fAmt(sel.amount)}</div>
+                  <div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginTop:"2px"}}>{Number(sel.amount)===0?"Product-only collab":(locked?"Amount Locked":"Proposed")}{paid>0?` · ${f(paid)} paid`:""}</div>
                 </div>
               </div>
               <div style={{display:"flex",gap:"22px",flexWrap:"wrap"}}>
@@ -5570,6 +5605,25 @@ return (
             <div style={{padding:"24px 28px",overflowY:"auto",flex:1,minHeight:0}}>
 
             {dealTab==="overview"&&<>
+              {(()=>{
+                const canEditNote = role==="admin"||role==="approver";
+                if(mgrNoteEdit===sel.id) return <div style={{border:`1px solid ${T.gold}`,background:T.goldSoft,borderRadius:"2px",padding:"14px 16px",marginBottom:"22px"}}>
+                  <div style={{fontSize:"10px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,color:T.brand,marginBottom:"8px"}}>📌 Management Note</div>
+                  <textarea value={mgrNoteF} onChange={e=>setMgrNoteF(e.target.value)} rows={3} placeholder="What does management want on this collab? (e.g., push for one extra reel, cap at ₹15k, prioritise go-live before 30 Jun)" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.inputBorder}`,borderRadius:"2px",fontSize:"13px",fontFamily:T.ui,resize:"vertical",boxSizing:"border-box"}}/>
+                  <div style={{display:"flex",gap:"6px",marginTop:"8px"}}><Btn v="gold" sm onClick={()=>saveManagerNote(sel,mgrNoteF)}>Save Note</Btn><Btn v="ghost" sm onClick={()=>setMgrNoteEdit(null)}>Cancel</Btn></div>
+                </div>;
+                if(sel.managerNote) return <div style={{borderLeft:`3px solid ${T.brand}`,background:T.goldSoft,borderRadius:"2px",padding:"14px 16px",marginBottom:"22px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"10px"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:"10px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,color:T.brand,marginBottom:"6px"}}>📌 Management Note</div>
+                      <div style={{fontSize:"13px",color:T.text,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{sel.managerNote}</div>
+                    </div>
+                    {canEditNote&&<span onClick={()=>{setMgrNoteF(sel.managerNote||"");setMgrNoteEdit(sel.id)}} style={{fontSize:"10px",letterSpacing:"0.5px",textTransform:"uppercase",fontWeight:700,color:T.brand,cursor:"pointer",flex:"none"}}>Edit</span>}
+                  </div>
+                </div>;
+                if(canEditNote) return <div style={{marginBottom:"20px"}}><Btn v="outline" sm onClick={()=>{setMgrNoteF("");setMgrNoteEdit(sel.id)}}>📌 Add Management Note</Btn></div>;
+                return null;
+              })()}
               <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"22px",flexWrap:"wrap"}}>
                 <Badge s={sel.status}/>
                 {lastLog&&<span style={{fontSize:"11px",color:T.sub,fontStyle:"italic",fontFamily:T.display}}>{lastLog.a} · {lastLog.u} · {lastLog.t}</span>}
@@ -5598,11 +5652,11 @@ return (
             {dealTab==="payment"&&<>
               <div style={{background:T.goldSoft,border:`1px dashed ${T.goldMid}`,borderRadius:"2px",padding:"12px",marginBottom:"16px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
-                  <div><div style={{fontSize:"10px",fontWeight:800,color:T.sub,textTransform:"uppercase"}}>{locked?"🔒 Locked Amount":"Proposed Amount"}</div><div style={{fontSize:"22px",fontWeight:900,color:T.gold,fontFamily:T.display}}>{f(sel.amount)}</div></div>
+                  <div><div style={{fontSize:"10px",fontWeight:800,color:T.sub,textTransform:"uppercase"}}>{Number(sel.amount)===0?"Barter (product-only)":(locked?"🔒 Locked Amount":"Proposed Amount")}</div><div style={{fontSize:"22px",fontWeight:900,color:T.gold,fontFamily:T.display}}>{fAmt(sel.amount)}</div></div>
                   <div style={{textAlign:"right"}}><div style={{fontSize:"11px",color:T.ok,fontWeight:700}}>Paid: {f(paid)}</div><div style={{fontSize:"11px",color:rem>0?T.warn:T.ok,fontWeight:700}}>Remaining: {f(rem)}</div></div>
                 </div>
                 {paid>0&&<div style={{height:"4px",borderRadius:"3px",background:T.border,marginTop:"8px"}}><div style={{height:"100%",width:`${Math.min(paid/sel.amount*100,100)}%`,background:T.ok,borderRadius:"3px"}}/></div>}
-                {sel.inv&&!sel.inv.match&&<div style={{marginTop:"8px",padding:"6px 8px",background:T.errBg,borderRadius:"2px",fontSize:"11px",color:T.err}}>⚠ Invoice: {f(sel.inv.amount)} vs Locked: {f(sel.amount)} — Difference: {f(Math.abs(sel.inv.amount-sel.amount))}</div>}
+                {sel.inv&&!sel.inv.match&&<div style={{marginTop:"8px",padding:"6px 8px",background:T.errBg,borderRadius:"2px",fontSize:"11px",color:T.err}}>⚠ Invoice: {f(sel.inv.amount)} vs Locked: {fAmt(sel.amount)} — Difference: {f(Math.abs(sel.inv.amount-sel.amount))}</div>}
               </div>
 
             {/* Payments */}
@@ -5824,7 +5878,7 @@ return (
                 Dear {sel.inf},<br/><br/>
                 Thank you for partnering with <b>Invogue</b>! Confirmed terms:<br/><br/>
                 <b>Product:</b> {sel.products?sel.products.map(p=>p.name).join(", "):sel.product}<br/>
-                <b>Amount:</b> <span style={{color:T.gold,fontWeight:800}}>{f(sel.amount)}</span><br/>
+                <b>Amount:</b> <span style={{color:T.gold,fontWeight:800}}>{fAmt(sel.amount)}</span><br/>
                 <b>Deliverables:</b> {sel.dels.map(d=>d.type).join(", ")} ({sel.dels.length} total)<br/>
                 <b>Usage Rights:</b> {sel.usage}<br/>
                 <b>Deadline:</b> {sel.deadline}<br/>
@@ -6066,7 +6120,7 @@ return (
         {sel&&<>
           <div style={{padding:"10px 12px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div>Locked Amount: <b style={{fontSize:"18px",color:T.gold}}>{f(sel.amount)}</b></div>
+              <div>Locked Amount: <b style={{fontSize:"18px",color:T.gold}}>{fAmt(sel.amount)}</b></div>
               <span style={{fontSize:"12px",fontWeight:700,color:T.brand,background:"#fff",padding:"3px 10px",borderRadius:"2px"}}>{sel.collabId||"—"}</span>
             </div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"3px"}}>This creator is agency-managed — attach the agency's GST invoice and payout details. Finance pays the agency the locked amount.</div>
@@ -6102,7 +6156,7 @@ return (
         {sel&&<>
           <div style={{padding:"12px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div>Amount: <b style={{fontSize:"20px",color:T.gold}}>{f(sel.amount)}</b></div>
+              <div>Amount: <b style={{fontSize:"20px",color:T.gold}}>{fAmt(sel.amount)}</b></div>
               <span style={{fontSize:"12px",fontWeight:700,color:T.brand,background:"#fff",padding:"3px 10px",borderRadius:"2px",fontFamily:"Bodoni Moda,serif",letterSpacing:".5px"}}>{sel.collabId||"—"}</span>
             </div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product} · {sel.dels.filter(d=>d.st==="live").length}/{sel.dels.length} live</div>
@@ -6144,7 +6198,7 @@ return (
         {sel&&<>
           <div style={{padding:"12px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div>🔒 Locked Amount: <b style={{fontSize:"20px",color:T.gold}}>{f(sel.amount)}</b></div>
+              <div>🔒 Locked Amount: <b style={{fontSize:"20px",color:T.gold}}>{fAmt(sel.amount)}</b></div>
               <span style={{fontSize:"12px",fontWeight:700,color:T.brand,fontFamily:"Bodoni Moda,serif"}}>{sel.collabId||"—"}</span>
             </div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product} · {sel.dels.length} deliverables · {ptLabel(sel.paymentTerms||"next_15th")}</div>
@@ -6168,7 +6222,7 @@ return (
           <Field label="Invoice Amount *">
             <Inp value={invoiceF.amount} onChange={e=>setInvoiceF({...invoiceF,amount:e.target.value})} type="number" prefix="₹" placeholder={String(sel.amount)}/>
           </Field>
-          {invoiceF.amount&&+invoiceF.amount!==sel.amount&&<div style={{padding:"6px 8px",background:T.errBg,borderRadius:"2px",fontSize:"11px",color:T.err,marginTop:"-4px",marginBottom:"8px"}}>⚠ MISMATCH: Invoice {f(invoiceF.amount)} ≠ Locked {f(sel.amount)}. Will be flagged as dispute for manager review.</div>}
+          {invoiceF.amount&&+invoiceF.amount!==sel.amount&&<div style={{padding:"6px 8px",background:T.errBg,borderRadius:"2px",fontSize:"11px",color:T.err,marginTop:"-4px",marginBottom:"8px"}}>⚠ MISMATCH: Invoice {f(invoiceF.amount)} ≠ Locked {fAmt(sel.amount)}. Will be flagged as dispute for manager review.</div>}
           {invoiceF.amount&&+invoiceF.amount===sel.amount&&<div style={{padding:"6px 8px",background:T.okBg,borderRadius:"2px",fontSize:"11px",color:T.ok,marginTop:"-4px",marginBottom:"8px"}}>✓ Matches locked amount — Finance can pay immediately.</div>}
 
           <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginTop:"10px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>🪪 PAN Details (required for payment)</div>
@@ -6189,7 +6243,7 @@ return (
       <Modal open={modal==="sendForPayment"} onClose={()=>setModal(null)} title={`Send for Payment — ${sel?.inf}`} w={460}>
         {sel&&<>
           <div style={{padding:"10px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
-            <div>Amount: <b style={{fontSize:"20px",color:T.gold}}>{f(sel.amount)}</b></div>
+            <div>Amount: <b style={{fontSize:"20px",color:T.gold}}>{fAmt(sel.amount)}</b></div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{sel.products?sel.products.map(p=>p.name).join(", "):sel.product} · {sel.dels.length} deliverables</div>
           </div>
           <div style={{padding:"10px",background:T.warnBg,borderRadius:"2px",marginBottom:"12px",fontSize:"11px",color:T.warn}}>
@@ -6199,7 +6253,7 @@ return (
           <Field label="Legal Name (as on PAN) *" required><Inp value={panF.name} onChange={e=>setPanF({...panF,name:e.target.value})} placeholder="Full legal name"/></Field>
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"14px",paddingTop:"12px",borderTop:`1px solid ${T.border}`}}>
             <Btn v="outline" onClick={()=>setModal("detail")}>Cancel</Btn>
-            <Btn v="gold" onClick={()=>{if(!panF.number||!panF.name){notify("PAN number and name are mandatory","err");return;}setConfirmAction({title:"Send for Payment",msg:`Send ${f(sel.amount)} payment request for ${sel.inf} to manager for approval?`,onConfirm:()=>{sendForPayment(sel,panF.number,panF.name);setConfirmAction(null)}})}}>💸 Send for Payment</Btn>
+            <Btn v="gold" onClick={()=>{if(!panF.number||!panF.name){notify("PAN number and name are mandatory","err");return;}setConfirmAction({title:"Send for Payment",msg:`Send ${fAmt(sel.amount)} payment request for ${sel.inf} to manager for approval?`,onConfirm:()=>{sendForPayment(sel,panF.number,panF.name);setConfirmAction(null)}})}}>💸 Send for Payment</Btn>
           </div>
         </>}
       </Modal>
@@ -6208,7 +6262,7 @@ return (
       <Modal open={modal==="reject"} onClose={()=>setModal(null)} title={`Reject Deal — ${sel?.inf}`} w={420}>
         {sel&&<>
           <div style={{padding:"10px",background:T.errBg,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
-            <div style={{color:T.err,fontWeight:700}}>Amount: {f(sel.amount)}</div>
+            <div style={{color:T.err,fontWeight:700}}>Amount: {fAmt(sel.amount)}</div>
             <div style={{fontSize:"11px",color:T.err,marginTop:"2px"}}>{sel.product} · {sel.dels.length} deliverables</div>
           </div>
           <Field label="Reason for Rejection *" required error={rejectReasonF.trim()===""?"Required":""}>
@@ -6225,7 +6279,7 @@ return (
       <Modal open={modal==="drop"} onClose={()=>setModal(null)} title={`Drop Collab — ${sel?.inf}`} w={420}>
         {sel&&<>
           <div style={{padding:"10px",background:T.errBg,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
-            <div style={{color:T.err,fontWeight:700}}>Amount: {f(sel.amount)}</div>
+            <div style={{color:T.err,fontWeight:700}}>Amount: {fAmt(sel.amount)}</div>
             <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>Status: {sel.status}</div>
             <div style={{fontSize:"11px",color:T.err,marginTop:"4px",fontWeight:600}}>⚠ Can only drop if NO payments made (Current paid: {f(totalPaid(sel))})</div>
           </div>
@@ -6249,7 +6303,7 @@ return (
         {sel&&<>
           <div style={{padding:"10px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
             <div>Collab: <b>{sel.product}</b></div>
-            <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>Status: {sel.status} · Amount: {f(sel.amount)}</div>
+            <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>Status: {sel.status} · Amount: {fAmt(sel.amount)}</div>
           </div>
           <div style={{marginBottom:"12px"}}>
             <div style={{fontSize:"13px",fontWeight:700,marginBottom:"8px"}}>Rate on these dimensions:</div>
@@ -6298,7 +6352,7 @@ return (
         {sel&&<>
           <div style={{padding:"10px",background:T.goldSoft,borderRadius:"2px",marginBottom:"12px",fontSize:"12px"}}>
             <div><b>{sel.inf}</b> · {sel.product}</div>
-            <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>Base Amount: <b>{f(sel.amount)}</b></div>
+            <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>Base Amount: <b>{fAmt(sel.amount)}</b></div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"14px"}}>
             <Field label="GST Rate (%)"><Sel value={gstRate} onChange={e=>setGstRate(e.target.value)} options={[{v:"0",l:"No GST (0%)"},{v:"5",l:"5%"},{v:"12",l:"12%"},{v:"18",l:"18%"},{v:"28",l:"28%"}]}/></Field>

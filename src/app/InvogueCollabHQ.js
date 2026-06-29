@@ -1516,11 +1516,11 @@ export default function InvogueCollabHQ() {
     const keptDels = resubmitF.dels.filter(d=>d.keep!==false);
     if(keptDels.length===0) return notify("Keep at least one deliverable","err");
     if(!resubmitF.response.trim()) return notify("Add a response note for the manager","err");
-    if(+resubmitF.amount <= 0) return notify("Amount must be positive","err");
+    if(resubmitF.amount===""||resubmitF.amount==null||+resubmitF.amount < 0||isNaN(+resubmitF.amount)) return notify("Enter a valid amount (use 0 for a barter / product-only collab)","err");
     // Prevent amount inflation — resubmitted amount cannot exceed original
     const originalDeal = deals.find(d=>d.id===resubmitF.dealId);
     if(originalDeal && +resubmitF.amount > originalDeal.amount) {
-      return notify(`Resubmitted amount (${f(resubmitF.amount)}) cannot exceed the original deal amount (${f(originalDeal.amount)})`,"err");
+      return notify(`Resubmitted amount (${fAmt(resubmitF.amount)}) cannot exceed the original deal amount (${fAmt(originalDeal.amount)})`,"err");
     }
 
     const newDels = keptDels.map(({keep,isNew,...rest})=>rest);
@@ -1547,7 +1547,7 @@ export default function InvogueCollabHQ() {
     if(removedIds.length>0) await supabase.from('deliverables').delete().in('id',removedIds);
 
     upDeal(resubmitF.dealId,{status:"pending",amount:+resubmitF.amount,dels:newDels});
-    addLog(resubmitF.dealId, userName, "Resubmitted after renegotiation", `Amount: ${f(resubmitF.amount)} | ${newDels.length} deliverables | Response: ${resubmitF.response}`);
+    addLog(resubmitF.dealId, userName, "Resubmitted after renegotiation", `Amount: ${fAmt(resubmitF.amount)} | ${newDels.length} deliverables | Response: ${resubmitF.response}`);
     setSel(null);
     setModal(null);
     setResubmitF(null);
@@ -5516,8 +5516,9 @@ return (
 
           <Field label="Revised Commercial Amount *">
             <Inp value={resubmitF.amount} onChange={e=>setResubmitF({...resubmitF,amount:e.target.value})} type="number" prefix="₹"/>
+            <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>Enter <b>0</b> for a barter / product-only collab.</div>
           </Field>
-          {+resubmitF.amount!==sel.amount&&<div style={{fontSize:"11px",color:T.info,marginBottom:"8px",marginTop:"-2px"}}>Changed from {fAmt(sel.amount)} → {f(resubmitF.amount)} ({+resubmitF.amount>sel.amount?"↑ increase":"↓ decrease"})</div>}
+          {+resubmitF.amount!==sel.amount&&<div style={{fontSize:"11px",color:T.info,marginBottom:"8px",marginTop:"-2px"}}>Changed from {fAmt(sel.amount)} → {fAmt(resubmitF.amount)} ({+resubmitF.amount>sel.amount?"↑ increase":"↓ decrease"})</div>}
 
           <div style={{marginBottom:"14px"}}>
             <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px"}}>Deliverables</div>

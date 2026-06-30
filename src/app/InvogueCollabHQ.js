@@ -1676,6 +1676,8 @@ export default function InvogueCollabHQ() {
     const u = users.find(x=>x.name && x.name.trim().toLowerCase()===poc.toLowerCase());
     return u?.email || null;
   };
+  // POC name for a given influencer — so logistics know who to contact about a shipment.
+  const pocNameFor = (infName) => (influencers.find(x=>x.name===infName)?.poc || "").trim();
 
   const sendEmail = async (d, isResend=false, overrideEmail=null) => {
     const toEmail = (overrideEmail || d.email || "").trim();
@@ -3972,6 +3974,7 @@ return (
               <div style={{padding:"8px 10px",background:T.purpleBg,borderRadius:"2px",fontSize:"12px",color:T.purple}}>
                 <div>📍 <b>Ship to:</b> {d.address||"Address not provided"}</div>
                 <div style={{marginTop:"2px"}}>📱 <b>Phone:</b> {d.phone||"Not provided"}</div>
+                {pocNameFor(d.inf)&&<div style={{marginTop:"2px"}}>🧑‍💼 <b>POC:</b> {pocNameFor(d.inf)}</div>}
               </div>
               <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>Approved: {d.appAt} · Deadline: {d.deadline}</div>
             </div>)}
@@ -4063,7 +4066,7 @@ return (
               <div>
                 <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div>
                 <div style={{fontSize:"13px",marginTop:"2px"}}>{d.ship.carrier}: <span style={{color:T.info,fontWeight:700}}>{d.ship.track}</span></div>
-                <div style={{fontSize:"11px",color:T.sub}}>Dispatched: {d.ship.dispAt}</div>
+                <div style={{fontSize:"11px",color:T.sub}}>Dispatched: {d.ship.dispAt}{pocNameFor(d.inf)?` · POC: ${pocNameFor(d.inf)}`:""}</div>
               </div>
               <Btn v="ok" onClick={(e)=>{e.stopPropagation();setSel(d);setDeliveryF({date:todayLocal(),note:""});setModal("markDelivered")}}>✓ Mark Delivered</Btn>
             </div>)}
@@ -5043,13 +5046,13 @@ return (
           </div>
           {awaitingAck.length>0&&<Section title={`Awaiting Acknowledgement (${awaitingAck.length})`} icon="⏳">
             {awaitingAck.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:"3px solid #f59e0b",borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Email sent · Deadline: {d.deadline}</div></div>
+              <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Email sent · Deadline: {d.deadline}{pocNameFor(d.inf)?` · POC: ${pocNameFor(d.inf)}`:""}</div></div>
               <span style={{fontSize:"11px",color:"#92400e",fontWeight:700}}>⏳ Awaiting influencer confirmation</span>
             </div>)}
           </Section>}
           {pendingShip.length>0&&<Section title={`Ready to Dispatch (${pendingShip.length})`} icon="📋">
             {pendingShip.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Acknowledged: {d.ackAt?new Date(d.ackAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"}):"—"} · Deadline: {d.deadline}</div></div>
+              <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Acknowledged: {d.ackAt?new Date(d.ackAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"}):"—"} · Deadline: {d.deadline}{pocNameFor(d.inf)?` · POC: ${pocNameFor(d.inf)}`:""}</div></div>
               {role==="logistics"?<Btn v="purple" sm onClick={()=>{setSel(d);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>:<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Awaiting logistics</span>}
             </div>)}
           </Section>}
@@ -5059,7 +5062,7 @@ return (
             {pickupRequests.map(h=>{
               const deal = deals.find(d=>d.id===h.dealId);
               return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.warn,fontWeight:600}}>· Return ({h.reason})</span></div><div style={{fontSize:"11px",color:T.sub}}>📍 {h.address||"—"} · Requested: {new Date(h.requestedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div></div>
+                <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.warn,fontWeight:600}}>· Return ({h.reason})</span></div><div style={{fontSize:"11px",color:T.sub}}>📍 {h.address||"—"} · Requested: {new Date(h.requestedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}{pocNameFor(h.inf)?` · POC: ${pocNameFor(h.inf)}`:""}</div></div>
                 {role==="logistics"&&<Btn v="gold" sm onClick={()=>{setSel(deal);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("arrangePickup-"+h.histIdx)}}>🔄 Arrange</Btn>}
               </div>;
             })}
@@ -5078,7 +5081,7 @@ return (
                   <span style={{width:"34px",height:"34px",borderRadius:"50%",background:"#E0EDFA",color:"#0F5BA7",display:"flex",alignItems:"center",justifyContent:"center",flex:"none"}}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></span>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}><span style={{fontSize:"13px",fontWeight:700}}>{h.inf}</span><span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:"#0F5BA7",background:"#E0EDFA",padding:"3px 7px",borderRadius:"2px",fontWeight:700}}>Return in transit</span></div>
-                    <div style={{fontSize:"10px",color:T.sub,marginTop:"4px"}}>{h.returnCarrier} · <span style={{fontFamily:DISPLAY,letterSpacing:"0.5px",color:"#3a342c"}}>{h.returnTrack}</span></div>
+                    <div style={{fontSize:"10px",color:T.sub,marginTop:"4px"}}>{h.returnCarrier} · <span style={{fontFamily:DISPLAY,letterSpacing:"0.5px",color:"#3a342c"}}>{h.returnTrack}</span>{pocNameFor(h.inf)?` · POC: ${pocNameFor(h.inf)}`:""}</div>
                   </div>
                   {role==="logistics"
                     ? <span onClick={()=>markProductReturned(deal,h.histIdx)} style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,color:T.brand,flex:"none",cursor:"pointer"}}>Mark returned →</span>
@@ -5093,7 +5096,7 @@ return (
             {reshipPending.map(h=>{
               const deal = deals.find(d=>d.id===h.dealId);
               return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.purple}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.purple,fontWeight:600}}>· New Shipment</span></div><div style={{fontSize:"11px",color:T.sub}}>📦 {(h.products||[]).map(p=>p.name).join(", ")} · 📍 {h.address||"—"}</div></div>
+                <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.purple,fontWeight:600}}>· New Shipment</span></div><div style={{fontSize:"11px",color:T.sub}}>📦 {(h.products||[]).map(p=>p.name).join(", ")} · 📍 {h.address||"—"}{pocNameFor(h.inf)?` · POC: ${pocNameFor(h.inf)}`:""}</div></div>
                 {role==="logistics"&&<Btn v="purple" sm onClick={()=>{setSel(deal);setReshipShipF({track:"",carrier:"DTDC",orderId:""});setModal("reshipDispatch-"+h.histIdx)}}>📦 Dispatch</Btn>}
               </div>;
             })}
@@ -5123,7 +5126,7 @@ return (
                 </div>
               : <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
                   {inTransit.map((d,i,arr)=><div key={d.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none"}}>
-                    <div><div style={{fontWeight:700,fontSize:"13px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"10px",color:T.sub,marginTop:"3px"}}>{d.ship.carrier} · <span style={{fontFamily:DISPLAY,letterSpacing:"0.5px",color:T.text}}>{d.ship.track}</span> · {d.ship.dispAt}</div></div>
+                    <div><div style={{fontWeight:700,fontSize:"13px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"10px",color:T.sub,marginTop:"3px"}}>{d.ship.carrier} · <span style={{fontFamily:DISPLAY,letterSpacing:"0.5px",color:T.text}}>{d.ship.track}</span> · {d.ship.dispAt}{pocNameFor(d.inf)?` · POC: ${pocNameFor(d.inf)}`:""}</div></div>
                     {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(d);setDeliveryF({date:todayLocal(),note:""});setModal("markDelivered")}}>Delivered</Btn>}
                   </div>)}
                 </div>}
@@ -5327,6 +5330,7 @@ return (
               <div><span style={{fontWeight:700}}>📍 Ship to:</span> {sel.address||"Address not provided"}</div>
               <div><span style={{fontWeight:700}}>📱 Phone:</span> {sel.phone||"Not provided"}</div>
               <div><span style={{fontWeight:700}}>👤 Influencer:</span> {sel.inf} · {sel.platform}</div>
+              {pocNameFor(sel.inf)&&<div><span style={{fontWeight:700}}>🧑‍💼 POC:</span> {pocNameFor(sel.inf)} <span style={{color:T.sub}}>— contact for any issues</span></div>}
             </div>
           </div>
           <Field label="Carrier"><Sel value={shipF.carrier} onChange={e=>setShipF({...shipF,carrier:e.target.value})} options={[{v:"DTDC",l:"DTDC"},{v:"Delhivery",l:"Delhivery"},{v:"Shiprocket",l:"Shiprocket"},{v:"BlueDart",l:"BlueDart"},{v:"India Post",l:"India Post"}]}/></Field>

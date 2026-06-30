@@ -100,7 +100,7 @@ async function loadFromSupabase() {
   const users = (usersRes.data||[]).map(u => ({
     id:u.id, name:u.name, email:u.email,
     role:u.role, status:u.status, avatar:u.avatar||u.name?.slice(0,2).toUpperCase(),
-    created:u.created_at?.slice(0,10)||'',
+    created:u.created_at?.slice(0,10)||'', monthlyBudget:u.monthly_budget??50000,
   }));
 
   const campaigns = (campaignsRes.data||[]).map(c => ({
@@ -557,7 +557,7 @@ export default function InvogueCollabHQ() {
         if(data) setUsers(data.map(u => ({
           id:u.id, name:u.name, email:u.email,
           role:u.role, status:u.status, avatar:u.avatar||u.name?.slice(0,2).toUpperCase(),
-          created:u.created_at?.slice(0,10)||'',
+          created:u.created_at?.slice(0,10)||'', monthlyBudget:u.monthly_budget??50000,
         })));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'influencers' }, async () => {
@@ -913,6 +913,13 @@ export default function InvogueCollabHQ() {
   const campDeals = cid => deals.filter(d=>d.cid===cid);
   const campLocked = cid => deals.filter(d=>d.cid===cid&&!["rejected","pending","renegotiate","dropped"].includes(d.status)).length;
   const openCampDetail = c => { setSelCamp(c); setModal("campDetail"); };
+
+  // ── Per-member monthly budget (cap defaults to ₹50k; counts a creator's locked, non-barter collabs in a calendar month) ──
+  const monthOf = (dateStr) => (dateStr||"").slice(0,7);            // "YYYY-MM"
+  const currentMonth = () => new Date().toISOString().slice(0,7);
+  const BUDGET_EXCLUDE = ["rejected","pending","renegotiate","dropped","drop_requested"];
+  const userMonthlyCap = (name) => { const u=users.find(x=>x.name===name); return (u && u.monthlyBudget!=null) ? Number(u.monthlyBudget) : 50000; };
+  const userCommittedMonth = (name, mk, excludeId) => deals.filter(d=>d.by===name && monthOf(d.at)===mk && !BUDGET_EXCLUDE.includes(d.status) && d.id!==excludeId).reduce((s,d)=>s+(d.amount||0),0);
 
   const pendingDels = useMemo(()=>{
     const arr=[];
@@ -1389,8 +1396,8 @@ export default function InvogueCollabHQ() {
   };
 
   const createCampaign = async () => {
-    if(!nCamp.name||!nCamp.budget||!nCamp.target) return notify("Fill all fields","err");
-    if(+nCamp.budget <= 0) return notify("Budget must be positive","err");
+    if(!nCamp.name||!nCamp.target) return notify("Campaign name and target are required","err");
+    if(+nCamp.budget < 0) return notify("Budget can't be negative","err");  // 0 = no campaign cap (budgets are per-member)
     if(+nCamp.target <= 0 || !Number.isInteger(+nCamp.target)) return notify("Target must be a positive whole number","err");
     const campId = uid();
     try {
@@ -1434,11 +1441,22 @@ export default function InvogueCollabHQ() {
     const userName = loggedIn?.name||"You (Manager)";
     const ts = new Date().toISOString();
 
-    // Budget check — enforce hard cap
+    // Budget check 1 — campaign hard cap
     const camp = getCamp(d.cid);
     const committed = campCommitted(d.cid);
-    if(camp && (committed + d.amount) > camp.budget) {
-      return notify(`Budget exceeded — campaign budget is ${f(camp.budget)}, already committed ${f(committed)}, this deal would add ${fAmt(d.amount)} (total ${f(committed + d.amount)})`,"err");
+    if(camp && camp.budget>0 && (committed + d.amount) > camp.budget) {
+      return notify(`Campaign budget exceeded — ${camp.name} budget is ${f(camp.budget)}, already committed ${f(committed)}, this collab would add ${fAmt(d.amount)} (total ${f(committed + d.amount)})`,"err");
+    }
+
+    // Budget check 2 — creator's monthly personal cap (barter collabs don't count)
+    if(d.amount>0){
+      const owner = d.by;
+      const mk = monthOf(d.at) || currentMonth();
+      const cap = userMonthlyCap(owner);
+      const usedM = userCommittedMonth(owner, mk, d.id);
+      if((usedM + d.amount) > cap){
+        return notify(`${owner}'s monthly budget exceeded — ${mk} cap is ${f(cap)}, already committed ${f(usedM)}; this collab adds ${fAmt(d.amount)} (total ${f(usedM + d.amount)}). Raise their cap in Team & Users or reduce the amount.`,"err");
+      }
     }
 
     // Dual approval: deals > ₹50K need both manager AND admin approval
@@ -2788,7 +2806,22 @@ ${bodies}</body></html>`);
       onConfirm: () => {
         const userName = loggedIn?.name || "Manager";
         const ts = new Date().toISOString();
+        // Running budget tallies so multiple collabs in one batch are counted; base excludes the selected set.
+        const selIds = new Set(toApprove.map(d=>d.id));
+        const campUsed = {}; const ownerUsed = {}; const skipped = [];
+        const baseCamp = cid => deals.filter(d=>d.cid===cid && !["rejected","pending","renegotiate","dropped"].includes(d.status) && !selIds.has(d.id)).reduce((s,d)=>s+d.amount,0);
+        const baseOwner = (owner,mk) => deals.filter(d=>d.by===owner && monthOf(d.at)===mk && !BUDGET_EXCLUDE.includes(d.status) && !selIds.has(d.id)).reduce((s,d)=>s+d.amount,0);
+        let approved = 0;
         toApprove.forEach(d => {
+          if(d.amount>0){
+            const camp = getCamp(d.cid);
+            if(campUsed[d.cid]==null) campUsed[d.cid]=baseCamp(d.cid);
+            if(camp && camp.budget>0 && (campUsed[d.cid]+d.amount)>camp.budget){ skipped.push(`${d.inf} — over ${camp.name} budget`); return; }
+            const owner=d.by, mk=monthOf(d.at)||currentMonth(), oKey=`${owner}|${mk}`;
+            if(ownerUsed[oKey]==null) ownerUsed[oKey]=baseOwner(owner,mk);
+            if((ownerUsed[oKey]+d.amount)>userMonthlyCap(owner)){ skipped.push(`${d.inf} — over ${owner}'s ${mk} cap`); return; }
+            campUsed[d.cid]+=d.amount; ownerUsed[oKey]+=d.amount;
+          }
           const needsDual = d.amount > 50000;
           const isDualPending = d.status === "manager_approved";
           if(needsDual && role === "approver" && !isDualPending) {
@@ -2801,11 +2834,12 @@ ${bodies}</body></html>`);
             upDeal(d.id, {status:"approved",appBy:userName,appAt:ts});
             addLog(d.id, userName, "Bulk approved", fAmt(d.amount));
           }
+          approved++;
         });
         setBulkSelected(new Set());
         setBulkSelectAll(false);
         setConfirmAction(null);
-        notify(`${count} deal${count > 1 ? 's' : ''} approved!`);
+        notify(`${approved} collab${approved!==1?'s':''} approved${skipped.length?` · ${skipped.length} skipped (over budget): ${skipped.join("; ")}`:""}`, skipped.length?"warn":"ok");
       }
     });
   };
@@ -3264,6 +3298,13 @@ return (
           notify("Role updated");
         };
 
+        const setUserBudget = (userId,val) => {
+          const v = Math.max(0, Math.round(+val||0));
+          supabase.from('users').update({monthly_budget:v}).eq('id',userId).then(({error})=>{if(error){console.error("Budget update failed:",error);notify("Failed to save budget","err");}});
+          setUsers(prev=>prev.map(u=>u.id===userId?{...u,monthlyBudget:v}:u));
+          notify("Monthly cap updated");
+        };
+
         return <>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px"}}>
             <div>
@@ -3283,6 +3324,37 @@ return (
                 <div><div style={{fontSize:"20px",fontWeight:800,color:v.c}}>{count}</div><div style={{fontSize:"10px",fontWeight:700,color:v.c,textTransform:"uppercase"}}>{v.l}{(v.l.endsWith("s")||v.l==="Finance")?"":"s"}</div></div>
               </div>;
             })}
+          </div>
+
+          {/* Team Budgets — per-person monthly cap */}
+          <div style={{marginBottom:"20px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px",flexWrap:"wrap",gap:"8px"}}>
+              <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700}}>Team Budgets — {new Date().toLocaleString("en-US",{month:"long",year:"numeric"})}</div>
+              <span style={{fontSize:"11px",color:T.sub,fontStyle:"italic",fontFamily:DISPLAY}}>Per-person monthly cap on locked collabs · resets on the 1st · barter excluded</span>
+            </div>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
+              {(()=>{
+                const cm=currentMonth();
+                const list=users.filter(u=>u.status!=="inactive"&&(u.role==="negotiator"||userCommittedMonth(u.name,cm)>0)).sort((a,b)=>a.name.localeCompare(b.name));
+                if(list.length===0) return <div style={{padding:"16px",fontSize:"12px",color:T.sub}}>No team members with budgets this month yet.</div>;
+                return list.map((u,i)=>{
+                  const cap=userMonthlyCap(u.name), used=userCommittedMonth(u.name,cm), rem=cap-used, pct=cap>0?Math.round(used/cap*100):0, over=used>cap;
+                  return <div key={u.id} style={{padding:"14px 16px",borderBottom:i<list.length-1?`1px solid ${T.borderSoft}`:"none"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px",gap:"12px",flexWrap:"wrap"}}>
+                      <div style={{fontSize:"13px",fontWeight:700}}>{u.name} <span style={{fontSize:"11px",color:T.sub,fontWeight:400}}>· {ROLE_CFG[u.role]?.l||u.role}</span></div>
+                      <div style={{display:"flex",alignItems:"center",gap:"14px",flexWrap:"wrap"}}>
+                        <span style={{fontSize:"12px",color:T.sub}}>Committed <b style={{fontFamily:DISPLAY,color:over?T.err:T.text}}>{f(used)}</b> · Remaining <b style={{fontFamily:DISPLAY,color:over?T.err:rem>0?T.ok:T.warn}}>{f(rem)}</b></span>
+                        <label style={{display:"flex",alignItems:"center",gap:"5px",fontSize:"10px",color:T.sub,textTransform:"uppercase",letterSpacing:"0.5px",fontWeight:700}}>Cap ₹
+                          <input type="number" defaultValue={cap} onBlur={e=>{if(+e.target.value!==cap) setUserBudget(u.id,e.target.value)}} style={{width:"95px",padding:"5px 8px",border:`1px solid ${T.inputBorder}`,borderRadius:"2px",fontSize:"12px",fontFamily:DISPLAY}}/>
+                        </label>
+                      </div>
+                    </div>
+                    <div style={{height:"6px",background:T.goldSoft,borderRadius:"3px",overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:over?T.err:pct>80?T.gold:T.brand}}/></div>
+                    {over&&<div style={{fontSize:"10px",color:T.err,marginTop:"4px",fontWeight:700}}>Over cap by {f(used-cap)} — new approvals blocked until the cap is raised or amounts reduced.</div>}
+                  </div>;
+                });
+              })()}
+            </div>
           </div>
 
           {/* Users table */}
@@ -3427,6 +3499,17 @@ return (
             <div><span style={{fontSize:"20px",fontWeight:800}}>👤 My Dashboard</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Your collaborations at a glance</span></div>
             <Btn v="gold" sm onClick={()=>{setEditingDealId(null);setNDeal({inf:"",platform:"Instagram",followers:"",product:"",amount:"",usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>+ New Deal</Btn>
           </div>
+          {(()=>{
+            const myName=loggedIn?.name||""; const cap=userMonthlyCap(myName); const used=userCommittedMonth(myName,currentMonth()); const rem=cap-used; const pct=cap>0?Math.round(used/cap*100):0; const over=used>cap;
+            return <div style={{background:over?T.errBg:T.surface,border:`1px solid ${over?T.err+"55":T.border}`,borderRadius:"2px",padding:"14px 16px",marginBottom:"14px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px",flexWrap:"wrap",gap:"8px"}}>
+                <span style={{fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,color:T.sub}}>My budget · {new Date().toLocaleString("en-US",{month:"long"})}</span>
+                <span style={{fontSize:"12px",color:T.text}}>Committed <b style={{fontFamily:DISPLAY}}>{f(used)}</b> of <b style={{fontFamily:DISPLAY}}>{f(cap)}</b> · <b style={{color:over?T.err:rem>0?T.ok:T.warn,fontFamily:DISPLAY}}>{f(Math.max(rem,0))} left</b></span>
+              </div>
+              <div style={{height:"6px",background:T.goldSoft,borderRadius:"3px",overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:over?T.err:pct>80?T.gold:T.brand}}/></div>
+              {over&&<div style={{fontSize:"10px",color:T.err,marginTop:"4px",fontWeight:700}}>You're over your monthly cap — new collabs won't be approved until it's raised or amounts are reduced.</div>}
+            </div>;
+          })()}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"8px",marginBottom:"16px"}}>
             <StatBox l="Needs My Action" v={myNeedAction.length} c={myNeedAction.length>0?T.warn:T.ok} sub="Do these now"/>
             <StatBox l="Pending Approval" v={myPending.length} c={myPending.length>0?T.warn:T.ok} sub="With manager"/>

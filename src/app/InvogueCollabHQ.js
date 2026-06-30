@@ -164,6 +164,7 @@ async function loadFromSupabase() {
     shipHistory:d.ship_history||[],
     renegotiationNote:d.renegotiation_note||"",
     managerNote:d.manager_note||"",
+    productOnHand:d.no_shipment||false,
     deleted:d.deleted||false,
     dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
     ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
@@ -530,6 +531,7 @@ export default function InvogueCollabHQ() {
             shipHistory:d.ship_history||[],
             renegotiationNote:d.renegotiation_note||"",
             managerNote:d.manager_note||"",
+            productOnHand:d.no_shipment||false,
             deleted:d.deleted||false,
             dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
             ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
@@ -780,6 +782,23 @@ export default function InvogueCollabHQ() {
     notify(note?"Manager note saved":"Manager note cleared");
   };
 
+  // ── Skip shipment: influencer already has the product → bypass dispatch, unlock content ──
+  const skipShipment = (deal) => {
+    if(!(role==="negotiator"||role==="admin"||role==="logistics")) return;
+    setConfirmAction({
+      title:"Skip Shipment",
+      msg:`Mark ${deal.inf} as already having the product? This bypasses dispatch and immediately unlocks content submission — no shipment will be created.`,
+      onConfirm: () => {
+        supabase.from('deals').update({status:'delivered_prod', no_shipment:true}).eq('id',deal.id).then(({error})=>{if(error){console.error("Skip shipment failed:",error);notify("Failed to skip shipment","err");}});
+        upDeal(deal.id,{status:"delivered_prod", productOnHand:true});
+        if(sel&&sel.id===deal.id) setSel(s=>s?{...s,status:"delivered_prod",productOnHand:true}:s);
+        addLog(deal.id, loggedIn?.name||"You", "Shipment skipped — influencer already has the product", "");
+        setConfirmAction(null);
+        notify("Shipment skipped — content can now be submitted");
+      }
+    });
+  };
+
   // ── Google Drive: resource management layer ──
   // Loads all files uploaded for a given deal, grouped as { deliverables: {[delId]: [rows]}, raw: [rows] }
   const loadDriveFiles = useCallback(async (dealId) => {
@@ -909,7 +928,7 @@ export default function InvogueCollabHQ() {
   const awaitingReview = useMemo(()=>pendingDels.filter(d=>d.st==="submitted"),[pendingDels]);
   const revisionNeeded = useMemo(()=>pendingDels.filter(d=>d.st==="revision_requested"),[pendingDels]);
 
-  const pendingShip = useMemo(()=>deals.filter(d=>d.status==="acknowledged"&&!d.ship),[deals]);
+  const pendingShip = useMemo(()=>deals.filter(d=>d.status==="acknowledged"&&!d.ship&&!d.productOnHand),[deals]);
   const awaitingAck = useMemo(()=>deals.filter(d=>d.status==="email_sent"),[deals]);
   const inTransit = useMemo(()=>deals.filter(d=>d.ship?.st==="in_transit"),[deals]);
 
@@ -5679,7 +5698,7 @@ return (
             <Section title={`Deliverables (${done}/${sel.dels.length})`} icon="📋">
               {sel.dels.map((dl,i)=>{
                 const url = deliverableLinkF[dl.id] || "";
-                const productDelivered = sel.ship && sel.ship.st === "delivered";
+                const productDelivered = (sel.ship && sel.ship.st === "delivered") || sel.productOnHand;
                 const canSubmit = (role==="negotiator"||role==="admin") && (dl.st==="pending"||dl.st==="revision_requested") && productDelivered && !["pending","renegotiate","rejected"].includes(sel.status);
                 const canReview = (role==="approver"||role==="admin") && dl.st==="submitted";
                 const canMarkLive = (role==="negotiator"||role==="admin") && dl.st==="approved";
@@ -5810,6 +5829,7 @@ return (
             </>}
 
             {dealTab==="shipment"&&<>
+            {sel.productOnHand&&!sel.ship&&<div style={{padding:"12px 14px",background:T.okBg,border:`1px solid ${T.ok}33`,borderLeft:`3px solid ${T.ok}`,borderRadius:"2px",marginBottom:"16px",fontSize:"13px"}}><b style={{color:T.ok}}>⏭ Shipment skipped</b> — the influencer already had the product, so dispatch was bypassed and content submission was unlocked directly.</div>}
             {/* Shipment & Logistics History */}
             {(sel.ship||(sel.shipHistory||[]).length>0)&&<Section title="Shipment & Logistics" icon="📦">
               {/* Original shipment */}
@@ -5925,6 +5945,7 @@ return (
               {(role==="negotiator"||role==="admin")&&["email_sent","acknowledged","shipped","delivered_prod","partial_live","live","invoice_ok","disputed"].includes(sel.status)&&<Btn v="ghost" sm onClick={()=>confirmAndResendEmail(sel)}>🔁 Resend Confirmation Email</Btn>}
               {(role==="negotiator"||role==="admin")&&["pending","renegotiate","approved","manager_approved","email_sent","acknowledged","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
               {(role==="logistics"||role==="admin")&&sel.status==="acknowledged"&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>}
+              {(role==="negotiator"||role==="logistics"||role==="admin")&&sel.status==="acknowledged"&&!sel.ship&&!sel.productOnHand&&<Btn v="outline" sm onClick={()=>skipShipment(sel)}>⏭ Already has product — skip shipment</Btn>}
               {(role==="logistics"||role==="admin")&&sel.status==="email_sent"&&!sel.ship&&<div style={{padding:"8px 12px",background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"2px",fontSize:"12px",color:"#92400e"}}>⏳ Awaiting influencer acknowledgement before dispatch</div>}
               {(role==="negotiator"||role==="admin")&&["partial_live","live"].includes(sel.status)&&!isPaymentEligible(sel)&&!sel.paymentDetailsAt&&<div style={{fontSize:"12px",color:T.warn,fontWeight:600,padding:"6px 10px",background:T.warnBg,borderRadius:"2px"}}>⏳ Payment opens once all required (non-Story) content is live. Stories are optional.</div>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&isPaymentEligible(sel)&&!sel.paymentDetailsAt&&<label style={{display:"inline-flex",alignItems:"center",gap:"6px",fontSize:"12px",color:T.sub,cursor:"pointer",padding:"6px 10px",background:sel.agencyManaged?T.goldSoft:"transparent",border:`1px solid ${sel.agencyManaged?T.gold:T.border}`,borderRadius:"2px"}}><input type="checkbox" checked={!!sel.agencyManaged} onChange={()=>toggleAgencyManaged(sel)} style={{cursor:"pointer"}}/>🏢 Agency-managed (agency raises GST invoice)</label>}

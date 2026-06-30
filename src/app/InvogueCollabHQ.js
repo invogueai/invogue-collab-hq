@@ -316,6 +316,7 @@ export default function InvogueCollabHQ() {
   const [infSearch, setInfSearch] = useState("");
   const [infFilter, setInfFilter] = useState("all"); // all | active
   const [dealTab, setDealTab] = useState("overview"); // overview|deliverables|shipment|payment|activity
+  const [anFrom, setAnFrom] = useState(""); const [anTo, setAnTo] = useState(""); const [anCamp, setAnCamp] = useState(""); // analytics filters
   const [mgrNoteEdit, setMgrNoteEdit] = useState(null); // dealId being edited
   const [mgrNoteF, setMgrNoteF] = useState("");
   const [loggedIn, setLoggedIn] = useState(null); // null = login screen, user object = app
@@ -4664,205 +4665,180 @@ return (
 
         {/* ═══ FEATURE 1: ANALYTICS & REPORTS VIEW ═══ */}
         {view==="analytics"&&(()=>{
-          const analytics = generateAnalyticsData();
-          // ── Maison analytics computations ──
           const LIVE_SET = ["partial_live","live","invoice_ok","invoice_pending_approval","payment_details_received","payment_requested","payment_approved","partial_paid","paid"];
-          const NON_REJ = deals.filter(d=>!["rejected","dropped"].includes(d.status));
-          const totalSpend = deals.reduce((s,d)=>s+totalPaid(d),0);
-          const avgDeal = NON_REJ.length>0?Math.round(NON_REJ.reduce((s,d)=>s+d.amount,0)/NON_REJ.length):0;
-          const committedN = deals.filter(d=>!["rejected","dropped","pending","renegotiate"].includes(d.status)).length;
-          const liveN = deals.filter(d=>LIVE_SET.includes(d.status)).length;
-          const goLiveRate = committedN>0?Math.round(liveN/committedN*100):0;
-          // avg days to live (created → first live deliverable date), best-effort
-          const ttlArr = deals.map(d=>{
-            const liveDates=(d.dels||[]).filter(x=>x.st==="live"&&x.liveAt).map(x=>new Date(x.liveAt));
-            const start=d.at?new Date(d.at):null;
-            if(!start||liveDates.length===0) return null;
-            const first=new Date(Math.min(...liveDates.map(x=>x.getTime())));
-            const days=Math.round((first-start)/(1000*60*60*24));
-            return days>=0?days:null;
-          }).filter(x=>x!==null);
-          const avgTTL = ttlArr.length>0?Math.round(ttlArr.reduce((s,x)=>s+x,0)/ttlArr.length):null;
+          const PAYWAIT = ["invoice_ok","invoice_pending_approval","payment_details_received","payment_requested","payment_approved","partial_paid","disputed"];
           const inrC = (n)=> n>=1e7?["₹"+(n/1e7).toFixed(1),"Cr"]:n>=1e5?["₹"+(n/1e5).toFixed(1),"L"]:n>=1e3?["₹"+Math.round(n/1e3),"k"]:["₹"+n,""];
-          const [tsMain,tsUnit]=inrC(totalSpend); const [adMain,adUnit]=inrC(avgDeal);
-          const statCells=[
-            {l:"Total spend",main:tsMain,unit:tsUnit},
-            {l:"Avg deal value",main:adMain,unit:adUnit},
-            {l:"Go-live rate",main:String(goLiveRate),unit:"%"},
-            {l:"Avg time to live",main:avgTTL!==null?String(avgTTL):"—",unit:avgTTL!==null?" days":""},
+          const moneyCell = (n)=>{const [m,u]=inrC(n); return <>{m}<span style={{fontSize:"18px"}}>{u}</span></>;};
+
+          // ── Filter (creation date range + campaign) ──
+          const inRange=(d)=>{const day=(d.at||"").slice(0,10); if(anFrom&&day<anFrom) return false; if(anTo&&day>anTo) return false; return true;};
+          const fdeals = deals.filter(d=>(!anCamp||d.cid===anCamp)&&inRange(d));
+          const REAL = fdeals.filter(d=>!["rejected","dropped","drop_requested"].includes(d.status));   // real pipeline
+          const committed = REAL.filter(d=>!["pending","renegotiate","manager_approved"].includes(d.status)); // locked
+          const liveDeals = fdeals.filter(d=>LIVE_SET.includes(d.status));
+          const inProgress = fdeals.filter(d=>["approved","email_sent","acknowledged","shipped","delivered_prod"].includes(d.status));
+          const paidClosed = fdeals.filter(d=>d.status==="paid");
+
+          const totalSpend = fdeals.reduce((s,d)=>s+totalPaid(d),0);
+          const committedVal = committed.reduce((s,d)=>s+d.amount,0);
+          const outstanding = committed.reduce((s,d)=>s+remaining(d),0);
+          const commercial = committed.filter(d=>d.amount>0);
+          const avgDeal = commercial.length>0?Math.round(commercial.reduce((s,d)=>s+d.amount,0)/commercial.length):0;
+          const goLiveRate = committed.length>0?Math.round(liveDeals.length/committed.length*100):0;
+          const isVideo=(t)=>/reel|video|short/i.test(t||"");
+          const videosLive = fdeals.flatMap(d=>(d.dels||[])).filter(x=>x.st==="live"&&isVideo(x.type)).length;
+          const uniqueCreators = new Set(REAL.map(d=>d.inf)).size;
+          const barterCount = committed.filter(d=>d.amount===0).length;
+          // avg days to live
+          const ttlArr = fdeals.map(d=>{const lds=(d.dels||[]).filter(x=>x.st==="live"&&x.liveAt).map(x=>new Date(x.liveAt));const st=d.at?new Date(d.at):null;if(!st||lds.length===0)return null;const fst=new Date(Math.min(...lds.map(x=>x.getTime())));const dd=Math.round((fst-st)/(864e5));return dd>=0?dd:null;}).filter(x=>x!==null);
+          const avgTTL = ttlArr.length>0?Math.round(ttlArr.reduce((s,x)=>s+x,0)/ttlArr.length):null;
+
+          // ── Stage breakdown ──
+          const stages=[
+            {l:"Pending approval",c:T.warn,n:fdeals.filter(d=>["pending","renegotiate","manager_approved"].includes(d.status)).length},
+            {l:"Approved · prep",c:T.info,n:fdeals.filter(d=>["approved","email_sent","acknowledged"].includes(d.status)).length},
+            {l:"Shipping · production",c:T.purple,n:fdeals.filter(d=>["shipped","delivered_prod"].includes(d.status)).length},
+            {l:"Live",c:T.brand,n:fdeals.filter(d=>["partial_live","live"].includes(d.status)).length},
+            {l:"Awaiting payment",c:T.teal,n:fdeals.filter(d=>PAYWAIT.includes(d.status)).length},
+            {l:"Paid · closed",c:T.gold,n:paidClosed.length},
           ];
-          // monthly "gone live" counts — last 6 months
+          const stageTotal=stages.reduce((s,b)=>s+b.n,0)||1;
+
+          // ── Top executives (deal creators) ──
+          const execMap={};
+          REAL.forEach(d=>{const o=d.by||"—"; if(!execMap[o])execMap[o]={name:o,closed:0,spent:0,videosLive:0,liveDeals:0}; if(!["pending","renegotiate","manager_approved"].includes(d.status))execMap[o].closed++; execMap[o].spent+=totalPaid(d); execMap[o].videosLive+=(d.dels||[]).filter(x=>x.st==="live"&&isVideo(x.type)).length; if(LIVE_SET.includes(d.status))execMap[o].liveDeals++;});
+          const execs=Object.values(execMap).map(e=>({...e,goLive:e.closed>0?Math.round(e.liveDeals/e.closed*100):0})).sort((a,b)=>b.closed-a.closed||b.spent-a.spent);
+
+          // ── Monthly gone-live (last 6 months, filtered) ──
           const now=new Date(); const monthKeys=[];
           for(let i=5;i>=0;i--){const dt=new Date(now.getFullYear(),now.getMonth()-i,1);monthKeys.push(dt.toISOString().slice(0,7));}
-          const liveByMonth={}; deals.forEach(d=>{ if(LIVE_SET.includes(d.status)&&d.at){const k=d.at.slice(0,7); if(monthKeys.includes(k)) liveByMonth[k]=(liveByMonth[k]||0)+1;} });
-          const monthVals=monthKeys.map(k=>liveByMonth[k]||0);
-          const maxMonth=Math.max(1,...monthVals);
-          const peakIdx=monthVals.indexOf(Math.max(...monthVals.slice(0,5)));
-          // pipeline buckets
-          const pipe=[
-            {l:"Live",c:T.brand,statuses:["live","partial_live","paid"]},
-            {l:"In production",c:T.gold,statuses:["approved","email_sent","acknowledged","shipped","delivered_prod"]},
-            {l:"Awaiting payment",c:T.teal,statuses:["invoice_ok","invoice_pending_approval","payment_details_received","payment_requested","payment_approved","partial_paid","disputed"]},
-            {l:"Pending approval",c:"#EDE7D6",bd:true,statuses:["pending","renegotiate","under_review","manager_review"]},
-          ].map(b=>({...b,n:deals.filter(d=>b.statuses.includes(d.status)).length}));
-          const pipeTotal=pipe.reduce((s,b)=>s+b.n,0)||1;
+          const liveByMonth={}; fdeals.forEach(d=>{if(LIVE_SET.includes(d.status)&&d.at){const k=d.at.slice(0,7); if(monthKeys.includes(k))liveByMonth[k]=(liveByMonth[k]||0)+1;}});
+          const monthVals=monthKeys.map(k=>liveByMonth[k]||0); const maxMonth=Math.max(1,...monthVals); const peakIdx=monthVals.indexOf(Math.max(...monthVals.slice(0,5)));
+
+          const countCells=[
+            {l:"Total deals",v:REAL.length,c:T.text},
+            {l:"Live deals",v:liveDeals.length,c:T.brand},
+            {l:"In progress",v:inProgress.length,c:T.info},
+            {l:"Paid · closed",v:paidClosed.length,c:T.ok},
+          ];
+          const moneyCells=[
+            {l:"Total spend",v:moneyCell(totalSpend)},
+            {l:"Committed value",v:moneyCell(committedVal)},
+            {l:"Outstanding",v:moneyCell(outstanding)},
+            {l:"Avg deal value",v:commercial.length>0?moneyCell(avgDeal):"—"},
+            {l:"Go-live rate",v:<>{goLiveRate}<span style={{fontSize:"18px"}}>%</span></>},
+            {l:"Avg time to live",v:avgTTL!==null?<>{avgTTL}<span style={{fontSize:"18px"}}> days</span></>:"—"},
+          ];
+          const Strip=({cells})=> <div style={{display:"flex",borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,marginBottom:"24px",flexWrap:"wrap"}}>
+            {cells.map((m,i,arr)=><div key={i} style={{flex:"1 1 140px",padding:"18px 22px",borderRight:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+              <div style={{fontSize:"10px",letterSpacing:"2px",textTransform:"uppercase",color:T.sub,marginBottom:"8px"}}>{m.l}</div>
+              <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,lineHeight:1,color:m.c||T.text}}>{m.v}</div>
+            </div>)}
+          </div>;
+
           return <>
-            {/* Header */}
-            <div style={{marginBottom:"24px"}}>
-              <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{getCurrentFY().label} · to date</div>
-              <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Analytics</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:"22px",flexWrap:"wrap",gap:"12px"}}>
+              <div>
+                <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{anFrom||anTo?`${anFrom||"start"} → ${anTo||"now"}`:`${getCurrentFY().label} · to date`}{anCamp?` · ${getCamp(anCamp)?.name||""}`:""}</div>
+                <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Analytics</div>
+              </div>
             </div>
 
-            {/* Stat strip */}
-            <div style={{display:"flex",borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,marginBottom:"28px",flexWrap:"wrap"}}>
-              {statCells.map((m,i,arr)=><div key={i} style={{flex:"1 1 150px",padding:"18px 22px",borderRight:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
-                <div style={{fontSize:"10px",letterSpacing:"2px",textTransform:"uppercase",color:T.sub,marginBottom:"8px"}}>{m.l}</div>
-                <div style={{fontFamily:DISPLAY,fontSize:"34px",fontWeight:500,lineHeight:1}}>{m.main}<span style={{fontSize:"18px"}}>{m.unit}</span></div>
+            {/* Filters */}
+            <div style={{display:"flex",alignItems:"flex-end",gap:"12px",marginBottom:"24px",flexWrap:"wrap"}}>
+              <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:"1px"}}>From</label><Inp type="date" value={anFrom} onChange={e=>setAnFrom(e.target.value)}/></div>
+              <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:"1px"}}>To</label><Inp type="date" value={anTo} onChange={e=>setAnTo(e.target.value)}/></div>
+              <div style={{minWidth:"180px"}}><label style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:"1px"}}>Campaign</label><Sel value={anCamp} onChange={e=>setAnCamp(e.target.value)} options={[{v:"",l:"All campaigns"},...campaigns.map(c=>({v:c.id,l:c.name}))]}/></div>
+              {(anFrom||anTo||anCamp)&&<Btn v="outline" sm onClick={()=>{setAnFrom("");setAnTo("");setAnCamp("")}}>Clear</Btn>}
+              <span style={{marginLeft:"auto",fontSize:"11px",color:T.sub,fontStyle:"italic",fontFamily:DISPLAY}}>Filtered by collab creation date</span>
+            </div>
+
+            {/* Headline counts */}
+            <Strip cells={countCells}/>
+
+            {/* Stage breakdown */}
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"22px",marginBottom:"24px"}}>
+              <div style={{fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:"18px"}}>Pipeline by stage</div>
+              <div style={{display:"flex",height:"14px",borderRadius:"2px",overflow:"hidden",marginBottom:"18px",background:T.goldSoft}}>
+                {stages.filter(b=>b.n>0).map((b,i)=><div key={i} style={{width:`${b.n/stageTotal*100}%`,background:b.c}} title={`${b.l}: ${b.n}`}/>)}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"12px"}}>
+                {stages.map((b,i)=><div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px"}}>
+                  <span style={{display:"flex",alignItems:"center",gap:"8px",fontSize:"12px"}}><span style={{width:"10px",height:"10px",borderRadius:"2px",background:b.c,flex:"none"}}/>{b.l}</span>
+                  <span style={{fontFamily:DISPLAY,fontSize:"15px",fontWeight:600}}>{b.n}</span>
+                </div>)}
+              </div>
+            </div>
+
+            {/* Money / efficiency */}
+            <Strip cells={moneyCells}/>
+
+            {/* Content output micro-strip */}
+            <div style={{display:"flex",gap:"20px",flexWrap:"wrap",fontSize:"12px",color:T.sub,marginBottom:"28px"}}>
+              <span>Videos live · <b style={{color:T.text,fontFamily:DISPLAY}}>{videosLive}</b></span>
+              <span>Unique creators · <b style={{color:T.text,fontFamily:DISPLAY}}>{uniqueCreators}</b></span>
+              <span>Barter collabs · <b style={{color:T.text,fontFamily:DISPLAY}}>{barterCount}</b></span>
+            </div>
+
+            {/* Top Executives */}
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",marginBottom:"28px",overflow:"hidden"}}>
+              <div style={{padding:"16px 18px 0"}}><div style={{fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700}}>Top executives</div></div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1.2fr 1fr 1fr",padding:"12px 18px",fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,fontWeight:700,borderBottom:`1px solid ${T.borderSoft}`}}>
+                <span>Executive</span><span style={{textAlign:"right"}}>Deals closed</span><span style={{textAlign:"right"}}>Money spent</span><span style={{textAlign:"right"}}>Videos live</span><span style={{textAlign:"right"}}>Go-live</span>
+              </div>
+              {execs.length===0&&<div style={{padding:"16px 18px",fontSize:"12px",color:T.sub}}>No collabs in this range.</div>}
+              {execs.map((e,i)=><div key={e.name} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1.2fr 1fr 1fr",padding:"13px 18px",fontSize:"13px",alignItems:"center",borderBottom:i<execs.length-1?`1px solid ${T.borderSoft}`:"none"}}>
+                <span style={{fontWeight:700}}>{i===0&&e.closed>0?"🏆 ":""}{e.name}</span>
+                <span style={{textAlign:"right",fontFamily:DISPLAY,fontSize:"15px",fontWeight:600}}>{e.closed}</span>
+                <span style={{textAlign:"right",fontFamily:DISPLAY,color:T.gold,fontWeight:600}}>{f(e.spent)}</span>
+                <span style={{textAlign:"right",fontFamily:DISPLAY,fontSize:"15px",fontWeight:600}}>{e.videosLive}</span>
+                <span style={{textAlign:"right",fontWeight:700,color:e.goLive>=70?T.ok:e.goLive>=40?T.warn:T.sub}}>{e.goLive}%</span>
               </div>)}
             </div>
 
-            {/* Charts */}
-            <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:"28px",marginBottom:"28px"}}>
-              {/* Monthly gone-live bars */}
-              <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"22px"}}>
-                <div style={{fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:"24px"}}>Collabs gone live · monthly</div>
-                <div style={{display:"flex",alignItems:"flex-end",gap:"18px",height:"150px",borderBottom:`1px solid ${T.border}`}}>
-                  {monthVals.map((v,i)=>{
-                    const h=Math.round(v/maxMonth*100); const isLast=i===monthVals.length-1;
-                    const col=isLast?T.brand:(i===peakIdx&&v>0)?T.gold:"#EDE7D6";
-                    return <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}} title={`${v} live`}>
-                      <div style={{width:"100%",maxWidth:"46px",height:`${Math.max(h,2)}%`,background:col,borderRadius:"2px 2px 0 0"}}/>
-                    </div>;
-                  })}
-                </div>
-                <div style={{display:"flex",gap:"18px",marginTop:"10px"}}>
-                  {monthKeys.map((k,i)=><span key={k} style={{flex:1,textAlign:"center",fontSize:"10px",letterSpacing:"1px",color:i===monthKeys.length-1?T.text:T.sub,fontWeight:i===monthKeys.length-1?700:400}}>{new Date(k+"-01").toLocaleDateString("en-US",{month:"short"}).toUpperCase()}</span>)}
-                </div>
+            {/* Monthly gone-live bars */}
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"22px",marginBottom:"28px"}}>
+              <div style={{fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:"24px"}}>Collabs gone live · monthly</div>
+              <div style={{display:"flex",alignItems:"flex-end",gap:"18px",height:"150px",borderBottom:`1px solid ${T.border}`}}>
+                {monthVals.map((v,i)=>{const h=Math.round(v/maxMonth*100); const isLast=i===monthVals.length-1; const col=isLast?T.brand:(i===peakIdx&&v>0)?T.gold:"#EDE7D6"; return <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}} title={`${v} live`}><div style={{width:"100%",maxWidth:"46px",height:`${Math.max(h,2)}%`,background:col,borderRadius:"2px 2px 0 0"}}/></div>;})}
               </div>
-              {/* Pipeline by status */}
-              <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"22px"}}>
-                <div style={{fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:"20px"}}>Pipeline by status</div>
-                <div style={{display:"flex",height:"14px",borderRadius:"2px",overflow:"hidden",marginBottom:"20px"}}>
-                  {pipe.filter(b=>b.n>0).map((b,i)=><div key={i} style={{width:`${b.n/pipeTotal*100}%`,background:b.c}}/>)}
-                </div>
-                <div style={{display:"flex",flexDirection:"column",gap:"11px"}}>
-                  {pipe.map((b,i)=><div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                    <span style={{display:"flex",alignItems:"center",gap:"8px",fontSize:"12px"}}><span style={{width:"10px",height:"10px",borderRadius:"2px",background:b.c,border:b.bd?`1px solid ${T.border}`:"none"}}/>{b.l}</span>
-                    <span style={{fontFamily:DISPLAY,fontSize:"13px"}}>{b.n}</span>
-                  </div>)}
-                </div>
+              <div style={{display:"flex",gap:"18px",marginTop:"10px"}}>
+                {monthKeys.map((k,i)=><span key={k} style={{flex:1,textAlign:"center",fontSize:"10px",letterSpacing:"1px",color:i===monthKeys.length-1?T.text:T.sub,fontWeight:i===monthKeys.length-1?700:400}}>{new Date(k+"-01").toLocaleDateString("en-US",{month:"short"}).toUpperCase()}</span>)}
               </div>
             </div>
 
-            {/* Campaign Performance */}
-            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"14px",marginBottom:"14px"}}>
-              <div style={{fontSize:"12px",fontWeight:700,marginBottom:"10px"}}>Campaign Performance (Budget vs Spent)</div>
-              {campaigns.map(c => {
-                const perf = analytics.campaignPerf[c.id] || {budget:c.budget,spent:0};
-                const pct = c.budget > 0 ? (perf.spent / c.budget * 100) : 0;
-                return <div key={c.id} style={{marginBottom:"10px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:"4px",fontSize:"11px"}}>
-                    <span style={{fontWeight:600}}>{c.name}</span>
-                    <span>{f(perf.spent)}/{f(perf.budget)}</span>
-                  </div>
-                  <div style={{height:"6px",background:T.border,borderRadius:"3px",overflow:"hidden"}}>
-                    <div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.warn:T.ok}}/>
-                  </div>
+            {/* Campaign Performance (filtered) */}
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"22px",marginBottom:"28px"}}>
+              <div style={{fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:"16px"}}>Campaign performance</div>
+              {campaigns.filter(c=>!anCamp||c.id===anCamp).map(c=>{
+                const cf=fdeals.filter(d=>d.cid===c.id); const spent=cf.reduce((s,d)=>s+totalPaid(d),0); const comm=cf.filter(d=>!["rejected","dropped","drop_requested","pending","renegotiate"].includes(d.status)).reduce((s,d)=>s+d.amount,0);
+                const pct=c.budget>0?Math.round(comm/c.budget*100):0;
+                return <div key={c.id} style={{marginBottom:"12px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px",fontSize:"12px"}}><span style={{fontWeight:600}}>{c.name} <span style={{color:T.sub,fontWeight:400}}>· {cf.length} collabs</span></span><span style={{color:T.sub}}>committed <b style={{color:T.text}}>{f(comm)}</b>{c.budget>0?` / ${f(c.budget)}`:" · no cap"} · paid {f(spent)}</span></div>
+                  {c.budget>0&&<div style={{height:"6px",background:T.goldSoft,borderRadius:"3px",overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.gold:T.brand}}/></div>}
                 </div>;
               })}
             </div>
 
-            {/* Top Influencers */}
-            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"14px",marginBottom:"14px"}}>
-              <div style={{fontSize:"12px",fontWeight:700,marginBottom:"10px"}}>Top Influencers</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
-                <div>
-                  <div style={{fontSize:"11px",color:T.sub,marginBottom:"6px"}}>By Deal Count</div>
-                  {Object.entries(analytics.influencerStats).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([inf,count])=><div key={inf} style={{fontSize:"11px",padding:"4px 0",display:"flex",justifyContent:"space-between"}}>
-                    <span>{inf}</span><span style={{color:T.gold,fontWeight:700}}>{count} deals</span>
-                  </div>)}
-                </div>
-                <div>
-                  <div style={{fontSize:"11px",color:T.sub,marginBottom:"6px"}}>By Total Amount</div>
-                  {deals.reduce((acc,d)=>{acc[d.inf]=(acc[d.inf]||0)+d.amount;return acc;},{})&&Object.entries(deals.reduce((acc,d)=>{acc[d.inf]=(acc[d.inf]||0)+d.amount;return acc;},{})).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([inf,amt])=><div key={inf} style={{fontSize:"11px",padding:"4px 0",display:"flex",justifyContent:"space-between"}}>
-                    <span>{inf}</span><span style={{color:T.gold,fontWeight:700}}>{f(amt)}</span>
-                  </div>)}
-                </div>
-              </div>
-            </div>
-
-            {/* Status Distribution Pie */}
-            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"14px",marginBottom:"14px"}}>
-              <div style={{fontSize:"12px",fontWeight:700,marginBottom:"10px"}}>Deal Status Distribution</div>
+            {/* Top Influencers (filtered) */}
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"22px",marginBottom:"28px"}}>
+              <div style={{fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:"16px"}}>Top influencers</div>
               {(()=>{
-                const total = Object.values(analytics.statusDist).reduce((s,v)=>s+v,0);
-                if(total===0) return <div style={{fontSize:"13px",color:T.sub,padding:"12px"}}>No deals yet</div>;
-                const colors = {pending:T.warn,approved:T.ok,live:T.teal,paid:T.brand,rejected:T.err,dropped:T.faint};
-                const entries = Object.entries(analytics.statusDist).filter(([,v])=>v>0);
-                let startAngle = 0;
-                const slices = entries.map(([status,count])=>{
-                  const pct = count/total;
-                  const angle = pct * 360;
-                  const endAngle = startAngle + angle;
-                  const largeArc = angle > 180 ? 1 : 0;
-                  const x1 = 80 + 70 * Math.cos((startAngle-90)*Math.PI/180);
-                  const y1 = 80 + 70 * Math.sin((startAngle-90)*Math.PI/180);
-                  const x2 = 80 + 70 * Math.cos((endAngle-90)*Math.PI/180);
-                  const y2 = 80 + 70 * Math.sin((endAngle-90)*Math.PI/180);
-                  const path = entries.length===1
-                    ? `M80,10 A70,70 0 1,1 79.99,10 Z`
-                    : `M80,80 L${x1},${y1} A70,70 0 ${largeArc},1 ${x2},${y2} Z`;
-                  startAngle = endAngle;
-                  return {status,count,pct,path,color:colors[status]||T.sub};
-                });
-                return <div style={{display:"flex",alignItems:"center",gap:"24px",padding:"12px"}}>
-                  <svg width="160" height="160" viewBox="0 0 160 160">
-                    {slices.map((s,i)=><path key={i} d={s.path} fill={s.color} stroke="#fff" strokeWidth="2"/>)}
-                  </svg>
-                  <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
-                    {slices.map((s,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:"8px",fontSize:"13px"}}>
-                      <div style={{width:"10px",height:"10px",borderRadius:"2px",background:s.color,flexShrink:0}}/>
-                      <span style={{fontWeight:600,textTransform:"capitalize"}}>{s.status}</span>
-                      <span style={{color:T.sub}}>{s.count} ({Math.round(s.pct*100)}%)</span>
-                    </div>)}
-                  </div>
+                const byCount={}, byAmt={};
+                REAL.forEach(d=>{byCount[d.inf]=(byCount[d.inf]||0)+1; byAmt[d.inf]=(byAmt[d.inf]||0)+d.amount;});
+                return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"24px"}}>
+                  <div><div style={{fontSize:"10px",color:T.sub,marginBottom:"8px",textTransform:"uppercase",letterSpacing:"0.5px"}}>By collab count</div>{Object.entries(byCount).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([inf,c])=><div key={inf} style={{fontSize:"12px",padding:"5px 0",display:"flex",justifyContent:"space-between",borderBottom:`1px solid ${T.borderSoft}`}}><span>{inf}</span><span style={{color:T.gold,fontWeight:700}}>{c}</span></div>)}{Object.keys(byCount).length===0&&<div style={{fontSize:"12px",color:T.sub}}>—</div>}</div>
+                  <div><div style={{fontSize:"10px",color:T.sub,marginBottom:"8px",textTransform:"uppercase",letterSpacing:"0.5px"}}>By total value</div>{Object.entries(byAmt).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([inf,a])=><div key={inf} style={{fontSize:"12px",padding:"5px 0",display:"flex",justifyContent:"space-between",borderBottom:`1px solid ${T.borderSoft}`}}><span>{inf}</span><span style={{color:T.gold,fontWeight:700,fontFamily:DISPLAY}}>{fAmt(a)}</span></div>)}{Object.keys(byAmt).length===0&&<div style={{fontSize:"12px",color:T.sub}}>—</div>}</div>
                 </div>;
               })()}
             </div>
 
-            {/* Deliverables Completion */}
-            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"14px",marginBottom:"14px"}}>
-              <div style={{fontWeight:800,fontSize:"13px",marginBottom:"10px"}}>Deliverables Completion</div>
-              {(()=>{
-                const allDels = deals.flatMap(d=>d.dels||[]);
-                const live = allDels.filter(d=>d.st==="live").length;
-                const pending = allDels.filter(d=>d.st==="pending").length;
-                const total = allDels.length;
-                const pct = total>0?Math.round(live/total*100):0;
-                return <>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:"13px",marginBottom:"5px"}}>
-                    <span>{live} of {total} deliverables completed</span>
-                    <span style={{fontWeight:700,color:pct>80?T.ok:pct>50?T.warn:T.err}}>{pct}%</span>
-                  </div>
-                  <div style={{height:"8px",borderRadius:"2px",background:T.border,overflow:"hidden"}}>
-                    <div style={{height:"100%",width:`${pct}%`,background:pct>80?T.ok:pct>50?T.warn:T.err,borderRadius:"2px",transition:"width .3s"}}/>
-                  </div>
-                  <div style={{display:"flex",gap:"16px",marginTop:"8px",fontSize:"11px",color:T.sub}}>
-                    <span>Live: {live}</span><span>Pending: {pending}</span>
-                  </div>
-                </>;
-              })()}
-            </div>
-
-            {/* Export Button */}
+            {/* Export */}
             <div style={{textAlign:"right"}}>
               <Btn v="gold" onClick={()=>{
-                const csv = "Metric,Value\nTotal Committed,"+stats.committed+"\nTotal Paid,"+stats.paid+"\nPending Approval,"+stats.pendingN+"\nDisputes,"+stats.disputed+"\nPending Deliverables,"+stats.pendingDels;
-                const blob = new Blob([csv],{type:"text/csv"});
-                const link = document.createElement("a");
-                link.href = URL.createObjectURL(blob);
-                link.download = `analytics_${new Date().toISOString().slice(0,10)}.csv`;
-                link.click();
+                const rows=[["Metric","Value"],["Range",`${anFrom||"start"} to ${anTo||"now"}`],["Campaign",anCamp?(getCamp(anCamp)?.name||anCamp):"All"],["Total deals",REAL.length],["Live deals",liveDeals.length],["In progress",inProgress.length],["Paid/closed",paidClosed.length],["Total spend",totalSpend],["Committed value",committedVal],["Outstanding",outstanding],["Avg deal value",avgDeal],["Go-live rate %",goLiveRate],["Videos live",videosLive],["Unique creators",uniqueCreators],[],["Executive","Deals closed","Money spent","Videos live","Go-live %"],...execs.map(e=>[e.name,e.closed,e.spent,e.videosLive,e.goLive])];
+                const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+                const blob=new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8;"}); const link=document.createElement("a"); link.href=URL.createObjectURL(blob); link.download=`analytics_${new Date().toISOString().slice(0,10)}.csv`; link.click();
                 notify("Report exported!");
               }}>📥 Export Report</Btn>
             </div>

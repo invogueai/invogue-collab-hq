@@ -342,6 +342,7 @@ export default function InvogueCollabHQ() {
   const [agencyFile, setAgencyFile] = useState(null);
   const [agencyUploading, setAgencyUploading] = useState(false);
   const [nCamp, setNCamp] = useState(null);
+  const [editingCampId, setEditingCampId] = useState(null);
   const [shipF, setShipF] = useState({track:"",carrier:"DTDC",orderId:""});
   const [payF, setPayF] = useState({type:"advance",amount:"",note:""});
   const [invF, setInvF] = useState("");
@@ -1395,10 +1396,29 @@ export default function InvogueCollabHQ() {
     finally { submittingDealRef.current = false; setSubmittingDeal(false); }
   };
 
+  const openEditCampaign = (c) => {
+    if(!(role==="admin"||role==="approver"||role==="finance")) return notify("Only admin / manager / finance can edit campaigns","err");
+    setNCamp({name:c.name, budget:c.budget!=null?String(c.budget):"", target:String(c.target||""), deadline:c.deadline||"", brief:c.brief||"", status:c.status||"active"});
+    setEditingCampId(c.id);
+    setModal("newCamp");
+  };
+
   const createCampaign = async () => {
     if(!nCamp.name||!nCamp.target) return notify("Campaign name and target are required","err");
     if(+nCamp.budget < 0) return notify("Budget can't be negative","err");  // 0 = no campaign cap (budgets are per-member)
     if(+nCamp.target <= 0 || !Number.isInteger(+nCamp.target)) return notify("Target must be a positive whole number","err");
+
+    // ── EDIT existing campaign ──
+    if(editingCampId){
+      const patch = {name:nCamp.name, budget:+nCamp.budget, target_influencers:+nCamp.target, status:nCamp.status||"active", deadline:nCamp.deadline||null, brief:nCamp.brief||null};
+      const {error} = await supabase.from('campaigns').update(patch).eq('id',editingCampId);
+      if(error){ console.error("Campaign update failed:",error); return notify("Failed to update campaign: "+error.message,"err"); }
+      setCampaigns(prev=>prev.map(c=>c.id===editingCampId?{...c,name:nCamp.name,budget:+nCamp.budget,target:+nCamp.target,status:nCamp.status||"active",deadline:nCamp.deadline,brief:nCamp.brief}:c));
+      if(selCamp&&selCamp.id===editingCampId) setSelCamp(c=>c?{...c,name:nCamp.name,budget:+nCamp.budget,target:+nCamp.target,status:nCamp.status||"active",deadline:nCamp.deadline,brief:nCamp.brief}:c);
+      setModal(null); setNCamp(null); setEditingCampId(null);
+      return notify("Campaign updated!");
+    }
+
     const campId = uid();
     try {
       const {error:campErr} = await supabase.from('campaigns').insert({
@@ -3241,7 +3261,7 @@ return (
           </Section>}
 
           {/* CAMPAIGN BUDGETS */}
-          <Section title="Campaign Budgets" action={<Btn v="gold" sm onClick={()=>{setNCamp({name:"",budget:"",target:"",deadline:""});setModal("newCamp")}}>+ New Campaign</Btn>}>
+          <Section title="Campaign Budgets" action={<Btn v="gold" sm onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active"});setModal("newCamp")}}>+ New Campaign</Btn>}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"14px"}}>
               {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"18px",cursor:"pointer"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"10px"}}><span style={{fontWeight:600,fontSize:"14px"}}>{c.name}</span><span style={{fontFamily:T.display,fontSize:"16px",fontWeight:600,color:pct>90?T.err:T.text}}>{pct}%</span></div>
@@ -4999,7 +5019,7 @@ return (
               <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{campaigns.filter(c=>c.status==="active").length} active · {f(campaigns.reduce((s,c)=>s+campCommitted(c.id),0))} committed</div>
               <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Campaigns</div>
             </div>
-            {(role==="approver"||role==="finance"||role==="admin")&&<Btn v="gold" onClick={()=>{setNCamp({name:"",budget:"",target:"",deadline:"",brief:""});setModal("newCamp")}}>+ New Campaign</Btn>}
+            {(role==="approver"||role==="finance"||role==="admin")&&<Btn v="gold" onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active"});setModal("newCamp")}}>+ New Campaign</Btn>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:"18px"}}>
             {campaigns.map(c=>{
@@ -5021,7 +5041,10 @@ return (
                 {over&&<div style={{display:"flex",alignItems:"center",gap:"7px",background:T.errBg,borderRadius:"2px",padding:"7px 10px",marginBottom:"14px"}}><span style={{fontSize:"10px",color:"#8a1a12",fontWeight:600}}>Over budget by {f(comm-c.budget)} — review before locking more.</span></div>}
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px"}}>
                   <div style={{fontSize:"11px",color:T.sub}}>{lk}/{c.target} influencers locked · <b style={{color:T.text}}>{campDeals(c.id).length} deals</b></div>
-                  {role==="admin"&&<span onClick={(e)=>{e.stopPropagation();deleteCampaignAdmin(c)}} style={{fontSize:"10px",letterSpacing:"0.5px",textTransform:"uppercase",fontWeight:700,color:T.err,cursor:"pointer",flex:"none"}}>🗑 Delete</span>}
+                  <div style={{display:"flex",gap:"10px",flex:"none"}}>
+                    {(role==="admin"||role==="approver"||role==="finance")&&<span onClick={(e)=>{e.stopPropagation();openEditCampaign(c)}} style={{fontSize:"10px",letterSpacing:"0.5px",textTransform:"uppercase",fontWeight:700,color:T.brand,cursor:"pointer"}}>✎ Edit</span>}
+                    {role==="admin"&&<span onClick={(e)=>{e.stopPropagation();deleteCampaignAdmin(c)}} style={{fontSize:"10px",letterSpacing:"0.5px",textTransform:"uppercase",fontWeight:700,color:T.err,cursor:"pointer"}}>🗑 Delete</span>}
+                  </div>
                 </div>
               </div>;})}
           </div>
@@ -5335,15 +5358,16 @@ return (
         </>}
       </Modal>
 
-      {/* NEW CAMPAIGN */}
-      <Modal open={modal==="newCamp"&&nCamp} onClose={()=>setModal(null)} title="Create Campaign" w={420}>
+      {/* NEW / EDIT CAMPAIGN */}
+      <Modal open={modal==="newCamp"&&nCamp} onClose={()=>{setModal(null);setEditingCampId(null);setNCamp(null)}} title={editingCampId?"Edit Campaign":"Create Campaign"} w={420}>
         {nCamp&&<>
           <Field label="Campaign Name *"><Inp value={nCamp.name} onChange={e=>setNCamp({...nCamp,name:e.target.value})} placeholder="Summer Sculpt Launch"/></Field>
-          <Field label="Budget *"><Inp value={nCamp.budget} onChange={e=>setNCamp({...nCamp,budget:e.target.value})} type="number" prefix="₹"/></Field>
+          <Field label="Budget (optional)"><Inp value={nCamp.budget} onChange={e=>setNCamp({...nCamp,budget:e.target.value})} type="number" prefix="₹"/><div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>Leave 0 for no campaign cap — budgets are enforced per team member.</div></Field>
           <Field label="Target Influencers *"><Inp value={nCamp.target} onChange={e=>setNCamp({...nCamp,target:e.target.value})} type="number"/></Field>
+          <Field label="Status"><Sel value={nCamp.status||"active"} onChange={e=>setNCamp({...nCamp,status:e.target.value})} options={[{v:"active",l:"Active"},{v:"planning",l:"Planning"},{v:"completed",l:"Completed"}]}/></Field>
           <Field label="Deadline"><Inp value={nCamp.deadline} onChange={e=>setNCamp({...nCamp,deadline:e.target.value})} type="date"/></Field>
           <Field label="Campaign Brief"><Textarea value={nCamp.brief} onChange={e=>setNCamp({...nCamp,brief:e.target.value})} placeholder="Describe the campaign objectives, target audience, key messages..." rows={4}/></Field>
-          <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"12px"}}><Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn><Btn v="gold" onClick={createCampaign}>Create</Btn></div>
+          <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"12px"}}><Btn v="outline" onClick={()=>{setModal(null);setEditingCampId(null);setNCamp(null)}}>Cancel</Btn><Btn v="gold" onClick={createCampaign}>{editingCampId?"Save Changes":"Create"}</Btn></div>
         </>}
       </Modal>
 
@@ -5367,6 +5391,10 @@ return (
           const dropped = cd.filter(d=>["dropped","drop_requested","rejected"].includes(d.status));
 
           return <>
+            {(role==="admin"||role==="approver"||role==="finance")&&<div style={{display:"flex",justifyContent:"flex-end",gap:"6px",marginBottom:"12px"}}>
+              <Btn v="outline" sm onClick={()=>openEditCampaign(selCamp)}>✎ Edit Campaign</Btn>
+              {role==="admin"&&<Btn v="danger" sm onClick={()=>{const c=selCamp;setModal(null);setSelCamp(null);deleteCampaignAdmin(c);}}>🗑 Delete</Btn>}
+            </div>}
             {/* Budget overview */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"8px",marginBottom:"14px"}}>
               <div style={{background:T.surfaceAlt,borderRadius:"2px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>BUDGET</div><div style={{fontSize:"16px",fontWeight:800}}>{f(selCamp.budget)}</div></div>

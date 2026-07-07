@@ -235,9 +235,9 @@ const Sel = ({value,onChange,options})=>(
 
 const Field = ({label,children,span,error,required})=>(<div style={{gridColumn:span?`span ${span}`:undefined,marginBottom:"14px"}}><div style={{fontSize:"10px",fontWeight:700,color:error?T.err:T.sub,textTransform:"uppercase",letterSpacing:"1.5px",marginBottom:"6px"}}>{label}{required&&<span style={{color:T.err}}> *</span>}{error&&<span style={{color:T.err,fontSize:"10px",marginLeft:"6px",textTransform:"none",fontWeight:600,letterSpacing:0}}>{error}</span>}</div>{children}</div>);
 
-const Modal = ({open,onClose,title,children,w=540,bare})=>{
+const Modal = ({open,onClose,title,children,w=540,bare,noBackdropClose})=>{
   if(!open) return null;
-  return <div role="presentation" style={{position:"fixed",inset:0,background:"rgba(26,20,14,.32)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"16px",animation:"fadeIn .2s ease"}} onClick={onClose}>
+  return <div role="presentation" style={{position:"fixed",inset:0,background:"rgba(26,20,14,.32)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"16px",animation:"fadeIn .2s ease"}} onClick={noBackdropClose?undefined:onClose}>
     <div role="dialog" aria-modal="true" aria-label={title} onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:"2px",width:`${w}px`,maxWidth:"96vw",minWidth:"280px",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 10px 40px rgba(0,0,0,.20)",animation:"fadeUp .22s ease",overflow:"hidden"}}>
       {bare ? children : <>
         <div style={{padding:"20px 24px",borderBottom:`1px solid ${T.borderHead}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
@@ -327,6 +327,7 @@ export default function InvogueCollabHQ() {
   const [view, setView] = useState("dashboard");
   const [tab, setTab] = useState("all");
   const [campFilter, setCampFilter] = useState("");
+  const [pocFilter, setPocFilter] = useState("");
   const [sel, setSel] = useState(null);
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState(null);
@@ -982,12 +983,18 @@ export default function InvogueCollabHQ() {
   const filtered = useMemo(()=>{
     let d = deals;
     if(campFilter) d = d.filter(x=>x.cid===campFilter);
+    if(pocFilter) d = d.filter(x=>(influencers.find(i=>i.name===x.inf)?.poc||"")===pocFilter);
     if(tab==="all") return d;
     if(tab==="pending") return d.filter(x=>x.status==="pending"||x.status==="renegotiate");
     if(tab==="active") return d.filter(x=>["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live"].includes(x.status));
+    if(tab==="review") return d.filter(x=>(x.dels||[]).some(dl=>dl.st==="submitted"));
+    if(tab==="dispatch") return d.filter(x=>x.status==="acknowledged"&&!x.ship&&!x.productOnHand);
+    if(tab==="transit") return d.filter(x=>x.ship?.st==="shipped");
+    if(tab==="delivered") return d.filter(x=>x.status==="delivered_prod"||x.ship?.st==="delivered");
+    if(tab==="live") return d.filter(x=>["partial_live","live"].includes(x.status));
     if(tab==="payment") return d.filter(x=>["invoice_ok","disputed","partial_paid","paid"].includes(x.status));
     return d;
-  },[deals,tab,campFilter]);
+  },[deals,tab,campFilter,pocFilter,influencers]);
 
   const stats = useMemo(()=>{
     const active = deals.filter(d=>!["rejected","pending","renegotiate","dropped"].includes(d.status));
@@ -2100,7 +2107,7 @@ export default function InvogueCollabHQ() {
 
   // ─── CONTENT APPROVAL WORKFLOW ───
   const submitContentForReview = (deal, delIdx, contentUrl) => {
-    if(!deal.ship || deal.ship.st !== "delivered") return notify("Product must be delivered before content can be submitted","err");
+    if(!((deal.ship && deal.ship.st === "delivered") || deal.productOnHand)) return notify("Product must be delivered before content can be submitted","err");
     if(!contentUrl) return notify("Content URL/link is required","err");
     if(!validUrl(contentUrl)) return notify("Invalid URL — must be a valid link","err");
     const dl0 = deal.dels[delIdx];
@@ -3196,6 +3203,16 @@ return (
                 <Btn v="danger" sm onClick={()=>openRejectModal(d)}>Reject</Btn>
               </div>
             </div>)}
+          </Section>}
+
+          {/* CONTENT AWAITING REVIEW */}
+          {awaitingReview.length>0&&<Section title="Content Awaiting Review" action={<span style={{fontSize:"11px",color:T.info,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}}>{awaitingReview.length} to review</span>}>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
+              {awaitingReview.map((d,i,arr)=>{const deal=deals.find(x=>x.id===d.dealId);return <div key={i} onClick={()=>{if(deal){setSel(deal);setModal("detail")}}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",cursor:"pointer"}}>
+                <div><div style={{fontSize:"13px",fontWeight:600}}>{d.inf} <span style={{color:T.sub,fontWeight:400,fontSize:"11px"}}>· {d.platform}</span></div><div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{d.type}: {d.desc||"—"} · {getCamp(d.cid)?.name||""}{deal?.by?` · by ${deal.by}`:""}</div>{d.link&&<a href={ensureUrl(d.link)} target="_blank" rel="noreferrer" style={{fontSize:"10px",color:T.info,fontWeight:600}} onClick={e=>e.stopPropagation()}>🔗 View content</a>}</div>
+                <DBadge s="submitted"/>
+              </div>;})}
+            </div>
           </Section>}
 
           {/* DISPUTES */}
@@ -4703,10 +4720,12 @@ return (
             {l:"Paid · closed",c:T.gold,n:paidClosed.length},
           ];
           const stageTotal=stages.reduce((s,b)=>s+b.n,0)||1;
+          const rejectedN = fdeals.filter(d=>d.status==="rejected").length;
+          const droppedN = fdeals.filter(d=>["dropped","drop_requested"].includes(d.status)).length;
 
-          // ── Top executives (deal creators) ──
+          // ── Top executives (deal creators) ── "Money spent" = committed value of their approved/active collabs (any payment stage)
           const execMap={};
-          REAL.forEach(d=>{const o=d.by||"—"; if(!execMap[o])execMap[o]={name:o,closed:0,spent:0,videosLive:0,liveDeals:0}; if(!["pending","renegotiate","manager_approved"].includes(d.status))execMap[o].closed++; execMap[o].spent+=totalPaid(d); execMap[o].videosLive+=(d.dels||[]).filter(x=>x.st==="live"&&isVideo(x.type)).length; if(LIVE_SET.includes(d.status))execMap[o].liveDeals++;});
+          REAL.forEach(d=>{const o=d.by||"—"; if(!execMap[o])execMap[o]={name:o,closed:0,spent:0,videosLive:0,liveDeals:0}; const locked=!["pending","renegotiate","manager_approved"].includes(d.status); if(locked){execMap[o].closed++; execMap[o].spent+=(d.amount||0);} execMap[o].videosLive+=(d.dels||[]).filter(x=>x.st==="live"&&isVideo(x.type)).length; if(LIVE_SET.includes(d.status))execMap[o].liveDeals++;});
           const execs=Object.values(execMap).map(e=>({...e,goLive:e.closed>0?Math.round(e.liveDeals/e.closed*100):0})).sort((a,b)=>b.closed-a.closed||b.spent-a.spent);
 
           // ── Monthly gone-live (last 6 months, filtered) ──
@@ -4722,8 +4741,8 @@ return (
             {l:"Paid · closed",v:paidClosed.length,c:T.ok},
           ];
           const moneyCells=[
-            {l:"Total spend",v:moneyCell(totalSpend)},
-            {l:"Committed value",v:moneyCell(committedVal)},
+            {l:"Money spent",v:moneyCell(committedVal)},
+            {l:"Paid out",v:moneyCell(totalSpend)},
             {l:"Outstanding",v:moneyCell(outstanding)},
             {l:"Avg deal value",v:commercial.length>0?moneyCell(avgDeal):"—"},
             {l:"Go-live rate",v:<>{goLiveRate}<span style={{fontSize:"18px"}}>%</span></>},
@@ -4768,6 +4787,11 @@ return (
                   <span style={{fontFamily:DISPLAY,fontSize:"15px",fontWeight:600}}>{b.n}</span>
                 </div>)}
               </div>
+              {(rejectedN>0||droppedN>0)&&<div style={{marginTop:"16px",paddingTop:"14px",borderTop:`1px solid ${T.borderSoft}`,display:"flex",gap:"24px",fontSize:"12px",color:T.sub}}>
+                <span style={{display:"flex",alignItems:"center",gap:"8px"}}><span style={{width:"10px",height:"10px",borderRadius:"2px",background:T.err,flex:"none"}}/>Rejected <b style={{color:T.text,fontFamily:DISPLAY}}>{rejectedN}</b></span>
+                <span style={{display:"flex",alignItems:"center",gap:"8px"}}><span style={{width:"10px",height:"10px",borderRadius:"2px",background:T.faint,flex:"none"}}/>Dropped <b style={{color:T.text,fontFamily:DISPLAY}}>{droppedN}</b></span>
+                <span style={{color:T.faint,fontStyle:"italic",fontFamily:DISPLAY}}>not counted in pipeline / money</span>
+              </div>}
             </div>
 
             {/* Money / efficiency */}
@@ -4873,10 +4897,12 @@ return (
               <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Max Amount</label><Inp type="number" value={filterAmountMax} onChange={e=>setFilterAmountMax(e.target.value)} placeholder="999999"/></div>
               <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Platform</label><Sel value={filterPlatform} onChange={e=>setFilterPlatform(e.target.value)} options={[{v:"",l:"All"},{v:"Instagram",l:"Instagram"},{v:"YouTube",l:"YouTube"},{v:"TikTok",l:"TikTok"}]}/></div>
               <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Negotiator</label><Sel value={filterNegotiator} onChange={e=>setFilterNegotiator(e.target.value)} options={[{v:"",l:"All"},...users.filter(u=>u.role==="negotiator").map(u=>({v:u.name,l:u.name}))]}/></div>
+              <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>POC</label><Sel value={pocFilter} onChange={e=>setPocFilter(e.target.value)} options={[{v:"",l:"All POCs"},...[...new Set(influencers.map(i=>i.poc).filter(Boolean))].sort().map(p=>({v:p,l:p}))]}/></div>
             </div>
+            {pocFilter&&<div style={{marginBottom:"8px",fontSize:"11px",color:T.brand,fontWeight:700}}>Filtering by POC · {pocFilter}</div>}
             <div style={{display:"flex",gap:"6px"}}>
               <Btn v="gold" sm onClick={()=>{const filtered=applyFilters();setTab("all")}}>Apply Filters</Btn>
-              <Btn v="outline" sm onClick={()=>{setFilterDateFrom("");setFilterDateTo("");setFilterAmountMin("");setFilterAmountMax("");setFilterPlatform("");setFilterNegotiator("");setFilterStatus([]);setActiveFilters([])}}>Clear All</Btn>
+              <Btn v="outline" sm onClick={()=>{setFilterDateFrom("");setFilterDateTo("");setFilterAmountMin("");setFilterAmountMax("");setFilterPlatform("");setFilterNegotiator("");setFilterStatus([]);setActiveFilters([]);setPocFilter("")}}>Clear All</Btn>
             </div>
             {activeFilters.length>0&&<div style={{marginTop:"8px",display:"flex",gap:"4px",flexWrap:"wrap"}}>
               {activeFilters.map((f,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:"4px",background:T.goldSoft,color:T.brand,padding:"4px 8px",borderRadius:"2px",fontSize:"10px",fontWeight:700}}>
@@ -4891,12 +4917,17 @@ return (
               all: deals.length,
               pending: deals.filter(x=>["pending","renegotiate"].includes(x.status)).length,
               active: deals.filter(x=>["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live","payment_details_received"].includes(x.status)).length,
+              review: deals.filter(x=>(x.dels||[]).some(dl=>dl.st==="submitted")).length,
+              dispatch: deals.filter(x=>x.status==="acknowledged"&&!x.ship&&!x.productOnHand).length,
+              transit: deals.filter(x=>x.ship?.st==="shipped").length,
+              delivered: deals.filter(x=>x.status==="delivered_prod"||x.ship?.st==="delivered").length,
+              live: deals.filter(x=>["partial_live","live"].includes(x.status)).length,
               payment: deals.filter(x=>["invoice_ok","disputed","partial_paid","paid","payment_details_received","payment_requested","payment_approved"].includes(x.status)).length,
             };
             return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.border}`,marginBottom:"20px",flexWrap:"wrap",gap:"8px"}}>
-              <div style={{display:"flex",gap:"28px"}}>
-                {[{k:"all",l:"All"},{k:"pending",l:"Pending"},{k:"active",l:"Active"},{k:"payment",l:"Payments"}].map(t=>(
-                  <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"12px 0",border:"none",borderBottom:tab===t.k?`2px solid ${T.brand}`:"2px solid transparent",background:"none",color:tab===t.k?T.brand:T.sub,fontWeight:700,fontSize:"12px",letterSpacing:"1px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui}}>{t.l} <span style={{color:tab===t.k?T.gold:T.faint,fontFamily:T.display}}>{tc[t.k]}</span></button>
+              <div style={{display:"flex",gap:"22px",flexWrap:"wrap"}}>
+                {[{k:"all",l:"All"},{k:"pending",l:"Pending"},{k:"active",l:"Active"},{k:"review",l:"Content Review"},{k:"dispatch",l:"Awaiting Dispatch"},{k:"transit",l:"In Transit"},{k:"delivered",l:"Delivered"},{k:"live",l:"Live"},{k:"payment",l:"Payments"}].map(t=>(
+                  <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"12px 0",border:"none",borderBottom:tab===t.k?`2px solid ${T.brand}`:"2px solid transparent",background:"none",color:tab===t.k?T.brand:T.sub,fontWeight:700,fontSize:"12px",letterSpacing:"1px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui,whiteSpace:"nowrap"}}>{t.l} <span style={{color:tab===t.k?T.gold:T.faint,fontFamily:T.display}}>{tc[t.k]}</span></button>
                 ))}
               </div>
               <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
@@ -5015,6 +5046,10 @@ return (
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:"10px",marginBottom:"6px"}}><span style={{color:T.sub}}>Budget used</span><span style={{color:over?T.err:T.sub,fontWeight:700}}>{pct}%</span></div>
                 <div style={{height:"6px",background:T.goldSoft,borderRadius:"3px",overflow:"hidden",marginBottom:over?"12px":"24px"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:over?T.err:pct>70?T.gold:T.brand}}/></div>
                 {over&&<div style={{display:"flex",alignItems:"center",gap:"7px",background:T.errBg,borderRadius:"2px",padding:"7px 10px",marginBottom:"14px"}}><span style={{fontSize:"10px",color:"#8a1a12",fontWeight:600}}>Over budget by {f(comm-c.budget)} — review before locking more.</span></div>}
+                {(()=>{const goalPct=c.target>0?Math.round(lk/c.target*100):0;const met=c.target>0&&lk>=c.target;return <div style={{marginBottom:"16px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:"10px",marginBottom:"6px"}}><span style={{color:T.sub}}>Goal · influencers locked</span><span style={{color:met?T.ok:T.sub,fontWeight:700}}>{lk}/{c.target}{c.target>0?` · ${goalPct}%`:""}</span></div>
+                  <div style={{height:"6px",background:T.goldSoft,borderRadius:"3px",overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(goalPct,100)}%`,background:met?T.ok:T.brand}}/></div>
+                </div>;})()}
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px"}}>
                   <div style={{fontSize:"11px",color:T.sub}}>{lk}/{c.target} influencers locked · <b style={{color:T.text}}>{campDeals(c.id).length} deals</b></div>
                   <div style={{display:"flex",gap:"10px",flex:"none"}}>
@@ -5254,7 +5289,7 @@ return (
       {/* ═══════════════ MODALS ═══════════════ */}
 
       {/* NEW DEAL */}
-      <Modal open={modal==="newDeal"&&nDeal} onClose={()=>{setModal(null);setEditingDealId(null)}} title={editingDealId?"Edit Collaboration":"New Collaboration"} w={580}>
+      <Modal open={modal==="newDeal"&&nDeal} onClose={()=>{setModal(null);setEditingDealId(null)}} title={editingDealId?"Edit Collaboration":"New Collaboration"} w={580} noBackdropClose>
         {nDeal&&<>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 10px"}}>
             <Field label="Campaign *"><Sel value={nDeal.cid} onChange={e=>setNDeal({...nDeal,cid:e.target.value})} options={campaigns.map(c=>({v:c.id,l:c.name}))}/></Field>
@@ -5335,7 +5370,7 @@ return (
       </Modal>
 
       {/* NEW / EDIT CAMPAIGN */}
-      <Modal open={modal==="newCamp"&&nCamp} onClose={()=>{setModal(null);setEditingCampId(null);setNCamp(null)}} title={editingCampId?"Edit Campaign":"Create Campaign"} w={420}>
+      <Modal open={modal==="newCamp"&&nCamp} onClose={()=>{setModal(null);setEditingCampId(null);setNCamp(null)}} title={editingCampId?"Edit Campaign":"Create Campaign"} w={420} noBackdropClose>
         {nCamp&&<>
           <Field label="Campaign Name *"><Inp value={nCamp.name} onChange={e=>setNCamp({...nCamp,name:e.target.value})} placeholder="Summer Sculpt Launch"/></Field>
           <Field label="Budget (optional)"><Inp value={nCamp.budget} onChange={e=>setNCamp({...nCamp,budget:e.target.value})} type="number" prefix="₹"/><div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>Leave 0 for no campaign cap — budgets are enforced per team member.</div></Field>
@@ -5502,7 +5537,7 @@ return (
       </Modal>
 
       {/* NEW USER */}
-      <Modal open={modal==="newUser"} onClose={()=>setModal(null)} title="Add Team Member" w={440}>
+      <Modal open={modal==="newUser"} onClose={()=>setModal(null)} title="Add Team Member" w={440} noBackdropClose>
         <Field label="Full Name *"><Inp value={userF.name} onChange={e=>setUserF({...userF,name:e.target.value})} placeholder="Priya Mehta"/></Field>
         <Field label="Email *"><Inp value={userF.email} onChange={e=>setUserF({...userF,email:e.target.value})} placeholder="priya@invogue.shop" type="email"/></Field>
         <Field label="Role *">
@@ -5788,12 +5823,13 @@ return (
                 const productDelivered = (sel.ship && sel.ship.st === "delivered") || sel.productOnHand;
                 const canSubmit = (role==="negotiator"||role==="admin") && (dl.st==="pending"||dl.st==="revision_requested") && productDelivered && !["pending","renegotiate","rejected"].includes(sel.status);
                 const canReview = (role==="approver"||role==="admin") && dl.st==="submitted";
+                const canEditSubmission = (role==="negotiator"||role==="admin") && dl.st==="submitted";
                 const canMarkLive = (role==="negotiator"||role==="admin") && dl.st==="approved";
                 const delFiles = driveFiles.deliverables?.[dl.id] || [];
                 const latestFile = delFiles[0]; // already sorted version desc
                 const activeUploads = Object.entries(driveUploading).filter(([k])=>k.startsWith(`${sel.id}:${dl.id}:`));
                 return <div key={i} style={{background:T.surface,border:`1px solid ${dl.st==="revision_requested"?T.err+"33":T.border}`,borderRadius:"2px",padding:"12px",marginBottom:"8px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:canSubmit||canReview||canMarkLive?"10px":"0"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:canSubmit||canReview||canMarkLive||canEditSubmission?"10px":"0"}}>
                     <div style={{flex:1}}>
                       <span style={{fontSize:"14px",fontWeight:700}}>{dl.type}</span>
                       <span style={{fontSize:"13px",color:T.sub,marginLeft:"6px"}}>{dl.desc}</span>
@@ -5860,6 +5896,15 @@ return (
                       <span style={{fontSize:"11px",color:T.info,fontWeight:700,textDecoration:"underline",cursor:"pointer"}}>⬆ Upload {delFiles.length>0?`v${(delFiles[0]?.version||0)+1}`:"file"} to Drive</span>
                     </label>
                     <span style={{fontSize:"10px",color:T.faint,marginLeft:"10px"}}>Files go to Drive → Campaign → Influencer → {sel.collabId||"Collab"}. Keeps all versions.</span>
+                  </div>}
+
+                  {/* Negotiator/admin: edit the submission before the manager gives feedback */}
+                  {canEditSubmission&&<div style={{background:T.surfaceAlt,borderRadius:"2px",padding:"10px 12px",marginBottom:canReview?"8px":"0"}}>
+                    <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>Edit submission <span style={{color:T.faint,fontWeight:400,textTransform:"none",letterSpacing:0}}>· editable until the manager reviews</span></div>
+                    <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                      <div style={{flex:1}}><Inp value={deliverableLinkF[dl.id]!==undefined?deliverableLinkF[dl.id]:(dl.link||"")} onChange={e=>setDeliverableLinkF({...deliverableLinkF,[dl.id]:e.target.value})} placeholder="Updated content URL"/></div>
+                      <Btn v="outline" sm onClick={()=>{const u=deliverableLinkF[dl.id]!==undefined?deliverableLinkF[dl.id]:dl.link; submitContentForReview(sel,i,u);}}>Update link</Btn>
+                    </div>
                   </div>}
 
                   {/* Manager: Review & approve or request revision */}

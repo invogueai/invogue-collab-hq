@@ -1794,15 +1794,20 @@ export default function InvogueCollabHQ() {
     }
   };
 
-  const dispatch = () => {
+  const dispatch = async () => {
     if(!shipF.track) return notify("Enter tracking ID","err");
     if(shipF.track.length < 4) return notify("Tracking ID seems too short","err");
     const userName = loggedIn?.name||"You (Logistics)";
     // Store local DATE only (no time component) so day-of comparisons are trivial and
     // unambiguous — avoids timezone drift between dispatch and delivery checks.
     const ts = todayLocal();
-    supabase.from('shipments').insert({deal_id:sel.id,carrier:shipF.carrier,tracking_id:shipF.track,order_id:shipF.orderId||null,status:'in_transit',dispatched_by:userName,dispatched_at:ts}).then(({error})=>{if(error) console.error("Shipment insert failed:",error);});
-    supabase.from('deals').update({status:'shipped'}).eq('id',sel.id).then(({error})=>{if(error) console.error("Dispatch save failed:",error);});
+    // Create the shipment record FIRST and confirm it saved. Previously this was fire-and-forget:
+    // if the insert failed, the deal was still flipped to 'shipped' with no shipment row, so it
+    // got stuck (shipped, but no way to mark delivered). Now we abort on failure.
+    const {error:shipErr} = await supabase.from('shipments').insert({deal_id:sel.id,carrier:shipF.carrier,tracking_id:shipF.track,order_id:shipF.orderId||null,status:'in_transit',dispatched_by:userName,dispatched_at:ts});
+    if(shipErr){ console.error("Shipment insert failed:",shipErr); return notify("Couldn't save the shipment: "+(shipErr.message||"error")+". Not dispatched — please retry.","err"); }
+    const {error:updErr} = await supabase.from('deals').update({status:'shipped'}).eq('id',sel.id);
+    if(updErr) console.error("Dispatch status save failed:",updErr);
     upDeal(sel.id,{status:"shipped",ship:{track:shipF.track,carrier:shipF.carrier,orderId:shipF.orderId||"",st:"in_transit",dispAt:ts,dispBy:userName,delAt:null}});
     addLog(sel.id,userName,"Shipment dispatched",`${shipF.carrier}: ${shipF.track}`);
     sendDispatchEmail(sel, {carrier:shipF.carrier, track:shipF.track, orderId:shipF.orderId||""});

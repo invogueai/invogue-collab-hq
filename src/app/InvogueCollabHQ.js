@@ -5186,15 +5186,15 @@ return (
             <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>All Shipments</div>
           </div>
           {awaitingAck.length>0&&<Section title={`Awaiting Acknowledgement (${awaitingAck.length})`} icon="⏳">
-            {awaitingAck.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:"3px solid #f59e0b",borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            {awaitingAck.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:"3px solid #f59e0b",borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
               <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Email sent · Deadline: {d.deadline}{pocNameFor(d.inf)?` · POC: ${pocNameFor(d.inf)}`:""}</div></div>
               <span style={{fontSize:"11px",color:"#92400e",fontWeight:700}}>⏳ Awaiting influencer confirmation</span>
             </div>)}
           </Section>}
           {pendingShip.length>0&&<Section title={`Ready to Dispatch (${pendingShip.length})`} icon="📋">
-            {pendingShip.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            {pendingShip.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
               <div><div style={{fontWeight:700,fontSize:"12px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"11px",color:T.sub}}>Acknowledged: {d.ackAt?new Date(d.ackAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"}):"—"} · Deadline: {d.deadline}{pocNameFor(d.inf)?` · POC: ${pocNameFor(d.inf)}`:""}</div></div>
-              {role==="logistics"?<Btn v="purple" sm onClick={()=>{setSel(d);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>:<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Awaiting logistics</span>}
+              {(role==="logistics"||role==="admin")?<Btn v="purple" sm onClick={(e)=>{e.stopPropagation();setSel(d);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>:<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Awaiting logistics</span>}
             </div>)}
           </Section>}
 
@@ -5202,9 +5202,9 @@ return (
           {pickupRequests.length>0&&<Section title={`Pickup Requests (${pickupRequests.length})`} icon="🔄">
             {pickupRequests.map(h=>{
               const deal = deals.find(d=>d.id===h.dealId);
-              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              return <div key={h.dealId+"-"+h.histIdx} onClick={()=>{if(deal){setSel(deal);setModal("detail")}}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
                 <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.warn,fontWeight:600}}>· Return ({h.reason})</span></div><div style={{fontSize:"11px",color:T.sub}}>📍 {h.address||"—"} · Requested: {new Date(h.requestedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}{pocNameFor(h.inf)?` · POC: ${pocNameFor(h.inf)}`:""}</div></div>
-                {role==="logistics"&&<Btn v="gold" sm onClick={()=>{setSel(deal);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("arrangePickup-"+h.histIdx)}}>🔄 Arrange</Btn>}
+                {(role==="logistics"||role==="admin")&&<Btn v="gold" sm onClick={(e)=>{e.stopPropagation();setSel(deal);setShipF({track:"",carrier:"DTDC",orderId:""});setModal("arrangePickup-"+h.histIdx)}}>🔄 Arrange</Btn>}
               </div>;
             })}
           </Section>}
@@ -5218,14 +5218,14 @@ return (
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:"14px"}}>
               {pickupsInTransit.map(h=>{
                 const deal = deals.find(d=>d.id===h.dealId);
-                return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"16px 18px",display:"flex",alignItems:"center",gap:"14px"}}>
+                return <div key={h.dealId+"-"+h.histIdx} onClick={()=>{if(deal){setSel(deal);setModal("detail")}}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"16px 18px",display:"flex",alignItems:"center",gap:"14px",cursor:"pointer"}}>
                   <span style={{width:"34px",height:"34px",borderRadius:"50%",background:"#E0EDFA",color:"#0F5BA7",display:"flex",alignItems:"center",justifyContent:"center",flex:"none"}}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></span>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}><span style={{fontSize:"13px",fontWeight:700}}>{h.inf}</span><span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:"#0F5BA7",background:"#E0EDFA",padding:"3px 7px",borderRadius:"2px",fontWeight:700}}>Return in transit</span></div>
                     <div style={{fontSize:"10px",color:T.sub,marginTop:"4px"}}>{h.returnCarrier} · <span style={{fontFamily:DISPLAY,letterSpacing:"0.5px",color:"#3a342c"}}>{h.returnTrack}</span>{pocNameFor(h.inf)?` · POC: ${pocNameFor(h.inf)}`:""}</div>
                   </div>
-                  {role==="logistics"
-                    ? <span onClick={()=>markProductReturned(deal,h.histIdx)} style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,color:T.brand,flex:"none",cursor:"pointer"}}>Mark returned →</span>
+                  {(role==="logistics"||role==="admin")
+                    ? <span onClick={(e)=>{e.stopPropagation();markProductReturned(deal,h.histIdx)}} style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,color:T.brand,flex:"none",cursor:"pointer"}}>Mark returned →</span>
                     : <span style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,color:T.brand,flex:"none"}}>Track →</span>}
                 </div>;
               })}
@@ -5236,9 +5236,9 @@ return (
           {reshipPending.length>0&&<Section title={`Re-shipments Pending (${reshipPending.length})`} icon="📦">
             {reshipPending.map(h=>{
               const deal = deals.find(d=>d.id===h.dealId);
-              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.purple}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              return <div key={h.dealId+"-"+h.histIdx} onClick={()=>{if(deal){setSel(deal);setModal("detail")}}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.purple}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
                 <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.purple,fontWeight:600}}>· New Shipment</span></div><div style={{fontSize:"11px",color:T.sub}}>📦 {(h.products||[]).map(p=>p.name).join(", ")} · 📍 {h.address||"—"}{pocNameFor(h.inf)?` · POC: ${pocNameFor(h.inf)}`:""}</div></div>
-                {role==="logistics"&&<Btn v="purple" sm onClick={()=>{setSel(deal);setReshipShipF({track:"",carrier:"DTDC",orderId:""});setModal("reshipDispatch-"+h.histIdx)}}>📦 Dispatch</Btn>}
+                {(role==="logistics"||role==="admin")&&<Btn v="purple" sm onClick={(e)=>{e.stopPropagation();setSel(deal);setReshipShipF({track:"",carrier:"DTDC",orderId:""});setModal("reshipDispatch-"+h.histIdx)}}>📦 Dispatch</Btn>}
               </div>;
             })}
           </Section>}
@@ -5247,9 +5247,9 @@ return (
           {reshipInTransit.length>0&&<Section title={`Re-shipments In Transit (${reshipInTransit.length})`} icon="🚚">
             {reshipInTransit.map(h=>{
               const deal = deals.find(d=>d.id===h.dealId);
-              return <div key={h.dealId+"-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              return <div key={h.dealId+"-"+h.histIdx} onClick={()=>{if(deal){setSel(deal);setModal("detail")}}} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
                 <div><div style={{fontWeight:700,fontSize:"12px"}}>{h.inf} <span style={{color:T.purple,fontWeight:600}}>· Re-shipment</span></div><div style={{fontSize:"11px",color:T.sub}}>{h.reCarrier}: <span style={{color:T.info,fontWeight:700}}>{h.reTrack}</span></div></div>
-                {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(deal);setReshipDelivF({date:todayLocal(),note:"",histIdx:h.histIdx});setModal("markReshipDelivered")}}>✓ Delivered</Btn>}
+                {(role==="logistics"||role==="admin")&&<Btn v="ok" sm onClick={(e)=>{e.stopPropagation();setSel(deal);setReshipDelivF({date:todayLocal(),note:"",histIdx:h.histIdx});setModal("markReshipDelivered")}}>✓ Delivered</Btn>}
               </div>;
             })}
           </Section>}
@@ -5266,9 +5266,9 @@ return (
                   <div style={{fontSize:"11px",color:T.faint,marginTop:"4px"}}>Dispatched orders will appear here with live tracking.</div>
                 </div>
               : <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
-                  {inTransit.map((d,i,arr)=><div key={d.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none"}}>
+                  {inTransit.map((d,i,arr)=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",cursor:"pointer"}}>
                     <div><div style={{fontWeight:700,fontSize:"13px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></div><div style={{fontSize:"10px",color:T.sub,marginTop:"3px"}}>{d.ship.carrier} · <span style={{fontFamily:DISPLAY,letterSpacing:"0.5px",color:T.text}}>{d.ship.track}</span> · {d.ship.dispAt}{pocNameFor(d.inf)?` · POC: ${pocNameFor(d.inf)}`:""}</div></div>
-                    {role==="logistics"&&<Btn v="ok" sm onClick={()=>{setSel(d);setDeliveryF({date:todayLocal(),note:""});setModal("markDelivered")}}>Delivered</Btn>}
+                    {(role==="logistics"||role==="admin")&&<Btn v="ok" sm onClick={(e)=>{e.stopPropagation();setSel(d);setDeliveryF({date:todayLocal(),note:""});setModal("markDelivered")}}>Delivered</Btn>}
                   </div>)}
                 </div>}
           </div>
@@ -5281,7 +5281,7 @@ return (
             </div>
             <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
               {deals.filter(d=>d.ship?.st==="delivered").length===0&&<div style={{padding:"20px",textAlign:"center",color:T.sub,fontSize:"12px"}}>No deliveries yet</div>}
-              {deals.filter(d=>d.ship?.st==="delivered").map((d,i,arr)=><div key={d.id} style={{display:"flex",alignItems:"center",gap:"13px",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none"}}>
+              {deals.filter(d=>d.ship?.st==="delivered").map((d,i,arr)=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{display:"flex",alignItems:"center",gap:"13px",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",cursor:"pointer"}}>
                 <span style={{width:"22px",height:"22px",borderRadius:"50%",background:T.tealBg,color:T.teal,display:"flex",alignItems:"center",justifyContent:"center",flex:"none"}}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
                 <span style={{flex:1,fontSize:"13px"}}><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></span>
                 <span style={{fontSize:"11px",color:T.sub,fontFamily:DISPLAY}}>Delivered {d.ship.delAt}</span>

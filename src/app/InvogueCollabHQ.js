@@ -1197,9 +1197,11 @@ export default function InvogueCollabHQ() {
     setFormErrors({});
     const errors = {};
 
+    if(!nDeal.inf) errors.inf = "Influencer name is required";
     if(!nDeal.profile) errors.profile = "Influencer profile is mandatory";
     const hasProduct = (nDeal.products && nDeal.products.some(p=>p.name)) || nDeal.product;
-    if(!nDeal.inf||!nDeal.amount||!nDeal.deadline) errors.general = "Fill all required fields";
+    if(!nDeal.amount) errors.amount = "Amount is required";
+    if(!nDeal.deadline) errors.deadline = "Content deadline is required";
     if(!hasProduct) errors.products = "At least one product is required";
     if(!nDeal.email) errors.email = "Email is required";
     if(nDeal.dels.length===0) errors.dels = "Add at least one deliverable";
@@ -1220,7 +1222,7 @@ export default function InvogueCollabHQ() {
 
     if(Object.keys(errors).length > 0) {
       setFormErrors(errors);
-      return notify("Please fix validation errors","err");
+      return notify("Please fix: "+Object.values(errors).join(" · "),"err");
     }
 
     // Validation passed — lock submission until this attempt finishes.
@@ -1351,9 +1353,11 @@ export default function InvogueCollabHQ() {
     if(submittingDealRef.current) return;
     setFormErrors({});
     const errors = {};
+    if(!nDeal.inf) errors.inf = "Influencer name is required";
     if(!nDeal.profile) errors.profile = "Influencer profile is mandatory";
     const hasProduct = (nDeal.products && nDeal.products.some(p=>p.name)) || nDeal.product;
-    if(!nDeal.inf||!nDeal.amount||!nDeal.deadline) errors.general = "Fill all required fields";
+    if(!nDeal.amount) errors.amount = "Amount is required";
+    if(!nDeal.deadline) errors.deadline = "Content deadline is required";
     if(!hasProduct) errors.products = "At least one product is required";
     if(!nDeal.email) errors.email = "Email is required";
     if(!nDeal.dels||nDeal.dels.length===0) errors.dels = "Add at least one deliverable";
@@ -1361,7 +1365,7 @@ export default function InvogueCollabHQ() {
     if(nDeal.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nDeal.email)) errors.email = "Invalid email format";
     if(nDeal.phone && !validPhone(nDeal.phone)) errors.phone = "Phone must be 10 digits";
     if(nDeal.profile && !validUrl(nDeal.profile)) errors.profile = "Invalid profile URL";
-    if(Object.keys(errors).length > 0) { setFormErrors(errors); return notify("Please fix validation errors","err"); }
+    if(Object.keys(errors).length > 0) { setFormErrors(errors); return notify("Please fix: "+Object.values(errors).join(" · "),"err"); }
 
     submittingDealRef.current = true; setSubmittingDeal(true);
     try {
@@ -5304,18 +5308,18 @@ return (
         {nDeal&&<>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 10px"}}>
             <Field label="Campaign *"><Sel value={nDeal.cid} onChange={e=>setNDeal({...nDeal,cid:e.target.value})} options={campaigns.map(c=>({v:c.id,l:c.name}))}/></Field>
-            <Field label="Influencer *"><Inp value={nDeal.inf} onChange={e=>setNDeal({...nDeal,inf:e.target.value})} placeholder="Priya Sharma"/></Field>
+            <Field label="Influencer *"><Inp value={nDeal.inf} onChange={e=>setNDeal({...nDeal,inf:e.target.value})} placeholder="Priya Sharma" error={formErrors.inf}/></Field>
             <Field label="Influencer Email" required><Inp value={nDeal.email} onChange={e=>setNDeal({...nDeal,email:e.target.value})} placeholder="influencer@gmail.com" error={formErrors.email}/></Field>
             <Field label="Profile" required><Inp value={nDeal.profile} onChange={e=>setNDeal({...nDeal,profile:e.target.value})} placeholder="instagram.com/handle" error={formErrors.profile}/></Field>
             <Field label="Platform"><Sel value={nDeal.platform} onChange={e=>setNDeal({...nDeal,platform:e.target.value})} options={[{v:"Instagram",l:"Instagram"},{v:"YouTube",l:"YouTube"},{v:"Other",l:"Other"}]}/></Field>
             <Field label="Followers"><Inp value={nDeal.followers} onChange={e=>setNDeal({...nDeal,followers:e.target.value})} placeholder="125K"/></Field>
             <Field label="Usage Rights"><Sel value={nDeal.usage} onChange={e=>setNDeal({...nDeal,usage:e.target.value})} options={[{v:"3 months",l:"3 months"},{v:"6 months",l:"6 months"},{v:"12 months",l:"12 months"},{v:"Perpetual",l:"Perpetual"}]}/></Field>
-            <Field label="Deadline *"><Inp value={nDeal.deadline} onChange={e=>setNDeal({...nDeal,deadline:e.target.value})} type="date"/></Field>
-            <Field label="Phone *"><Inp value={nDeal.phone} onChange={e=>setNDeal({...nDeal,phone:e.target.value})} placeholder="+91 98765 43210"/></Field>
-            <Field label="Street Address *"><Inp value={nDeal.address?.street||""} onChange={e=>setNDeal({...nDeal,address:{...nDeal.address,street:e.target.value}})} placeholder="House/Flat, Building, Street"/></Field>
-            <Field label="City *"><Inp value={nDeal.address?.city||""} onChange={e=>setNDeal({...nDeal,address:{...nDeal.address,city:e.target.value}})} placeholder="City"/></Field>
+            <Field label="Deadline *"><Inp value={nDeal.deadline} onChange={e=>setNDeal({...nDeal,deadline:e.target.value})} type="date" error={formErrors.deadline}/></Field>
+            <Field label="Phone *"><Inp value={nDeal.phone} onChange={e=>setNDeal({...nDeal,phone:e.target.value})} placeholder="+91 98765 43210" error={formErrors.phone}/></Field>
+            <Field label="Street Address *"><Inp value={nDeal.address?.street||""} onChange={e=>setNDeal({...nDeal,address:{...nDeal.address,street:e.target.value}})} placeholder="House/Flat, Building, Street" error={formErrors.address}/></Field>
+            <Field label="City *"><Inp value={nDeal.address?.city||""} onChange={e=>setNDeal({...nDeal,address:{...nDeal.address,city:e.target.value}})} placeholder="City" error={formErrors.city}/></Field>
             <Field label="State *"><Inp value={nDeal.address?.state||""} onChange={e=>setNDeal({...nDeal,address:{...nDeal.address,state:e.target.value}})} placeholder="State"/></Field>
-            <Field label="Pincode *"><Inp value={nDeal.address?.pincode||""} onChange={e=>setNDeal({...nDeal,address:{...nDeal.address,pincode:e.target.value}})} placeholder="6-digit pincode"/></Field>
+            <Field label="Pincode *"><Inp value={nDeal.address?.pincode||""} onChange={e=>setNDeal({...nDeal,address:{...nDeal.address,pincode:e.target.value}})} placeholder="6-digit pincode" error={formErrors.pincode}/></Field>
           </div>
 
           {/* Historical rates for returning influencer */}
@@ -5355,7 +5359,7 @@ return (
             {formErrors.products&&<div style={{fontSize:"10px",color:T.err,marginTop:"4px"}}>At least one product name is required</div>}
           </div>
 
-          <Field label="Amount (INR) *"><Inp value={nDeal.amount} onChange={e=>setNDeal({...nDeal,amount:e.target.value})} type="number" prefix="₹"/></Field>
+          <Field label="Amount (INR) *"><Inp value={nDeal.amount} onChange={e=>setNDeal({...nDeal,amount:e.target.value})} type="number" prefix="₹" error={formErrors.amount}/></Field>
           <Field label="Payment Terms"><Sel value={nDeal.paymentTerms||"next_15th"} onChange={e=>setNDeal({...nDeal,paymentTerms:e.target.value})} options={[{v:"next_15th",l:"Next 15th after going live"},{v:"45_days",l:"45 days after going live"},{v:"60_days",l:"60 days after going live"},{v:"immediate",l:"Immediate (on going live)"},{v:"advance",l:"Advance (before going live)"},{v:"custom",l:"Custom"}]}/></Field>
 
           {/* Deliverables */}

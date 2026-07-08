@@ -2085,7 +2085,7 @@ export default function InvogueCollabHQ() {
     if(newStatus==="live"&&!deal.adStatus) {
       dealUpdates.ad_status = 'fresh';
       localUpdates.adStatus = 'fresh';
-      if(deal.usageDays && !deal.usageEndDate) {
+      if(deal.usageDays && !deal.usageEndDate && !(deal.usage||"").toLowerCase().includes("perpetual")) {
         const endD = new Date(); endD.setDate(endD.getDate()+deal.usageDays);
         dealUpdates.usage_end_date = endD.toISOString().slice(0,10);
         localUpdates.usageEndDate = dealUpdates.usage_end_date;
@@ -2169,8 +2169,8 @@ export default function InvogueCollabHQ() {
     const userName = loggedIn?.name||"You";
     const updates = {ad_status:newAdStatus};
     const patch = {adStatus:newAdStatus};
-    // Only auto-set usage_end_date if usageDays is explicitly set and no end date yet
-    if(deal.usageDays && !deal.usageEndDate) {
+    // Only auto-set usage_end_date if usageDays is set, no end date yet, and rights aren't perpetual
+    if(deal.usageDays && !deal.usageEndDate && !(deal.usage||"").toLowerCase().includes("perpetual")) {
       const endD = new Date(); endD.setDate(endD.getDate()+deal.usageDays);
       const endDate = endD.toISOString().slice(0,10);
       updates.usage_end_date = endDate;
@@ -3671,7 +3671,7 @@ return (
             return <Section title={`Usage Extension Requests (${reuseDeals.length})`} icon="🔄" action={<span style={{fontSize:"11px",color:T.info,fontWeight:700}}>From Performance Marketer</span>}>
               <div style={{fontSize:"12px",color:T.info,background:T.infoBg,padding:"6px 10px",borderRadius:"2px",marginBottom:"8px"}}>The performance marketing team is requesting usage extensions for high-performing creatives. Contact the influencer to negotiate extended rights.</div>
               {reuseDeals.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.info}`,borderRadius:"2px",padding:"8px 12px",marginBottom:"4px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div><b style={{fontSize:"13px"}}>{d.inf}</b> <span style={{color:T.sub,fontSize:"12px"}}>· {d.product} · Usage ends: {d.usageEndDate||"N/A"}</span></div>
+                <div><b style={{fontSize:"13px"}}>{d.inf}</b> <span style={{color:T.sub,fontSize:"12px"}}>· {d.product} · Usage ends: {(d.usage||"").toLowerCase().includes("perpetual")?"Perpetual":(d.usageEndDate||"N/A")}</span></div>
                 <span style={{fontSize:"11px",color:T.info,fontWeight:700}}>🔄 {d.reuseRequestedBy?`By ${d.reuseRequestedBy}`:"Requested"}</span>
               </div>)}
             </Section>;
@@ -4317,21 +4317,23 @@ return (
         const runningCreatives = allCreatives.filter(d=>d.adStatus==="running");
         const testedCreatives = allCreatives.filter(d=>d.adStatus==="tested");
 
+        // Perpetual usage rights never expire — ignore any stray usage window on them.
+        const isPerpetual = (d) => (d.usage||"").toLowerCase().includes("perpetual");
         // Expiring: within 7 days of usage_end_date or past it
         const today = new Date();
         const expiringCreatives = allCreatives.filter(d=>{
-          if(!d.usageEndDate) return false;
+          if(isPerpetual(d)||!d.usageEndDate) return false;
           const end = new Date(d.usageEndDate);
           const daysLeft = Math.ceil((end-today)/(1000*60*60*24));
           return daysLeft <= 7;
         });
         const expiredCreatives = allCreatives.filter(d=>{
-          if(!d.usageEndDate) return false;
+          if(isPerpetual(d)||!d.usageEndDate) return false;
           return new Date(d.usageEndDate) < today;
         });
 
         const getDaysLeft = (d) => {
-          if(!d.usageEndDate) return null;
+          if(isPerpetual(d)||!d.usageEndDate) return null;
           return Math.ceil((new Date(d.usageEndDate)-today)/(1000*60*60*24));
         };
 
@@ -4360,7 +4362,7 @@ return (
             : d.adStatus==="tested"?{l:"Tested",c:T.teal,bg:T.tealBg}
             : {l:"Fresh",c:"#1B7A3D",bg:"#E2F3E8"};
           const fmt = d.platform==="YouTube"?"video · 16:9":"reel · vertical 9:16";
-          const usageStr = daysLeft!==null?(isExpired?`Expired ${Math.abs(daysLeft)}d`:`${daysLeft} day${daysLeft===1?"":"s"}`):(d.usageDays?`${d.usageDays} days`:"Perpetual");
+          const usageStr = isPerpetual(d)?"Perpetual":(daysLeft!==null?(isExpired?`Expired ${Math.abs(daysLeft)}d`:`${daysLeft} day${daysLeft===1?"":"s"}`):(d.usageDays?`${d.usageDays} days`:"Perpetual"));
           // single contextual action (preserves existing handlers)
           const action = d.reuseRequested ? {l:"Reuse sent",fill:false,fn:null}
             : isExpiring ? {l:"Request reuse",fill:true,fn:()=>requestReuse(d)}

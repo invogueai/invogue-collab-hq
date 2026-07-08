@@ -993,6 +993,8 @@ export default function InvogueCollabHQ() {
     if(tab==="delivered") return d.filter(x=>x.status==="delivered_prod"||x.ship?.st==="delivered");
     if(tab==="live") return d.filter(x=>["partial_live","live"].includes(x.status));
     if(tab==="payment") return d.filter(x=>["invoice_ok","disputed","partial_paid","paid"].includes(x.status));
+    if(tab==="rejected") return d.filter(x=>x.status==="rejected");
+    if(tab==="dropped") return d.filter(x=>["dropped","drop_requested"].includes(x.status));
     return d;
   },[deals,tab,campFilter,pocFilter,influencers]);
 
@@ -4928,10 +4930,12 @@ return (
               delivered: deals.filter(x=>x.status==="delivered_prod"||x.ship?.st==="delivered").length,
               live: deals.filter(x=>["partial_live","live"].includes(x.status)).length,
               payment: deals.filter(x=>["invoice_ok","disputed","partial_paid","paid","payment_details_received","payment_requested","payment_approved"].includes(x.status)).length,
+              rejected: deals.filter(x=>x.status==="rejected").length,
+              dropped: deals.filter(x=>["dropped","drop_requested"].includes(x.status)).length,
             };
             return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.border}`,marginBottom:"20px",flexWrap:"wrap",gap:"8px"}}>
               <div style={{display:"flex",gap:"22px",flexWrap:"wrap"}}>
-                {[{k:"all",l:"All"},{k:"pending",l:"Pending"},{k:"active",l:"Active"},{k:"review",l:"Content Review"},{k:"dispatch",l:"Awaiting Dispatch"},{k:"transit",l:"In Transit"},{k:"delivered",l:"Delivered"},{k:"live",l:"Live"},{k:"payment",l:"Payments"}].map(t=>(
+                {[{k:"all",l:"All"},{k:"pending",l:"Pending"},{k:"active",l:"Active"},{k:"review",l:"Content Review"},{k:"dispatch",l:"Awaiting Dispatch"},{k:"transit",l:"In Transit"},{k:"delivered",l:"Delivered"},{k:"live",l:"Live"},{k:"payment",l:"Payments"},{k:"rejected",l:"Rejected"},{k:"dropped",l:"Dropped"}].map(t=>(
                   <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"12px 0",border:"none",borderBottom:tab===t.k?`2px solid ${T.brand}`:"2px solid transparent",background:"none",color:tab===t.k?T.brand:T.sub,fontWeight:700,fontSize:"12px",letterSpacing:"1px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui,whiteSpace:"nowrap"}}>{t.l} <span style={{color:tab===t.k?T.gold:T.faint,fontFamily:T.display}}>{tc[t.k]}</span></button>
                 ))}
               </div>

@@ -1497,7 +1497,7 @@ export default function InvogueCollabHQ() {
     const needsDualApproval = d.amount > 50000;
     if(needsDualApproval && role === "approver" && d.status !== "manager_approved") {
       // Manager is first approver — move to intermediate state
-      supabase.from('deals').update({status:'manager_approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error){console.error("Manager approve save failed:",error);notify("Failed to save approval","err");}});
+      supabase.from('deals').update({status:'manager_approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error){console.error("Manager approve save failed:",error);notify("Couldn't save approval: "+(error.message||"unknown error"),"err");}});
       upDeal(d.id,{status:"manager_approved",appBy:userName,appAt:ts});
       addLog(d.id,userName,"Manager approved — awaiting admin approval (₹50K+ dual approval)",fAmt(d.amount));
       setSel(null);
@@ -1507,7 +1507,7 @@ export default function InvogueCollabHQ() {
     }
 
     // Admin final approval (or single approval for ≤₹50K)
-    supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error){console.error("Approve save failed:",error);notify("Failed to save approval","err");}});
+    supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error){console.error("Approve save failed:",error);notify("Couldn't save approval: "+(error.message||"unknown error"),"err");}});
     upDeal(d.id,{status:"approved",appBy:userName,appAt:ts});
     addLog(d.id,userName,needsDualApproval?"Admin approved (dual approval complete) & amount locked":"Approved & amount locked",fAmt(d.amount));
     setSel(null);

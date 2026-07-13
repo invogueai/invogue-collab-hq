@@ -396,7 +396,7 @@ export default function InvogueCollabHQ() {
     {id:'p11',name:'Non Padded Wireless Shaping Bra',sizes:['XS','S','M','L','XL'],colors:['Beige','Black']},
     {id:'p12',name:'Everyday Seamless Lightly Padded Bra',sizes:['S','M','L','XL'],colors:['Pink','Rust']},
     {id:'p13',name:'No-Wire Push Up Bra',sizes:['S','M','L','XL'],colors:['Black','Blush','White']},
-    {id:'p14',name:'Essentials Plus Bodysuit Bodyshaper',sizes:['S-M','L-XL','2XL-3XL','4XL-5XL'],colors:['Beige','Black','Cream']},
+    {id:'p14',name:'Essentials Plus Bodysuit Bodyshaper',sizes:['S-M','L-XL','2XL-3XL','4XL-5XL'],colors:['Beige','Black','Cream'],cuts:['Brief Style','Mid Thigh']},
     {id:'p15',name:'Intense High Waisted Shaper Shorts',sizes:['XS','S','M','L','XL'],colors:['Beige','Black']},
     {id:'p16',name:'High Compression Tummy Tucker',sizes:['S','M','L','XL','2XL','3XL'],colors:['Brief Cut - High Rise','Mid Thigh - Mid Rise']},
     {id:'p17',name:'Zipper Shapewear Swimsuit',sizes:['S','M','L','XL','2XL','3XL'],colors:[]},
@@ -1661,8 +1661,13 @@ export default function InvogueCollabHQ() {
 
   const buildConfirmationEmailHTML = (d, ackToken) => {
     const productList = d.products && d.products.length > 0
-      ? d.products.map(p=>`${p.name}${p.size?` (${p.size})`:""}${p.qty>1?` × ${p.qty}`:""}`).join(", ")
+      ? d.products.map(p=>`${p.name}${[p.color,p.cut,p.size].filter(Boolean).length?` (${[p.color,p.cut,p.size].filter(Boolean).join(", ")})`:""}${p.qty>1?` × ${p.qty}`:""}`).join(", ")
       : (d.product||"—");
+    // Deliverables the influencer is expected to provide
+    const dels = Array.isArray(d.dels) ? d.dels : [];
+    const deliverablesRows = dels.length > 0
+      ? dels.map(dl=>`<tr><td style="padding:9px 0;font-size:13px;font-weight:700;color:#770A1C;width:150px;border-bottom:1px solid #f1ece3;vertical-align:top;">${dl.type||"Deliverable"}</td><td style="padding:9px 0;font-size:14px;color:#444;border-bottom:1px solid #f1ece3;">${dl.desc||"—"}</td></tr>`).join("")
+      : `<tr><td style="padding:9px 0;font-size:14px;color:#444;" colspan="2">As discussed with your POC.</td></tr>`;
     // Hosted logo URL — GitHub raw URL is always available and works in every email client
     const LOGO_URL = process.env.NEXT_PUBLIC_EMAIL_LOGO_URL || "https://raw.githubusercontent.com/invogueai/invogue-collab-hq/main/public/invogue-logo.png";
     // Try to find the POC assigned to this influencer (from the influencers table)
@@ -1693,6 +1698,12 @@ export default function InvogueCollabHQ() {
       <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Usage Rights</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${d.usage||"—"}</td></tr>
       <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #f1ece3;vertical-align:top;">Payment Terms</td><td style="padding:9px 0;font-size:14px;border-bottom:1px solid #f1ece3;">${paymentTermsLabel}</td></tr>
       <tr><td style="padding:9px 0;font-size:12px;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.5px;vertical-align:top;">Shipping Address</td><td style="padding:9px 0;font-size:14px;line-height:1.55;">${d.address||"—"}</td></tr>
+    </table>
+
+    <div style="margin:22px 0 10px;font-size:13px;font-weight:700;color:#770A1C;text-transform:uppercase;letter-spacing:1px;">Deliverables</div>
+    <p style="font-size:14px;line-height:1.65;color:#444;margin:0 0 8px;">As part of this collaboration, we'll need the following content from you:</p>
+    <table style="width:100%;border-collapse:collapse;margin:8px 0 18px;">
+      ${deliverablesRows}
     </table>
 
     <div style="margin:22px 0 10px;font-size:13px;font-weight:700;color:#770A1C;text-transform:uppercase;letter-spacing:1px;">Posting Timeline</div>
@@ -1825,7 +1836,7 @@ export default function InvogueCollabHQ() {
   const buildDeliveryEmailHTML = (d, deliveryDate) => {
     const LOGO_URL = process.env.NEXT_PUBLIC_EMAIL_LOGO_URL || "https://raw.githubusercontent.com/invogueai/invogue-collab-hq/main/public/invogue-logo.png";
     const productList = d.products && d.products.length > 0
-      ? d.products.map(p=>`${p.name}${p.size?` (${p.size})`:""}${p.qty>1?` × ${p.qty}`:""}`).join(", ")
+      ? d.products.map(p=>`${p.name}${[p.color,p.cut,p.size].filter(Boolean).length?` (${[p.color,p.cut,p.size].filter(Boolean).join(", ")})`:""}${p.qty>1?` × ${p.qty}`:""}`).join(", ")
       : (d.product||"—");
     const infRecord = influencers.find(x=>x.name===d.inf);
     const pocName = infRecord?.poc || "your collab manager";
@@ -1898,7 +1909,7 @@ export default function InvogueCollabHQ() {
   const buildDispatchEmailHTML = (d, ship) => {
     const LOGO_URL = process.env.NEXT_PUBLIC_EMAIL_LOGO_URL || "https://raw.githubusercontent.com/invogueai/invogue-collab-hq/main/public/invogue-logo.png";
     const productList = d.products && d.products.length > 0
-      ? d.products.map(p=>`${p.name}${p.size?` (${p.size})`:""}${p.qty>1?` × ${p.qty}`:""}`).join(", ")
+      ? d.products.map(p=>`${p.name}${[p.color,p.cut,p.size].filter(Boolean).length?` (${[p.color,p.cut,p.size].filter(Boolean).join(", ")})`:""}${p.qty>1?` × ${p.qty}`:""}`).join(", ")
       : (d.product||"—");
     const infRecord = influencers.find(x=>x.name===d.inf);
     const pocName = infRecord?.poc || "your collab manager";
@@ -4188,7 +4199,7 @@ return (
                 </div>
                 {(h.products||[]).length>0&&<div style={{marginTop:"6px",padding:"8px",background:T.surfaceAlt,borderRadius:"2px",fontSize:"11px"}}>
                   <div style={{fontWeight:700,marginBottom:"4px"}}>Items to pack & ship:</div>
-                  {h.products.map((p,i)=><div key={i}><b>{p.name}</b>{p.color?" · "+p.color:""}{p.size?" · "+p.size:""}{p.qty?" · Qty: "+p.qty:""}</div>)}
+                  {h.products.map((p,i)=><div key={i}><b>{p.name}</b>{p.color?" · "+p.color:""}{p.cut?" · "+p.cut:""}{p.size?" · "+p.size:""}{p.qty?" · Qty: "+p.qty:""}</div>)}
                 </div>}
                 <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>Requested by {h.requestedBy} · {new Date(h.requestedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
               </div>;
@@ -4264,7 +4275,10 @@ return (
                 <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>
                   <span style={{fontWeight:600}}>Colors:</span> {p.colors.length?p.colors.map((c,i)=><span key={c} style={{display:"inline-block",background:T.surfaceAlt,borderRadius:"3px",padding:"1px 5px",margin:"1px 2px",fontSize:"10px"}}>{c}{editingProduct===p.id&&<span onClick={()=>{setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,colors:x.colors.filter((_,j)=>j!==i)}:x))}} style={{cursor:"pointer",color:T.err,marginLeft:"3px",fontWeight:700}}>×</span>}</span>):<span style={{color:T.sub,fontStyle:"italic"}}>None</span>}
                 </div>
-                <div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{p.sizes.length*(p.colors.length||1)} variant{p.sizes.length*(p.colors.length||1)!==1?'s':''}</div>
+                {((p.cuts&&p.cuts.length)||editingProduct===p.id)?<div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>
+                  <span style={{fontWeight:600}}>Cuts:</span> {(p.cuts&&p.cuts.length)?p.cuts.map((c,i)=><span key={c} style={{display:"inline-block",background:T.surfaceAlt,borderRadius:"3px",padding:"1px 5px",margin:"1px 2px",fontSize:"10px"}}>{c}{editingProduct===p.id&&<span onClick={()=>{setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,cuts:(x.cuts||[]).filter((_,j)=>j!==i)}:x))}} style={{cursor:"pointer",color:T.err,marginLeft:"3px",fontWeight:700}}>×</span>}</span>):<span style={{color:T.sub,fontStyle:"italic"}}>None</span>}
+                </div>:null}
+                <div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{p.sizes.length*(p.colors.length||1)*((p.cuts&&p.cuts.length)||1)} variant{p.sizes.length*(p.colors.length||1)*((p.cuts&&p.cuts.length)||1)!==1?'s':''}</div>
                 {editingProduct===p.id&&<div style={{marginTop:"8px",padding:"8px",background:T.surfaceAlt,borderRadius:"2px",border:`1px dashed ${T.gold}`}}>
                   <div style={{fontSize:"11px",fontWeight:700,marginBottom:"6px",color:T.gold}}>Add Variants</div>
                   <div style={{display:"flex",gap:"6px",alignItems:"end",flexWrap:"wrap"}}>
@@ -4282,6 +4296,13 @@ return (
                       setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,colors:[...x.colors,c]}:x));
                       setEditVariant({...editVariant,color:''});notify("Color "+c+" added!");
                     }}>+ Color</Btn>
+                    <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>New Cut</label><Inp value={editVariant.cut||''} onChange={e=>setEditVariant({...editVariant,cut:e.target.value})} placeholder="e.g. Brief Style" style={{width:"120px"}}/></div>
+                    <Btn v="ok" sm onClick={()=>{
+                      const c=(editVariant.cut||'').trim();if(!c) return notify("Enter a cut","err");
+                      if((p.cuts||[]).some(x=>x.toLowerCase()===c.toLowerCase())) return notify("Cut already exists","err");
+                      setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,cuts:[...(x.cuts||[]),c]}:x));
+                      setEditVariant({...editVariant,cut:''});notify("Cut "+c+" added!");
+                    }}>+ Cut</Btn>
                   </div>
                   <div style={{display:"flex",gap:"6px",alignItems:"end",flexWrap:"wrap",marginTop:"6px"}}>
                     <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Bulk Sizes (comma-sep)</label><Inp value={editVariant.bulkSizes||''} onChange={e=>setEditVariant({...editVariant,bulkSizes:e.target.value})} placeholder="XS,S,M,L,XL" style={{width:"200px"}}/></div>
@@ -5349,13 +5370,17 @@ return (
               <span style={{fontSize:"11px",fontWeight:800,color:T.brand,textTransform:"uppercase",letterSpacing:".5px"}}>📦 Products ({nDeal.products?.length||0})</span>
               <Btn v="outline" sm onClick={()=>setNDeal({...nDeal,products:[...(nDeal.products||[]),{id:uid(),name:"",color:"",size:"",qty:"1"}]})}>+ Add Product</Btn>
             </div>
-            {(nDeal.products||[]).map((p,idx)=><div key={idx} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 60px 24px",gap:"5px",marginBottom:"4px",alignItems:"center"}}>
-              <Sel value={p.name} onChange={e=>{const updated=[...(nDeal.products||[])];updated[idx].name=e.target.value;const cat=productCatalog.find(c=>c.name===e.target.value);if(cat){updated[idx].color=cat.colors[0]||'';updated[idx].size=cat.sizes[0]||''}setNDeal({...nDeal,products:updated})}} options={[{v:'',l:'Select product...'},...productCatalog.map(c=>({v:c.name,l:c.name}))]} error={formErrors.products&&!p.name}/>
-              <Sel value={p.color||''} onChange={e=>{const updated=[...(nDeal.products||[])];updated[idx].color=e.target.value;setNDeal({...nDeal,products:updated})}} options={[{v:'',l:'Color'},...(productCatalog.find(c=>c.name===p.name)?.colors||[]).map(c=>({v:c,l:c}))]}/>
-              <Sel value={p.size||''} onChange={e=>{const updated=[...(nDeal.products||[])];updated[idx].size=e.target.value;setNDeal({...nDeal,products:updated})}} options={[{v:'',l:'Size'},...(productCatalog.find(c=>c.name===p.name)?.sizes||[]).map(s=>({v:s,l:s}))]}/>
+            {(nDeal.products||[]).map((p,idx)=>{
+              const cat = productCatalog.find(c=>c.name===p.name);
+              const cuts = cat?.cuts || [];
+              return <div key={idx} style={{display:"grid",gridTemplateColumns:cuts.length?"1fr 72px 80px 72px 48px 20px":"1fr 80px 80px 60px 24px",gap:"5px",marginBottom:"4px",alignItems:"center"}}>
+              <Sel value={p.name} onChange={e=>{const updated=[...(nDeal.products||[])];updated[idx].name=e.target.value;const c2=productCatalog.find(c=>c.name===e.target.value);if(c2){updated[idx].color=c2.colors[0]||'';updated[idx].size=c2.sizes[0]||'';updated[idx].cut=(c2.cuts&&c2.cuts[0])||''}setNDeal({...nDeal,products:updated})}} options={[{v:'',l:'Select product...'},...productCatalog.map(c=>({v:c.name,l:c.name}))]} error={formErrors.products&&!p.name}/>
+              <Sel value={p.color||''} onChange={e=>{const updated=[...(nDeal.products||[])];updated[idx].color=e.target.value;setNDeal({...nDeal,products:updated})}} options={[{v:'',l:'Color'},...(cat?.colors||[]).map(c=>({v:c,l:c}))]}/>
+              {cuts.length>0&&<Sel value={p.cut||''} onChange={e=>{const updated=[...(nDeal.products||[])];updated[idx].cut=e.target.value;setNDeal({...nDeal,products:updated})}} options={[{v:'',l:'Cut'},...cuts.map(c=>({v:c,l:c}))]}/>}
+              <Sel value={p.size||''} onChange={e=>{const updated=[...(nDeal.products||[])];updated[idx].size=e.target.value;setNDeal({...nDeal,products:updated})}} options={[{v:'',l:'Size'},...(cat?.sizes||[]).map(s=>({v:s,l:s}))]}/>
               <Inp value={p.qty} onChange={e=>{const ps=[...(nDeal.products||[])];ps[idx]={...ps[idx],qty:e.target.value};setNDeal({...nDeal,products:ps})}} placeholder="Qty" type="number"/>
               {(nDeal.products||[]).length>1&&<button onClick={()=>setNDeal({...nDeal,products:(nDeal.products||[]).filter((_,j)=>j!==idx)})} style={{background:"none",border:"none",color:T.err,cursor:"pointer",fontSize:"13px",padding:0}}>✕</button>}
-            </div>)}
+            </div>;})}
             {formErrors.products&&<div style={{fontSize:"10px",color:T.err,marginTop:"4px"}}>At least one product name is required</div>}
           </div>
 
@@ -5478,7 +5503,7 @@ return (
               <div style={{fontWeight:700,marginBottom:"4px"}}>Items to pack & ship:</div>
               {sel.products.map((p,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px",marginBottom:"3px"}}>
                 <span><b>{p.name}</b></span>
-                <span>{p.color&&`Color: ${p.color}`} {p.size&&`Size: ${p.size}`}</span>
+                <span>{p.color&&`Color: ${p.color}`} {p.cut&&`Cut: ${p.cut}`} {p.size&&`Size: ${p.size}`}</span>
                 <span>{p.qty&&`Qty: ${p.qty}`}</span>
               </div>)}
             </div>}
@@ -6242,11 +6267,13 @@ return (
             {(reshipF.products||[]).map((p,i)=>{
               const cat = productCatalog.find(pc=>pc.name===p.name);
               const upd = patch=>{const ps=[...(reshipF.products||[])];ps[i]={...ps[i],...patch};setReshipF({...reshipF,products:ps})};
-              return <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 60px 24px",gap:"5px",marginBottom:"4px",alignItems:"center"}}>
-              <Sel value={p.name} onChange={e=>upd({name:e.target.value,color:"",size:""})} options={[{v:"",l:"Select product…"},...productCatalog.map(pc=>({v:pc.name,l:pc.name}))]}/>
+              const rCuts = cat?.cuts || [];
+              return <div key={i} style={{display:"grid",gridTemplateColumns:rCuts.length?"1fr 72px 80px 72px 48px 20px":"1fr 80px 80px 60px 24px",gap:"5px",marginBottom:"4px",alignItems:"center"}}>
+              <Sel value={p.name} onChange={e=>upd({name:e.target.value,color:"",size:"",cut:""})} options={[{v:"",l:"Select product…"},...productCatalog.map(pc=>({v:pc.name,l:pc.name}))]}/>
               {cat&&cat.colors&&cat.colors.length>0
                 ? <Sel value={p.color} onChange={e=>upd({color:e.target.value})} options={[{v:"",l:"Color"},...cat.colors.map(c=>({v:c,l:c}))]}/>
                 : <Inp value={p.color} onChange={e=>upd({color:e.target.value})} placeholder="Color"/>}
+              {rCuts.length>0&&<Sel value={p.cut||''} onChange={e=>upd({cut:e.target.value})} options={[{v:"",l:"Cut"},...rCuts.map(c=>({v:c,l:c}))]}/>}
               {cat&&cat.sizes&&cat.sizes.length>0
                 ? <Sel value={p.size} onChange={e=>upd({size:e.target.value})} options={[{v:"",l:"Size"},...cat.sizes.map(s=>({v:s,l:s}))]}/>
                 : <Inp value={p.size} onChange={e=>upd({size:e.target.value})} placeholder="Size"/>}
@@ -6271,7 +6298,7 @@ return (
         return <Modal open={true} onClose={()=>setModal(null)} title={`Dispatch Re-shipment — ${sel?.inf}`} w={440}>
           <div style={{padding:"10px",background:T.purpleBg,borderRadius:"2px",marginBottom:"12px",fontSize:"13px",color:T.purple}}>
             <div style={{fontWeight:700,marginBottom:"4px"}}>📦 Re-shipment Products</div>
-            {(h?.products||[]).map((p,i)=><div key={i}><b>{p.name}</b>{p.color?" · "+p.color:""}{p.size?" · "+p.size:""}{p.qty?" · Qty: "+p.qty:""}</div>)}
+            {(h?.products||[]).map((p,i)=><div key={i}><b>{p.name}</b>{p.color?" · "+p.color:""}{p.cut?" · "+p.cut:""}{p.size?" · "+p.size:""}{p.qty?" · Qty: "+p.qty:""}</div>)}
           </div>
           <div style={{padding:"8px 10px",background:T.surfaceAlt,borderRadius:"2px",marginBottom:"10px",fontSize:"12px"}}>
             <div>📍 <b>Ship to:</b> {h?.newAddress||sel.address||"—"}</div>

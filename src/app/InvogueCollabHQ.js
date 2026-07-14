@@ -127,6 +127,7 @@ async function loadFromSupabase() {
       id:dl.id, type:dl.type, desc:dl.description, st:dl.status,
       link:dl.live_link||'',
       feedback:dl.feedback||'',
+      submitNote:dl.submit_note||'',
       history:Array.isArray(dl.history)?dl.history:[],
     });
   });
@@ -369,6 +370,7 @@ export default function InvogueCollabHQ() {
   const [rejectReasonF, setRejectReasonF] = useState(""); // rejection reason modal
   const [dropReasonF, setDropReasonF] = useState(""); // drop collab reason modal
   const [deliverableLinkF, setDeliverableLinkF] = useState({}); // unique state per deliverable {delId: url}
+  const [deliverableNoteF, setDeliverableNoteF] = useState({}); // negotiator's comment on submission {delId: note}
   const [attachmentMode, setAttachmentMode] = useState({}); // {delId: "link"|"attachment"}
   const [attachmentDesc, setAttachmentDesc] = useState({}); // {delId: description}
   const [revisionFeedback, setRevisionFeedback] = useState({}); // {delId: feedback text}
@@ -501,6 +503,7 @@ export default function InvogueCollabHQ() {
               id:dl.id, type:dl.type, desc:dl.description, st:dl.status,
               link:dl.live_link||'',
               feedback:dl.feedback||'',
+              submitNote:dl.submit_note||'',
               history:Array.isArray(dl.history)?dl.history:[],
             });
           });
@@ -1334,9 +1337,10 @@ export default function InvogueCollabHQ() {
   };
 
   // ─── EDIT A DEAL (only before manager approval) ───
+  const EDITABLE_STATUSES = ["pending","renegotiate","manager_approved","approved","email_sent"];
   const openEditDeal = (deal) => {
     if(!(role==="negotiator"||role==="admin")) return notify("Only the negotiator or admin can edit a deal","err");
-    if(!["pending","renegotiate"].includes(deal.status)) return notify("Deals can only be edited before manager approval","err");
+    if(!EDITABLE_STATUSES.includes(deal.status) || deal.ackAt) return notify("Deals can only be edited before the influencer confirms","err");
     const addr = deal.address;
     const parts = typeof addr==='string' ? addr.split(', ') : [];
     setNDeal({
@@ -1379,12 +1383,19 @@ export default function InvogueCollabHQ() {
       const productStr = nDeal.products?.filter(p=>p.name).map(p=>p.name).join(", ") || nDeal.product;
       const addressStr = typeof nDeal.address === 'object' ? [nDeal.address.street, nDeal.address.city, nDeal.address.state, nDeal.address.pincode].filter(Boolean).join(', ') : (nDeal.address || '');
 
+      // If the deal was already approved (or the email had gone out), editing it
+      // invalidates that approval — revert to pending so a manager must re-approve.
+      const priorStatus = deals.find(d=>d.id===editingDealId)?.status;
+      const needsReapproval = ["manager_approved","approved","email_sent"].includes(priorStatus);
+      const statusReset = needsReapproval ? { status:'pending', approved_by:null, approved_at:null, email_sent_at:null, acknowledge_token:null } : {};
+
       const {error:updErr} = await supabase.from('deals').update({
         influencer_name:nDeal.inf, platform:nDeal.platform, followers:nDeal.followers,
         product:productStr, amount:+nDeal.amount, campaign_id:nDeal.cid||null,
         usage_rights:nDeal.usage, deadline:nDeal.deadline, profile_link:nDeal.profile,
         phone:nDeal.phone, address:addressStr, email:nDeal.email,
         products_json:JSON.stringify(nDeal.products||[]), payment_terms:nDeal.paymentTerms||"Net 15 days",
+        ...statusReset,
       }).eq('id',editingDealId);
       if(updErr){ console.error("Deal update failed:",updErr); return notify("Failed to update deal: "+updErr.message,"err"); }
 
@@ -1404,13 +1415,13 @@ export default function InvogueCollabHQ() {
         newDels.push({id,type:dl.type,desc:dl.desc,st:dl.st||'pending',link:dl.link||""});
       }
 
-      await supabase.from('audit_log').insert({deal_id:editingDealId,user_name:userName,action:'Deal edited',detail:`${f(nDeal.amount)} | ${newDels.length} deliverables`,created_at:ts});
+      await supabase.from('audit_log').insert({deal_id:editingDealId,user_name:userName,action:needsReapproval?'Deal edited — reverted to pending for manager re-approval':'Deal edited',detail:`${f(nDeal.amount)} | ${newDels.length} deliverables`,created_at:ts});
 
-      const patch = {inf:nDeal.inf,email:nDeal.email,platform:nDeal.platform,followers:nDeal.followers,products:nDeal.products,product:productStr,amount:+nDeal.amount,cid:nDeal.cid,usage:nDeal.usage,deadline:nDeal.deadline,profile:nDeal.profile,phone:nDeal.phone,address:addressStr,paymentTerms:nDeal.paymentTerms,dels:newDels};
+      const patch = {inf:nDeal.inf,email:nDeal.email,platform:nDeal.platform,followers:nDeal.followers,products:nDeal.products,product:productStr,amount:+nDeal.amount,cid:nDeal.cid,usage:nDeal.usage,deadline:nDeal.deadline,profile:nDeal.profile,phone:nDeal.phone,address:addressStr,paymentTerms:nDeal.paymentTerms,dels:newDels,...(needsReapproval?{status:'pending',appBy:null,appAt:null,ackToken:null}:{})};
       setDeals(prev=>prev.map(d=>d.id===editingDealId?{...d,...patch}:d));
       setSel(prev=>prev&&prev.id===editingDealId?{...prev,...patch}:prev);
       setModal(null); setNDeal(null); setEditingDealId(null); setFormErrors({});
-      notify("Deal updated!");
+      notify(needsReapproval?"Deal updated — sent back for manager re-approval.":"Deal updated!");
     } catch(e){ console.error("Deal edit error:",e); notify("Error updating deal. Please try again.","err"); }
     finally { submittingDealRef.current = false; setSubmittingDeal(false); }
   };
@@ -2133,20 +2144,22 @@ export default function InvogueCollabHQ() {
   };
 
   // ─── CONTENT APPROVAL WORKFLOW ───
-  const submitContentForReview = (deal, delIdx, contentUrl) => {
+  const submitContentForReview = (deal, delIdx, contentUrl, note="") => {
     if(!((deal.ship && deal.ship.st === "delivered") || deal.productOnHand)) return notify("Product must be delivered before content can be submitted","err");
     if(!contentUrl) return notify("Content URL/link is required","err");
     if(!validUrl(contentUrl)) return notify("Invalid URL — must be a valid link","err");
     const dl0 = deal.dels[delIdx];
     const delId = dl0.id;
     const ts = new Date().toISOString();
-    const newHistory = [...(dl0.history||[]),{action:"submitted",by:loggedIn?.name||"You",at:ts,link:contentUrl}];
-    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"submitted",link:contentUrl,history:newHistory}:dl);
-    supabase.from('deliverables').update({status:'submitted',live_link:contentUrl,submitted_at:ts,history:newHistory}).eq('id',delId).then(({error})=>{if(error) console.error("Submit content failed:",error);});
+    const cleanNote = (note||"").trim();
+    const newHistory = [...(dl0.history||[]),{action:"submitted",by:loggedIn?.name||"You",at:ts,link:contentUrl,...(cleanNote?{note:cleanNote}:{})}];
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"submitted",link:contentUrl,submitNote:cleanNote,history:newHistory}:dl);
+    supabase.from('deliverables').update({status:'submitted',live_link:contentUrl,submitted_at:ts,submit_note:cleanNote||null,history:newHistory}).eq('id',delId).then(({error})=>{if(error) console.error("Submit content failed:",error);});
     upDeal(deal.id,{dels:newDels});
-    addLog(deal.id,loggedIn?.name||"You","Content submitted for review",`${deal.dels[delIdx].type}: ${contentUrl}`);
+    addLog(deal.id,loggedIn?.name||"You","Content submitted for review",`${deal.dels[delIdx].type}: ${contentUrl}${cleanNote?` — Note: ${cleanNote}`:""}`);
     setSel(prev=>prev?{...prev,dels:newDels}:null);
     setDeliverableLinkF(prev=>{const copy={...prev};delete copy[delId];return copy;});
+    setDeliverableNoteF(prev=>{const copy={...prev};delete copy[delId];return copy;});
     notify("Content submitted for manager review!");
   };
 
@@ -5905,6 +5918,7 @@ return (
                           <span style={{color:T.faint,fontSize:"11px"}}>{new Date(h.at).toLocaleDateString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</span>
                         </div>
                         {h.link&&<div style={{fontSize:"11px",color:T.info,marginLeft:"22px",marginTop:"1px"}}>🔗 <a href={ensureUrl(h.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info}}>{h.link}</a></div>}
+                        {h.note&&<div style={{fontSize:"12px",color:T.text,marginLeft:"22px",marginTop:"1px",fontStyle:"italic"}}>💬 "{h.note}"</div>}
                         {h.feedback&&<div style={{fontSize:"12px",color:T.err,marginLeft:"22px",marginTop:"1px",fontStyle:"italic"}}>"{h.feedback}"</div>}
                       </div>;
                     })}
@@ -5930,8 +5944,9 @@ return (
                     <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>{dl.st==="revision_requested"?"Resubmit Revised Content":"Submit Content for Review"}</div>
                     <div style={{display:"flex",gap:"6px",alignItems:"center",marginBottom:"6px"}}>
                       <div style={{flex:1}}><Inp value={url} onChange={e=>setDeliverableLinkF({...deliverableLinkF,[dl.id]:e.target.value})} placeholder="Content URL (Instagram, Drive link, etc.) *"/></div>
-                      <Btn v="primary" sm onClick={()=>submitContentForReview(sel,i,url||latestFile?.web_view_link||"")}>Submit for Review</Btn>
+                      <Btn v="primary" sm onClick={()=>submitContentForReview(sel,i,url||latestFile?.web_view_link||"",deliverableNoteF[dl.id]||"")}>Submit for Review</Btn>
                     </div>
+                    <Textarea value={deliverableNoteF[dl.id]||""} onChange={e=>setDeliverableNoteF({...deliverableNoteF,[dl.id]:e.target.value})} placeholder="Add a comment for the manager (optional) — context, what changed, things to note…" rows={2}/>
                     <label style={{display:"inline-block",cursor:"pointer"}}>
                       <input type="file" style={{display:"none"}} accept="image/*,video/*,.mp4,.mov,.jpg,.jpeg,.png,.gif,.webp,.mkv,.webm" onChange={async e=>{
                         const file = e.target.files?.[0]; e.target.value='';
@@ -5949,13 +5964,15 @@ return (
                     <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>Edit submission <span style={{color:T.faint,fontWeight:400,textTransform:"none",letterSpacing:0}}>· editable until the manager reviews</span></div>
                     <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
                       <div style={{flex:1}}><Inp value={deliverableLinkF[dl.id]!==undefined?deliverableLinkF[dl.id]:(dl.link||"")} onChange={e=>setDeliverableLinkF({...deliverableLinkF,[dl.id]:e.target.value})} placeholder="Updated content URL"/></div>
-                      <Btn v="outline" sm onClick={()=>{const u=deliverableLinkF[dl.id]!==undefined?deliverableLinkF[dl.id]:dl.link; submitContentForReview(sel,i,u);}}>Update link</Btn>
+                      <Btn v="outline" sm onClick={()=>{const u=deliverableLinkF[dl.id]!==undefined?deliverableLinkF[dl.id]:dl.link; const n=deliverableNoteF[dl.id]!==undefined?deliverableNoteF[dl.id]:(dl.submitNote||""); submitContentForReview(sel,i,u,n);}}>Update</Btn>
                     </div>
+                    <Textarea value={deliverableNoteF[dl.id]!==undefined?deliverableNoteF[dl.id]:(dl.submitNote||"")} onChange={e=>setDeliverableNoteF({...deliverableNoteF,[dl.id]:e.target.value})} placeholder="Comment for the manager (optional)" rows={2}/>
                   </div>}
 
                   {/* Manager: Review & approve or request revision */}
                   {canReview&&<div style={{background:T.purpleBg,borderRadius:"2px",padding:"10px 12px"}}>
                     <div style={{fontSize:"11px",fontWeight:700,color:T.purple,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>Review Content</div>
+                    {dl.submitNote&&<div style={{fontSize:"12px",color:T.text,marginBottom:"8px",padding:"7px 9px",background:T.surface,borderLeft:`3px solid ${T.purple}`,borderRadius:"2px"}}><b style={{color:T.purple}}>💬 Negotiator's note:</b> {dl.submitNote}</div>}
                     {dl.link&&<div style={{fontSize:"12px",color:T.info,marginBottom:"6px"}}>🔗 <a href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info}}>{dl.link}</a></div>}
                     {latestFile&&<div style={{fontSize:"12px",marginBottom:"8px",padding:"6px 8px",background:T.surface,borderRadius:"2px"}}>📁 Latest upload: <b>{latestFile.file_name}</b>{latestFile.web_view_link&&<a href={latestFile.web_view_link} target="_blank" rel="noopener noreferrer" style={{color:T.info,marginLeft:"8px",fontWeight:700}}>Download ↗</a>}</div>}
                     <div style={{display:"flex",gap:"6px",marginBottom:"8px"}}>
@@ -6110,7 +6127,7 @@ return (
 
             {/* Actions footer */}
             <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center",padding:"16px 28px",borderTop:`1px solid ${T.borderHead}`,background:"#FBFAF7",flexShrink:0,maxHeight:"34vh",overflowY:"auto"}}>
-              {(role==="negotiator"||role==="admin")&&["pending","renegotiate"].includes(sel.status)&&<Btn v="outline" sm onClick={()=>openEditDeal(sel)}>✎ Edit Details</Btn>}
+              {(role==="negotiator"||role==="admin")&&EDITABLE_STATUSES.includes(sel.status)&&!sel.ackAt&&<Btn v="outline" sm onClick={()=>openEditDeal(sel)}>✎ Edit Details</Btn>}
               {(role==="approver"||role==="admin")&&(sel.status==="pending"||sel.status==="renegotiate"||(sel.status==="manager_approved"&&role==="admin"))&&<>
                 <Btn v="ok" onClick={()=>approveDeal(sel)}>✓ Approve & Lock</Btn>
                 <Btn v="outline" onClick={()=>renegDeal(sel)}>↩ Renegotiate</Btn>

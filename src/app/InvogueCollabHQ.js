@@ -328,6 +328,7 @@ export default function InvogueCollabHQ() {
   const [tab, setTab] = useState("all");
   const [campFilter, setCampFilter] = useState("");
   const [pocFilter, setPocFilter] = useState("");
+  const [sortOrder, setSortOrder] = useState("newest"); // newest | oldest
   const [sel, setSel] = useState(null);
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState(null);
@@ -984,19 +985,23 @@ export default function InvogueCollabHQ() {
     let d = deals;
     if(campFilter) d = d.filter(x=>x.cid===campFilter);
     if(pocFilter) d = d.filter(x=>(influencers.find(i=>i.name===x.inf)?.poc||"")===pocFilter);
-    if(tab==="all") return d;
-    if(tab==="pending") return d.filter(x=>x.status==="pending"||x.status==="renegotiate");
-    if(tab==="active") return d.filter(x=>["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live"].includes(x.status));
-    if(tab==="review") return d.filter(x=>(x.dels||[]).some(dl=>dl.st==="submitted"));
-    if(tab==="dispatch") return d.filter(x=>x.status==="acknowledged"&&!x.ship&&!x.productOnHand);
-    if(tab==="transit") return d.filter(x=>x.ship?.st==="shipped");
-    if(tab==="delivered") return d.filter(x=>x.status==="delivered_prod"||x.ship?.st==="delivered");
-    if(tab==="live") return d.filter(x=>["partial_live","live"].includes(x.status));
-    if(tab==="payment") return d.filter(x=>["invoice_ok","disputed","partial_paid","paid"].includes(x.status));
-    if(tab==="rejected") return d.filter(x=>x.status==="rejected");
-    if(tab==="dropped") return d.filter(x=>["dropped","drop_requested"].includes(x.status));
-    return d;
-  },[deals,tab,campFilter,pocFilter,influencers]);
+    if(tab==="pending") d = d.filter(x=>x.status==="pending"||x.status==="renegotiate");
+    else if(tab==="active") d = d.filter(x=>["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live"].includes(x.status));
+    else if(tab==="review") d = d.filter(x=>(x.dels||[]).some(dl=>dl.st==="submitted"));
+    else if(tab==="dispatch") d = d.filter(x=>x.status==="acknowledged"&&!x.ship&&!x.productOnHand);
+    else if(tab==="transit") d = d.filter(x=>x.ship?.st==="shipped");
+    else if(tab==="delivered") d = d.filter(x=>x.status==="delivered_prod"||x.ship?.st==="delivered");
+    else if(tab==="live") d = d.filter(x=>["partial_live","live"].includes(x.status));
+    else if(tab==="payment") d = d.filter(x=>["invoice_ok","disputed","partial_paid","paid"].includes(x.status));
+    else if(tab==="rejected") d = d.filter(x=>x.status==="rejected");
+    else if(tab==="dropped") d = d.filter(x=>["dropped","drop_requested"].includes(x.status));
+    // Sort by created date
+    const sorted = [...d].sort((a,b)=>{
+      const ta = new Date(a.at||0).getTime(), tb = new Date(b.at||0).getTime();
+      return sortOrder==="oldest" ? ta-tb : tb-ta;
+    });
+    return sorted;
+  },[deals,tab,campFilter,pocFilter,influencers,sortOrder]);
 
   const stats = useMemo(()=>{
     const active = deals.filter(d=>!["rejected","pending","renegotiate","dropped"].includes(d.status));
@@ -4932,11 +4937,12 @@ return (
               <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Platform</label><Sel value={filterPlatform} onChange={e=>setFilterPlatform(e.target.value)} options={[{v:"",l:"All"},{v:"Instagram",l:"Instagram"},{v:"YouTube",l:"YouTube"},{v:"TikTok",l:"TikTok"}]}/></div>
               <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Negotiator</label><Sel value={filterNegotiator} onChange={e=>setFilterNegotiator(e.target.value)} options={[{v:"",l:"All"},...users.filter(u=>u.role==="negotiator").map(u=>({v:u.name,l:u.name}))]}/></div>
               <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>POC</label><Sel value={pocFilter} onChange={e=>setPocFilter(e.target.value)} options={[{v:"",l:"All POCs"},...[...new Set(influencers.map(i=>i.poc).filter(Boolean))].sort().map(p=>({v:p,l:p}))]}/></div>
+              <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Sort by Date</label><Sel value={sortOrder} onChange={e=>setSortOrder(e.target.value)} options={[{v:"newest",l:"Newest first"},{v:"oldest",l:"Oldest first"}]}/></div>
             </div>
             {pocFilter&&<div style={{marginBottom:"8px",fontSize:"11px",color:T.brand,fontWeight:700}}>Filtering by POC · {pocFilter}</div>}
             <div style={{display:"flex",gap:"6px"}}>
               <Btn v="gold" sm onClick={()=>{const filtered=applyFilters();setTab("all")}}>Apply Filters</Btn>
-              <Btn v="outline" sm onClick={()=>{setFilterDateFrom("");setFilterDateTo("");setFilterAmountMin("");setFilterAmountMax("");setFilterPlatform("");setFilterNegotiator("");setFilterStatus([]);setActiveFilters([]);setPocFilter("")}}>Clear All</Btn>
+              <Btn v="outline" sm onClick={()=>{setFilterDateFrom("");setFilterDateTo("");setFilterAmountMin("");setFilterAmountMax("");setFilterPlatform("");setFilterNegotiator("");setFilterStatus([]);setActiveFilters([]);setPocFilter("");setSortOrder("newest")}}>Clear All</Btn>
             </div>
             {activeFilters.length>0&&<div style={{marginTop:"8px",display:"flex",gap:"4px",flexWrap:"wrap"}}>
               {activeFilters.map((f,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:"4px",background:T.goldSoft,color:T.brand,padding:"4px 8px",borderRadius:"2px",fontSize:"10px",fontWeight:700}}>

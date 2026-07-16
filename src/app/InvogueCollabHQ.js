@@ -308,7 +308,7 @@ const ContentPipeline = ({deals:dls, onClickDeal}) => {
 export default function InvogueCollabHQ() {
   const [loaded, setLoaded] = useState(false);
   const [campaigns, setCampaigns] = useState([]);
-  const [deals, setDeals] = useState([]);
+  const [rawDeals, setDeals] = useState([]);
   const [deletedDeals, setDeletedDeals] = useState([]);
   const [deletedCampaigns, setDeletedCampaigns] = useState([]);
   const [users, setUsers] = useState([]);
@@ -324,7 +324,15 @@ export default function InvogueCollabHQ() {
   const [loginErr, setLoginErr] = useState("");
   const [authChecking, setAuthChecking] = useState(true); // true while resolving initial Supabase session
   const [authBusy, setAuthBusy] = useState(false);        // true while Google redirect is in flight
-  const role = loggedIn?.role || "negotiator";
+  const realRole = loggedIn?.role || "negotiator";
+  const [viewAsRole, setViewAsRole] = useState(null); // admin only: preview the app as another role
+  const role = (realRole==="admin" && viewAsRole) ? viewAsRole : realRole;
+  // Negotiators only ever see their own collabs. This is keyed on the REAL identity,
+  // so an admin previewing the negotiator view still sees everything.
+  const deals = useMemo(
+    () => (realRole==="negotiator" && loggedIn?.name) ? rawDeals.filter(d=>d.by===loggedIn.name) : rawDeals,
+    [rawDeals, realRole, loggedIn]
+  );
   const [view, setView] = useState("dashboard");
   const [tab, setTab] = useState("all");
   const [campFilter, setCampFilter] = useState("");
@@ -3127,6 +3135,13 @@ return (
             <div style={{fontSize:"9px",fontFamily:T.ui,color:T.gold,fontWeight:600,letterSpacing:"1.5px",textTransform:"uppercase"}}>{loggedRC.l}</div>
           </div>
         </div>
+        {realRole==="admin"&&<div style={{display:"flex",alignItems:"center",gap:"5px",padding:"4px 8px",background:viewAsRole?T.brand:"transparent",borderRadius:"4px"}}>
+          <span style={{fontSize:"9px",fontFamily:T.ui,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",color:viewAsRole?"#fff":"#7D766A"}}>View as</span>
+          <select value={viewAsRole||""} onChange={e=>{setViewAsRole(e.target.value||null);setView("dashboard")}} style={{border:`1px solid ${viewAsRole?"#fff":T.border}`,background:viewAsRole?"#fff":T.surface,color:"#1A1A1A",borderRadius:"3px",fontSize:"11px",fontWeight:600,fontFamily:T.ui,padding:"3px 6px",cursor:"pointer"}}>
+            <option value="">Admin (default)</option>
+            {["negotiator","approver","finance","logistics","performance_marketer"].map(r=><option key={r} value={r}>{ROLE_CFG[r].l}</option>)}
+          </select>
+        </div>}
         <button aria-label="Sign out" onClick={handleLogout} style={{background:"none",border:"none",color:"#7D766A",fontSize:"11px",padding:"5px 10px",cursor:"pointer",fontFamily:"'Archivo',sans-serif",fontWeight:400}}>Sign Out</button>
         <button onClick={resetData} title="Reset to sample data" style={{background:"none",border:"none",color:"#B5AFA4",fontSize:"10px",padding:"3px 6px",cursor:"pointer",fontFamily:"'Archivo',sans-serif",fontWeight:400}}>Reset</button>
       </div>
@@ -5900,7 +5915,7 @@ return (
                   {/* Revision feedback banner */}
                   {dl.st==="revision_requested"&&dl.feedback&&<div style={{background:T.errBg,border:`1px solid ${T.err}22`,borderRadius:"2px",padding:"10px 12px",marginBottom:"10px",fontSize:"13px"}}>
                     <div style={{fontWeight:700,color:T.err,fontSize:"11px",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px",fontFamily:"Bodoni Moda,serif"}}>Manager Feedback</div>
-                    <div style={{color:T.text}}>{dl.feedback}</div>
+                    <div style={{color:T.text,whiteSpace:"pre-wrap"}}>{dl.feedback}</div>
                   </div>}
 
                   {/* Feedback & revision trail */}
@@ -5918,8 +5933,8 @@ return (
                           <span style={{color:T.faint,fontSize:"11px"}}>{new Date(h.at).toLocaleDateString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</span>
                         </div>
                         {h.link&&<div style={{fontSize:"11px",color:T.info,marginLeft:"22px",marginTop:"1px"}}>🔗 <a href={ensureUrl(h.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info}}>{h.link}</a></div>}
-                        {h.note&&<div style={{fontSize:"12px",color:T.text,marginLeft:"22px",marginTop:"1px",fontStyle:"italic"}}>💬 "{h.note}"</div>}
-                        {h.feedback&&<div style={{fontSize:"12px",color:T.err,marginLeft:"22px",marginTop:"1px",fontStyle:"italic"}}>"{h.feedback}"</div>}
+                        {h.note&&<div style={{fontSize:"12px",color:T.text,marginLeft:"22px",marginTop:"1px",fontStyle:"italic",whiteSpace:"pre-wrap"}}>💬 "{h.note}"</div>}
+                        {h.feedback&&<div style={{fontSize:"12px",color:T.err,marginLeft:"22px",marginTop:"1px",fontStyle:"italic",whiteSpace:"pre-wrap"}}>"{h.feedback}"</div>}
                       </div>;
                     })}
                   </div>}
@@ -5972,14 +5987,14 @@ return (
                   {/* Manager: Review & approve or request revision */}
                   {canReview&&<div style={{background:T.purpleBg,borderRadius:"2px",padding:"10px 12px"}}>
                     <div style={{fontSize:"11px",fontWeight:700,color:T.purple,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>Review Content</div>
-                    {dl.submitNote&&<div style={{fontSize:"12px",color:T.text,marginBottom:"8px",padding:"7px 9px",background:T.surface,borderLeft:`3px solid ${T.purple}`,borderRadius:"2px"}}><b style={{color:T.purple}}>💬 Negotiator's note:</b> {dl.submitNote}</div>}
+                    {dl.submitNote&&<div style={{fontSize:"12px",color:T.text,marginBottom:"8px",padding:"7px 9px",background:T.surface,borderLeft:`3px solid ${T.purple}`,borderRadius:"2px",whiteSpace:"pre-wrap"}}><b style={{color:T.purple}}>💬 Negotiator's note:</b> {dl.submitNote}</div>}
                     {dl.link&&<div style={{fontSize:"12px",color:T.info,marginBottom:"6px"}}>🔗 <a href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info}}>{dl.link}</a></div>}
                     {latestFile&&<div style={{fontSize:"12px",marginBottom:"8px",padding:"6px 8px",background:T.surface,borderRadius:"2px"}}>📁 Latest upload: <b>{latestFile.file_name}</b>{latestFile.web_view_link&&<a href={latestFile.web_view_link} target="_blank" rel="noopener noreferrer" style={{color:T.info,marginLeft:"8px",fontWeight:700}}>Download ↗</a>}</div>}
                     <div style={{display:"flex",gap:"6px",marginBottom:"8px"}}>
                       <Btn v="ok" sm onClick={()=>approveContent(sel,i)}>✅ Approve Content</Btn>
                       <Btn v="danger" sm onClick={()=>{const fb=revisionFeedback[dl.id];if(!fb){notify("Enter feedback before requesting revision","err");return;}requestRevision(sel,i,fb)}}>↩ Request Revision</Btn>
                     </div>
-                    <Inp value={revisionFeedback[dl.id]||""} onChange={e=>setRevisionFeedback({...revisionFeedback,[dl.id]:e.target.value})} placeholder="Feedback for revision (required if requesting changes)"/>
+                    <Textarea value={revisionFeedback[dl.id]||""} onChange={e=>setRevisionFeedback({...revisionFeedback,[dl.id]:e.target.value})} rows={3} placeholder="Feedback for revision (required if requesting changes)"/>
                   </div>}
 
                   {/* Negotiator: Mark approved content as live */}

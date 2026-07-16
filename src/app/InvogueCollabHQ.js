@@ -916,6 +916,8 @@ export default function InvogueCollabHQ() {
   // Stories are optional and don't block payment. If a deal is stories-only, all must be live.
   const STORY_RE = /story|stories/i;
   const isPaymentEligible = (deal) => {
+    // Barter collabs (₹0) have no commercials — they never enter the payment flow.
+    if(!(deal?.amount>0)) return false;
     const dels = deal?.dels || [];
     if(dels.length===0) return false;
     const required = dels.filter(d=>!STORY_RE.test(d.type||""));
@@ -3153,7 +3155,7 @@ return (
       const unreads = recentNotifs.filter(n => new Date(n.time) > new Date(lastSeenTime)).length;
 
       const navItems = {
-        admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"creatives",l:"Creative Hub",i:"📈"},{k:"analytics",l:"Analytics",i:"📊"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"payments",l:"Payments",i:"💰",n:deals.filter(d=>["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0).length},{k:"audit",l:"Audit Log",i:"📜"},{k:"deleted",l:"Deleted",i:"🗑",n:deletedDeals.length+deletedCampaigns.length}],
+        admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"creatives",l:"Creative Hub",i:"📈"},{k:"analytics",l:"Analytics",i:"📊"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"payments",l:"Payments",i:"💰",n:deals.filter(d=>d.amount>0&&["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0).length},{k:"audit",l:"Audit Log",i:"📜"},{k:"deleted",l:"Deleted",i:"🗑",n:deletedDeals.length+deletedCampaigns.length}],
         negotiator: [{k:"dashboard",l:"My Dashboard",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"dropped",l:"Dropped Collabs",i:"🚫",n:stats.dropped},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
         approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.awaitingReview||stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
         finance: [{k:"dashboard",l:"Payment Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"}],
@@ -3580,7 +3582,7 @@ return (
           (d.status==="email_sent"&&!d.ackAt) || // waiting for acknowledgement
           (d.status==="acknowledged"&&!d.ship) || // waiting for logistics
           (["shipped","delivered_prod","email_sent","acknowledged","partial_live"].includes(d.status)&&d.dels.some(dl=>dl.st==="pending")) || // deliverables to mark
-          (["live","partial_live"].includes(d.status)&&!d.inv) || // needs invoice
+          (d.amount>0&&["live","partial_live"].includes(d.status)&&!d.inv) || // needs invoice (barter has none)
           d.dels.some(dl=>dl.st==="revision_requested") // content needs revision
         );
         const myRevisions = myDeals.filter(d=>d.dels.some(dl=>dl.st==="revision_requested"));
@@ -3623,7 +3625,8 @@ return (
               else if(d.status==="email_sent"&&!d.ackAt) { actionLabel="Awaiting Influencer Acknowledgement"; actionColor="#f59e0b"; }
               else if(d.status==="acknowledged"&&!d.ship) { actionLabel="Acknowledged ✓ — Awaiting Logistics Dispatch"; actionColor="#10b981"; }
               else if(["shipped","delivered_prod","email_sent","acknowledged","partial_live"].includes(d.status)&&d.dels.some(dl=>dl.st==="pending")) { actionLabel=`${d.dels.filter(dl=>dl.st==="pending").length} deliverables to mark live`; actionColor=T.purple; }
-              else if(["live","partial_live"].includes(d.status)&&!d.inv) { actionLabel="Submit Invoice"; actionColor=T.gold; }
+              else if(d.amount>0&&["live","partial_live"].includes(d.status)&&!d.inv) { actionLabel="Submit Invoice"; actionColor=T.gold; }
+              else if(d.amount<=0&&["live","partial_live"].includes(d.status)) { actionLabel="Barter — content live, no payment"; actionColor=T.ok; }
               else if(d.status==="payment_requested") { actionLabel="Payment Requested - with Manager"; actionColor=T.info; }
               else { actionLabel="Review needed"; }
               return <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${actionColor}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",transition:"all .12s"}}
@@ -3882,7 +3885,7 @@ return (
           FINANCE DASHBOARD — Payment Center
          ═══════════════════════════════════════════════════════ */}
       {((view==="dashboard"&&role==="finance")||(view==="payments"&&role==="admin"))&&(()=>{
-        const pendingPayments = deals.filter(d=>["invoice_ok","payment_details_received","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0);
+        const pendingPayments = deals.filter(d=>d.amount>0&&["invoice_ok","payment_details_received","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0);
         const disputed = deals.filter(d=>d.status==="disputed");
         const advanceDue = deals.filter(d=>["approved","email_sent","acknowledged","shipped","delivered_prod"].includes(d.status)&&totalPaid(d)===0);
         const recentPaid = deals.filter(d=>d.status==="paid").slice(0,5);
@@ -5795,7 +5798,7 @@ return (
           const locked=["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","partial_paid","paid"].includes(sel.status);
           const steps=[{label:"Content Live",done:isPaymentEligible(sel)},{label:sel.agencyManaged?"Agency Inv.":"Form Sent",done:sel.agencyManaged?!!sel.agencyInvoiceUrl:!!sel.paymentFormSent},{label:"Details In",done:!!sel.paymentDetailsAt},{label:"Paid",done:sel.status==="paid"}];
           const commercials=[["Campaign",camp?.name||"—"],["Usage Rights",sel.usage||"—"],["Payment Terms",ptLabel(sel.paymentTerms||"next_15th")],["Deadline",sel.deadline||"—"],["Product",sel.products?sel.products.map(p=>p.name).join(", "):sel.product||"—"],["Platform",`${sel.platform||"—"}${sel.followers?` · ${sel.followers}`:""}`],["Phone",sel.phone||"—"],["Email",sel.email||"Not provided"]];
-          const TABS=[{k:"overview",l:"Overview"},{k:"deliverables",l:"Deliverables"},{k:"shipment",l:"Shipment"},{k:"payment",l:"Payment"},{k:"activity",l:"Activity"}];
+          const TABS=[{k:"overview",l:"Overview"},{k:"deliverables",l:"Deliverables"},{k:"shipment",l:"Shipment"},...(sel.amount>0?[{k:"payment",l:"Payment"}]:[]),{k:"activity",l:"Activity"}];
           return <>
             {/* Drawer header */}
             <div style={{padding:"24px 28px 0",background:"#FBFAF7",borderBottom:`1px solid ${T.borderHead}`,flexShrink:0}}>
@@ -5855,6 +5858,7 @@ return (
               </div>
               {sel.profile&&<div style={{fontSize:"12px",marginBottom:"12px"}}><span style={{color:T.sub}}>Profile · </span><a href={ensureUrl(sel.profile)} target="_blank" rel="noreferrer" style={{color:T.info,wordBreak:"break-all"}}>{sel.profile}</a></div>}
               {sel.address&&<div style={{padding:"10px 12px",background:T.infoBg,borderRadius:"2px",marginBottom:"20px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>📍 Address:</span> {sel.address}</div>}
+              {sel.amount>0 ? <>
               <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"18px"}}>Payment Workflow</div>
               <div style={{display:"flex",alignItems:"flex-start",marginBottom:"28px"}}>
                 {steps.map((s,i)=><div key={i} style={{flex:1,textAlign:"center",position:"relative"}}>
@@ -5862,7 +5866,7 @@ return (
                   <div style={{fontSize:"10px",fontWeight:700,color:s.done?T.text:T.sub}}>{s.label}</div>
                   {i<steps.length-1&&<div style={{position:"absolute",top:"13px",left:"62%",right:"-38%",height:"1px",background:T.border}}/>}
                 </div>)}
-              </div>
+              </div></> : <div style={{padding:"12px 14px",background:T.surfaceAlt,borderRadius:"2px",marginBottom:"28px",fontSize:"13px",color:T.sub,fontWeight:600}}>🎁 Barter collab — no payment workflow. Completes once all content is live.</div>}
               <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"14px"}}>Deliverables</div>
               <div style={{borderTop:`1px solid ${T.border}`}}>
                 {sel.dels.map((dl,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"13px 0",borderBottom:i<sel.dels.length-1?`1px solid ${T.borderSoft}`:"none"}}><span style={{fontSize:"13px",fontWeight:600}}>{dl.type}{dl.desc&&<span style={{fontSize:"11px",color:T.sub,fontWeight:400}}> · {dl.desc}</span>}</span><DBadge s={dl.st}/></div>)}
@@ -6157,7 +6161,8 @@ return (
               {(role==="logistics"||role==="admin")&&sel.status==="acknowledged"&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>}
               {(role==="negotiator"||role==="logistics"||role==="admin")&&sel.status==="acknowledged"&&!sel.ship&&!sel.productOnHand&&<Btn v="outline" sm onClick={()=>skipShipment(sel)}>⏭ Already has product — skip shipment</Btn>}
               {(role==="logistics"||role==="admin")&&sel.status==="email_sent"&&!sel.ship&&<div style={{padding:"8px 12px",background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"2px",fontSize:"12px",color:"#92400e"}}>⏳ Awaiting influencer acknowledgement before dispatch</div>}
-              {(role==="negotiator"||role==="admin")&&["partial_live","live"].includes(sel.status)&&!isPaymentEligible(sel)&&!sel.paymentDetailsAt&&<div style={{fontSize:"12px",color:T.warn,fontWeight:600,padding:"6px 10px",background:T.warnBg,borderRadius:"2px"}}>⏳ Payment opens once all required (non-Story) content is live. Stories are optional.</div>}
+              {(role==="negotiator"||role==="admin")&&sel.amount>0&&["partial_live","live"].includes(sel.status)&&!isPaymentEligible(sel)&&!sel.paymentDetailsAt&&<div style={{fontSize:"12px",color:T.warn,fontWeight:600,padding:"6px 10px",background:T.warnBg,borderRadius:"2px"}}>⏳ Payment opens once all required (non-Story) content is live. Stories are optional.</div>}
+              {sel.amount<=0&&["partial_live","live"].includes(sel.status)&&<div style={{fontSize:"12px",color:T.sub,fontWeight:600,padding:"6px 10px",background:T.surfaceAlt,borderRadius:"2px"}}>🎁 Barter collab — no payment required.</div>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&isPaymentEligible(sel)&&!sel.paymentDetailsAt&&<label style={{display:"inline-flex",alignItems:"center",gap:"6px",fontSize:"12px",color:T.sub,cursor:"pointer",padding:"6px 10px",background:sel.agencyManaged?T.goldSoft:"transparent",border:`1px solid ${sel.agencyManaged?T.gold:T.border}`,borderRadius:"2px"}}><input type="checkbox" checked={!!sel.agencyManaged} onChange={()=>toggleAgencyManaged(sel)} style={{cursor:"pointer"}}/>🏢 Agency-managed (agency raises GST invoice)</label>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&isPaymentEligible(sel)&&!sel.paymentDetailsAt&&!sel.agencyManaged&&<Btn v="primary" onClick={()=>setModal("collectPayment")}>{sel.paymentFormSent?"✅ Form Sent — Resend":"📩 Send Payment Details Form"}</Btn>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&isPaymentEligible(sel)&&!sel.paymentDetailsAt&&sel.agencyManaged&&<Btn v="gold" onClick={()=>openAgencyModal(sel)}>🏢 Attach Agency Invoice &amp; Details</Btn>}

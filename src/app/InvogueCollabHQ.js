@@ -197,6 +197,22 @@ const ROLE_CFG = {
   viewer:     { l:"Viewer",      c:T.sub,    bg:"#f0ede8",  i:"👁" },
 };
 
+// Single source of truth for the All-Collabs status tabs — used by the list,
+// the tab counts, AND the campaign chip counts so they always agree.
+const TAB_MATCHERS = {
+  all:       ()=>true,
+  pending:   d=>["pending","renegotiate"].includes(d.status),
+  active:    d=>["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live","payment_details_received"].includes(d.status),
+  review:    d=>(d.dels||[]).some(dl=>dl.st==="submitted"),
+  dispatch:  d=>d.status==="acknowledged"&&!d.ship&&!d.productOnHand,
+  transit:   d=>d.ship?.st==="shipped",
+  delivered: d=>d.status==="delivered_prod"||d.ship?.st==="delivered",
+  live:      d=>["partial_live","live"].includes(d.status),
+  payment:   d=>["invoice_ok","disputed","partial_paid","paid","payment_details_received","payment_requested","payment_approved"].includes(d.status),
+  rejected:  d=>d.status==="rejected",
+  dropped:   d=>["dropped","drop_requested"].includes(d.status),
+};
+
 // ─── REUSABLE COMPONENTS (Maison editorial) ───
 const Badge = ({s,sm}) => { const x=STATUS_CFG[s]||{l:s,c:T.sub,bg:T.goldSoft}; return <span style={{display:"inline-flex",alignItems:"center",padding:"4px 9px",borderRadius:"2px",fontSize:"9px",fontWeight:700,color:x.c,background:x.bg,whiteSpace:"nowrap",letterSpacing:"1px",textTransform:"uppercase",border:"none",fontFamily:T.ui}}>{x.l}</span>; };
 const ensureUrl = (url) => url && !url.match(/^https?:\/\//) ? "https://"+url : url;
@@ -448,7 +464,6 @@ export default function InvogueCollabHQ() {
   const [filterPlatform, setFilterPlatform] = useState("");
   const [filterStatus, setFilterStatus] = useState([]);
   const [filterNegotiator, setFilterNegotiator] = useState("");
-  const [activeFilters, setActiveFilters] = useState([]);
 
   // Pagination & Date Filters
   const [auditDateFrom, setAuditDateFrom] = useState("");
@@ -994,27 +1009,32 @@ export default function InvogueCollabHQ() {
     return arr;
   },[deals]);
 
+  // Cross-cutting filters (POC + advanced panel). These apply to the list AND
+  // to the tab/campaign counts, so everything moves together.
+  const matchesAdvanced = useCallback((d)=>{
+    if(pocFilter && (influencers.find(i=>i.name===d.inf)?.poc||"")!==pocFilter) return false;
+    if(filterDateFrom && new Date(d.at) < new Date(filterDateFrom)) return false;
+    if(filterDateTo && new Date(d.at) > new Date(filterDateTo+"T23:59:59")) return false;
+    if(filterAmountMin!=="" && filterAmountMin!=null && d.amount < +filterAmountMin) return false;
+    if(filterAmountMax!=="" && filterAmountMax!=null && d.amount > +filterAmountMax) return false;
+    if(filterPlatform && d.platform !== filterPlatform) return false;
+    if(filterStatus.length>0 && !filterStatus.includes(d.status)) return false;
+    if(filterNegotiator && d.by !== filterNegotiator) return false;
+    return true;
+  },[pocFilter,filterDateFrom,filterDateTo,filterAmountMin,filterAmountMax,filterPlatform,filterStatus,filterNegotiator,influencers]);
+
   const filtered = useMemo(()=>{
-    let d = deals;
+    let d = deals.filter(matchesAdvanced);
     if(campFilter) d = d.filter(x=>x.cid===campFilter);
-    if(pocFilter) d = d.filter(x=>(influencers.find(i=>i.name===x.inf)?.poc||"")===pocFilter);
-    if(tab==="pending") d = d.filter(x=>x.status==="pending"||x.status==="renegotiate");
-    else if(tab==="active") d = d.filter(x=>["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live"].includes(x.status));
-    else if(tab==="review") d = d.filter(x=>(x.dels||[]).some(dl=>dl.st==="submitted"));
-    else if(tab==="dispatch") d = d.filter(x=>x.status==="acknowledged"&&!x.ship&&!x.productOnHand);
-    else if(tab==="transit") d = d.filter(x=>x.ship?.st==="shipped");
-    else if(tab==="delivered") d = d.filter(x=>x.status==="delivered_prod"||x.ship?.st==="delivered");
-    else if(tab==="live") d = d.filter(x=>["partial_live","live"].includes(x.status));
-    else if(tab==="payment") d = d.filter(x=>["invoice_ok","disputed","partial_paid","paid"].includes(x.status));
-    else if(tab==="rejected") d = d.filter(x=>x.status==="rejected");
-    else if(tab==="dropped") d = d.filter(x=>["dropped","drop_requested"].includes(x.status));
+    const tabFn = TAB_MATCHERS[tab] || TAB_MATCHERS.all;
+    d = d.filter(tabFn);
     // Sort by created date
     const sorted = [...d].sort((a,b)=>{
       const ta = new Date(a.at||0).getTime(), tb = new Date(b.at||0).getTime();
       return sortOrder==="oldest" ? ta-tb : tb-ta;
     });
     return sorted;
-  },[deals,tab,campFilter,pocFilter,influencers,sortOrder]);
+  },[deals,tab,campFilter,matchesAdvanced,sortOrder]);
 
   const stats = useMemo(()=>{
     const active = deals.filter(d=>!["rejected","pending","renegotiate","dropped"].includes(d.status));
@@ -1114,48 +1134,19 @@ export default function InvogueCollabHQ() {
     return { dealMatches, infMatches, campMatches };
   };
 
-  const applyFilters = () => {
-    let filtered = deals;
-    const active = [];
-
-    if(filterDateFrom) {
-      filtered = filtered.filter(d => new Date(d.at) >= new Date(filterDateFrom));
-      active.push(`From: ${filterDateFrom}`);
-    }
-    if(filterDateTo) {
-      filtered = filtered.filter(d => new Date(d.at) <= new Date(filterDateTo));
-      active.push(`To: ${filterDateTo}`);
-    }
-    if(filterAmountMin) {
-      filtered = filtered.filter(d => d.amount >= +filterAmountMin);
-      active.push(`Min: ${f(filterAmountMin)}`);
-    }
-    if(filterAmountMax) {
-      filtered = filtered.filter(d => d.amount <= +filterAmountMax);
-      active.push(`Max: ${f(filterAmountMax)}`);
-    }
-    if(filterPlatform) {
-      filtered = filtered.filter(d => d.platform === filterPlatform);
-      active.push(`Platform: ${filterPlatform}`);
-    }
-    if(filterStatus.length > 0) {
-      filtered = filtered.filter(d => filterStatus.includes(d.status));
-      active.push(`Status: ${filterStatus.join(", ")}`);
-    }
-    if(filterNegotiator) {
-      filtered = filtered.filter(d => d.by === filterNegotiator);
-      active.push(`Negotiator: ${filterNegotiator}`);
-    }
-
-    setActiveFilters(active);
-    return filtered;
-  };
-
-  const clearFilter = (idx) => {
-    const filters = [filterDateFrom, filterDateTo, filterAmountMin, filterAmountMax, filterPlatform, filterStatus, filterNegotiator];
-    const filterSetters = [setFilterDateFrom, setFilterDateTo, setFilterAmountMin, setFilterAmountMax, setFilterPlatform, setFilterStatus, setFilterNegotiator];
-    if(idx < filterSetters.length) filterSetters[idx]("");
-  };
+  // Active filter chips — derived live from the filter state (each carries its own clear).
+  const activeFilters = useMemo(()=>{
+    const a = [];
+    if(filterDateFrom) a.push({label:`From: ${filterDateFrom}`, clear:()=>setFilterDateFrom("")});
+    if(filterDateTo) a.push({label:`To: ${filterDateTo}`, clear:()=>setFilterDateTo("")});
+    if(filterAmountMin!=="") a.push({label:`Min: ${f(filterAmountMin)}`, clear:()=>setFilterAmountMin("")});
+    if(filterAmountMax!=="") a.push({label:`Max: ${f(filterAmountMax)}`, clear:()=>setFilterAmountMax("")});
+    if(filterPlatform) a.push({label:`Platform: ${filterPlatform}`, clear:()=>setFilterPlatform("")});
+    if(filterStatus.length>0) a.push({label:`Status: ${filterStatus.join(", ")}`, clear:()=>setFilterStatus([])});
+    if(filterNegotiator) a.push({label:`Negotiator: ${filterNegotiator}`, clear:()=>setFilterNegotiator("")});
+    if(pocFilter) a.push({label:`POC: ${pocFilter}`, clear:()=>setPocFilter("")});
+    return a;
+  },[filterDateFrom,filterDateTo,filterAmountMin,filterAmountMax,filterPlatform,filterStatus,filterNegotiator,pocFilter]);
 
   const calculateTax = (amount) => {
     const base = +amount || 0;
@@ -4944,18 +4935,23 @@ return (
           {/* Header */}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:"24px",flexWrap:"wrap",gap:"12px"}}>
             <div>
-              <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{deals.length} collaborations</div>
+              <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{filtered.length===deals.length?`${deals.length} collaborations`:`${filtered.length} of ${deals.length} collaborations`}</div>
               <div style={{fontFamily:T.display,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>All Collabs</div>
             </div>
             {(role==="negotiator"||role==="admin")&&<Btn v="primary" onClick={()=>{setEditingDealId(null);setNDeal({inf:"",email:"",platform:"Instagram",followers:"",products:[],usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},paymentTerms:"next_15th",cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>New Collab</Btn>}
           </div>
 
-          {/* Campaign filter */}
-          <div style={{display:"flex",gap:"7px",marginBottom:"12px",flexWrap:"wrap",alignItems:"center"}}>
+          {/* Campaign filter — counts reflect the active POC/advanced filters AND the selected status tab */}
+          {(()=>{
+            const tabFn = TAB_MATCHERS[tab] || TAB_MATCHERS.all;
+            const campBase = deals.filter(matchesAdvanced).filter(tabFn);
+            const campCount = cid => campBase.filter(d=>d.cid===cid).length;
+            return <div style={{display:"flex",gap:"7px",marginBottom:"12px",flexWrap:"wrap",alignItems:"center"}}>
             <span style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:"1px",marginRight:"4px"}}>Campaign</span>
-            <button onClick={()=>setCampFilter("")} style={{padding:"5px 11px",border:`1px solid ${!campFilter?T.brand:T.border}`,borderRadius:"2px",background:!campFilter?T.brand:T.surface,color:!campFilter?"#fff":T.sub,fontSize:"10px",fontWeight:700,letterSpacing:"0.5px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui}}>All</button>
-            {campaigns.map(c=><button key={c.id} onClick={()=>setCampFilter(c.id)} style={{padding:"5px 11px",border:`1px solid ${campFilter===c.id?T.brand:T.border}`,borderRadius:"2px",background:campFilter===c.id?T.brand:T.surface,color:campFilter===c.id?"#fff":T.sub,fontSize:"10px",fontWeight:700,letterSpacing:"0.5px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui}}>{c.name} ({campDeals(c.id).length})</button>)}
-          </div>
+            <button onClick={()=>setCampFilter("")} style={{padding:"5px 11px",border:`1px solid ${!campFilter?T.brand:T.border}`,borderRadius:"2px",background:!campFilter?T.brand:T.surface,color:!campFilter?"#fff":T.sub,fontSize:"10px",fontWeight:700,letterSpacing:"0.5px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui}}>All ({campBase.length})</button>
+            {campaigns.map(c=><button key={c.id} onClick={()=>setCampFilter(c.id)} style={{padding:"5px 11px",border:`1px solid ${campFilter===c.id?T.brand:T.border}`,borderRadius:"2px",background:campFilter===c.id?T.brand:T.surface,color:campFilter===c.id?"#fff":T.sub,fontSize:"10px",fontWeight:700,letterSpacing:"0.5px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui}}>{c.name} ({campCount(c.id)})</button>)}
+          </div>;
+          })()}
 
           {/* Feature 4: Filter Controls */}
           <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"16px",marginBottom:"14px"}}>
@@ -4972,31 +4968,20 @@ return (
             </div>
             {pocFilter&&<div style={{marginBottom:"8px",fontSize:"11px",color:T.brand,fontWeight:700}}>Filtering by POC · {pocFilter}</div>}
             <div style={{display:"flex",gap:"6px"}}>
-              <Btn v="gold" sm onClick={()=>{const filtered=applyFilters();setTab("all")}}>Apply Filters</Btn>
-              <Btn v="outline" sm onClick={()=>{setFilterDateFrom("");setFilterDateTo("");setFilterAmountMin("");setFilterAmountMax("");setFilterPlatform("");setFilterNegotiator("");setFilterStatus([]);setActiveFilters([]);setPocFilter("");setSortOrder("newest")}}>Clear All</Btn>
+              <span style={{fontSize:"11px",color:T.sub,alignSelf:"center"}}>Filters apply live · <b style={{color:T.brand}}>{filtered.length}</b> shown</span>
+              <Btn v="outline" sm onClick={()=>{setFilterDateFrom("");setFilterDateTo("");setFilterAmountMin("");setFilterAmountMax("");setFilterPlatform("");setFilterNegotiator("");setFilterStatus([]);setPocFilter("");setSortOrder("newest");setCampFilter("");setTab("all")}}>Clear All</Btn>
             </div>
             {activeFilters.length>0&&<div style={{marginTop:"8px",display:"flex",gap:"4px",flexWrap:"wrap"}}>
               {activeFilters.map((f,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:"4px",background:T.goldSoft,color:T.brand,padding:"4px 8px",borderRadius:"2px",fontSize:"10px",fontWeight:700}}>
-                {f}<button onClick={()=>clearFilter(i)} style={{background:"none",border:"none",color:T.brand,cursor:"pointer",fontSize:"12px",padding:"0",lineHeight:1}}>✕</button>
+                {f.label}<button onClick={f.clear} style={{background:"none",border:"none",color:T.brand,cursor:"pointer",fontSize:"12px",padding:"0",lineHeight:1}}>✕</button>
               </span>)}
             </div>}
           </div>
 
-          {/* Tabs + Action */}
+          {/* Tabs + Action — counts reflect the active POC/advanced filters AND the selected campaign */}
           {(()=>{
-            const tc = {
-              all: deals.length,
-              pending: deals.filter(x=>["pending","renegotiate"].includes(x.status)).length,
-              active: deals.filter(x=>["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live","payment_details_received"].includes(x.status)).length,
-              review: deals.filter(x=>(x.dels||[]).some(dl=>dl.st==="submitted")).length,
-              dispatch: deals.filter(x=>x.status==="acknowledged"&&!x.ship&&!x.productOnHand).length,
-              transit: deals.filter(x=>x.ship?.st==="shipped").length,
-              delivered: deals.filter(x=>x.status==="delivered_prod"||x.ship?.st==="delivered").length,
-              live: deals.filter(x=>["partial_live","live"].includes(x.status)).length,
-              payment: deals.filter(x=>["invoice_ok","disputed","partial_paid","paid","payment_details_received","payment_requested","payment_approved"].includes(x.status)).length,
-              rejected: deals.filter(x=>x.status==="rejected").length,
-              dropped: deals.filter(x=>["dropped","drop_requested"].includes(x.status)).length,
-            };
+            const tabBase = deals.filter(matchesAdvanced).filter(d=>!campFilter||d.cid===campFilter);
+            const tc = Object.fromEntries(Object.keys(TAB_MATCHERS).map(k=>[k, tabBase.filter(TAB_MATCHERS[k]).length]));
             return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.border}`,marginBottom:"20px",flexWrap:"wrap",gap:"8px"}}>
               <div style={{display:"flex",gap:"22px",flexWrap:"wrap"}}>
                 {[{k:"all",l:"All"},{k:"pending",l:"Pending"},{k:"active",l:"Active"},{k:"review",l:"Content Review"},{k:"dispatch",l:"Awaiting Dispatch"},{k:"transit",l:"In Transit"},{k:"delivered",l:"Delivered"},{k:"live",l:"Live"},{k:"payment",l:"Payments"},{k:"rejected",l:"Rejected"},{k:"dropped",l:"Dropped"}].map(t=>(

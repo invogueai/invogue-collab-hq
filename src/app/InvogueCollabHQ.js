@@ -163,7 +163,7 @@ async function loadFromSupabase() {
     invoiceGenerated:d.invoice_generated||false, invoiceNumber:d.invoice_number||null, invoiceDate:d.invoice_date||null,
     inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
     shipHistory:d.ship_history||[],
-    renegotiationNote:d.renegotiation_note||"",
+    renegotiationNote:d.renegotiation_note||"", reapprovalNote:d.reapproval_note||"",
     managerNote:d.manager_note||"",
     productOnHand:d.no_shipment||false,
     deleted:d.deleted||false,
@@ -559,7 +559,7 @@ export default function InvogueCollabHQ() {
     agencyManaged:d.agency_managed||false, agencyName:d.agency_name||"", agencyGst:d.agency_gst||"", agencyInvoiceUrl:d.agency_invoice_url||"",
             inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
             shipHistory:d.ship_history||[],
-            renegotiationNote:d.renegotiation_note||"",
+            renegotiationNote:d.renegotiation_note||"", reapprovalNote:d.reapproval_note||"",
             managerNote:d.manager_note||"",
             productOnHand:d.no_shipment||false,
             deleted:d.deleted||false,
@@ -1386,9 +1386,29 @@ export default function InvogueCollabHQ() {
 
       // If the deal was already approved (or the email had gone out), editing it
       // invalidates that approval — revert to pending so a manager must re-approve.
-      const priorStatus = deals.find(d=>d.id===editingDealId)?.status;
+      const priorDeal = deals.find(d=>d.id===editingDealId);
+      const priorStatus = priorDeal?.status;
       const needsReapproval = ["manager_approved","approved","email_sent"].includes(priorStatus);
-      const statusReset = needsReapproval ? { status:'pending', approved_by:null, approved_at:null, email_sent_at:null, acknowledge_token:null } : {};
+
+      // Build a clear summary of what changed, for the manager reviewing the re-approval.
+      const changes = [];
+      const oldDelStr = (priorDeal?.dels||[]).map(d=>d.type).join(", ")||"none";
+      const newDelStr = (nDeal.dels||[]).map(d=>d.type).join(", ")||"none";
+      if(priorDeal){
+        if(Number(priorDeal.amount)!==Number(nDeal.amount)) changes.push(`Amount: ${fAmt(priorDeal.amount)} → ${fAmt(+nDeal.amount)}`);
+        if((priorDeal.product||"")!==(productStr||"")) changes.push(`Product: ${priorDeal.product||"—"} → ${productStr||"—"}`);
+        if((priorDeal.cid||"")!==(nDeal.cid||"")) changes.push(`Campaign: ${getCamp(priorDeal.cid)?.name||"—"} → ${getCamp(nDeal.cid)?.name||"—"}`);
+        if((priorDeal.deadline||"")!==(nDeal.deadline||"")) changes.push(`Deadline: ${priorDeal.deadline||"—"} → ${nDeal.deadline||"—"}`);
+        if((priorDeal.usage||"")!==(nDeal.usage||"")) changes.push(`Usage rights: ${priorDeal.usage||"—"} → ${nDeal.usage||"—"}`);
+        if((priorDeal.paymentTerms||"")!==(nDeal.paymentTerms||"")) changes.push(`Payment terms: ${ptLabel(priorDeal.paymentTerms||"next_15th")} → ${ptLabel(nDeal.paymentTerms||"next_15th")}`);
+        if(oldDelStr!==newDelStr) changes.push(`Deliverables: ${oldDelStr} → ${newDelStr}`);
+        if((priorDeal.address||"")!==(addressStr||"")) changes.push(`Address updated`);
+        if((priorDeal.phone||"")!==(nDeal.phone||"")) changes.push(`Phone: ${priorDeal.phone||"—"} → ${nDeal.phone||"—"}`);
+        if((priorDeal.email||"")!==(nDeal.email||"")) changes.push(`Email: ${priorDeal.email||"—"} → ${nDeal.email||"—"}`);
+      }
+      const changeSummary = changes.length ? `Edited by ${userName} on ${ts.slice(0,10)}:\n• ${changes.join("\n• ")}` : `Edited by ${userName} on ${ts.slice(0,10)} (minor edit).`;
+
+      const statusReset = needsReapproval ? { status:'pending', approved_by:null, approved_at:null, email_sent_at:null, acknowledge_token:null, reapproval_note:changeSummary } : {};
 
       const {error:updErr} = await supabase.from('deals').update({
         influencer_name:nDeal.inf, platform:nDeal.platform, followers:nDeal.followers,
@@ -1418,7 +1438,7 @@ export default function InvogueCollabHQ() {
 
       await supabase.from('audit_log').insert({deal_id:editingDealId,user_name:userName,action:needsReapproval?'Deal edited — reverted to pending for manager re-approval':'Deal edited',detail:`${f(nDeal.amount)} | ${newDels.length} deliverables`,created_at:ts});
 
-      const patch = {inf:nDeal.inf,email:nDeal.email,platform:nDeal.platform,followers:nDeal.followers,products:nDeal.products,product:productStr,amount:+nDeal.amount,cid:nDeal.cid,usage:nDeal.usage,deadline:nDeal.deadline,profile:nDeal.profile,phone:nDeal.phone,address:addressStr,paymentTerms:nDeal.paymentTerms,dels:newDels,...(needsReapproval?{status:'pending',appBy:null,appAt:null,ackToken:null}:{})};
+      const patch = {inf:nDeal.inf,email:nDeal.email,platform:nDeal.platform,followers:nDeal.followers,products:nDeal.products,product:productStr,amount:+nDeal.amount,cid:nDeal.cid,usage:nDeal.usage,deadline:nDeal.deadline,profile:nDeal.profile,phone:nDeal.phone,address:addressStr,paymentTerms:nDeal.paymentTerms,dels:newDels,...(needsReapproval?{status:'pending',appBy:null,appAt:null,ackToken:null,reapprovalNote:changeSummary}:{})};
       setDeals(prev=>prev.map(d=>d.id===editingDealId?{...d,...patch}:d));
       setSel(prev=>prev&&prev.id===editingDealId?{...prev,...patch}:prev);
       setModal(null); setNDeal(null); setEditingDealId(null); setFormErrors({});
@@ -1523,9 +1543,9 @@ export default function InvogueCollabHQ() {
       return;
     }
 
-    // Admin final approval (or single approval for ≤₹50K)
-    supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error){console.error("Approve save failed:",error);notify("Couldn't save approval: "+(error.message||"unknown error"),"err");}});
-    upDeal(d.id,{status:"approved",appBy:userName,appAt:ts});
+    // Admin final approval (or single approval for ≤₹50K) — clear any re-approval change note.
+    supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts,reapproval_note:null}).eq('id',d.id).then(({error})=>{if(error){console.error("Approve save failed:",error);notify("Couldn't save approval: "+(error.message||"unknown error"),"err");}});
+    upDeal(d.id,{status:"approved",appBy:userName,appAt:ts,reapprovalNote:""});
     addLog(d.id,userName,needsDualApproval?"Admin approved (dual approval complete) & amount locked":"Approved & amount locked",fAmt(d.amount));
     setSel(null);
     setModal(null);
@@ -2164,20 +2184,22 @@ export default function InvogueCollabHQ() {
     notify("Content submitted for manager review!");
   };
 
-  const approveContent = async (deal, delIdx) => {
+  const approveContent = async (deal, delIdx, comment="") => {
     const dl0 = deal.dels[delIdx];
     const delId = dl0.id;
     const ts = new Date().toISOString();
-    const newHistory = [...(dl0.history||[]),{action:"approved",by:loggedIn?.name||"You",at:ts}];
+    const note = (comment||"").trim();
+    const newHistory = [...(dl0.history||[]),{action:"approved",by:loggedIn?.name||"You",at:ts,...(note?{note}:{})}];
     // Persist FIRST and surface any error — previously this update was fire-and-forget,
     // so a failed write (e.g. RLS/permission) silently reverted on refresh and looked
     // like "approval doesn't stick", especially for revised→resubmitted deliverables.
-    const {error} = await supabase.from('deliverables').update({status:'approved',approved_at:ts,history:newHistory}).eq('id',delId);
+    const {error} = await supabase.from('deliverables').update({status:'approved',approved_at:ts,history:newHistory,...(note?{feedback:note}:{})}).eq('id',delId);
     if(error){ console.error("Approve content failed:",error); return notify("Couldn't approve content: "+error.message,"err"); }
-    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"approved",history:newHistory}:dl);
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"approved",history:newHistory,...(note?{feedback:note}:{})}:dl);
     upDeal(deal.id,{dels:newDels});
-    addLog(deal.id,loggedIn?.name||"You","Content approved",`${deal.dels[delIdx].type}: ${deal.dels[delIdx].desc}`);
+    addLog(deal.id,loggedIn?.name||"You","Content approved",`${deal.dels[delIdx].type}: ${deal.dels[delIdx].desc}${note?` — Note: ${note}`:""}`);
     setSel(prev=>prev?{...prev,dels:newDels}:null);
+    setRevisionFeedback(prev=>{const c={...prev};delete c[delId];return c;});
     notify("Content approved! Negotiator can now mark it live.");
   };
 
@@ -3245,6 +3267,7 @@ return (
               <div style={{fontSize:"12px",color:T.text,margin:"14px 0 12px",borderTop:`1px solid ${T.borderSoft}`,paddingTop:"12px"}}>{getCamp(d.cid)?.name||"—"} · <span style={{color:T.sub}}>{d.product} · {d.dels.length} deliverables · by {d.by}</span></div>
               {d.amount>50000&&d.status==="pending"&&<div style={{display:"flex",alignItems:"center",background:"#FBF3F2",border:"1px solid #F2DAD7",borderRadius:"2px",padding:"8px 12px",marginBottom:"16px"}}><span style={{fontSize:"11px",color:T.brand,fontWeight:600}}>Dual approval — exceeds ₹50,000, manager sign-off required.</span></div>}
               {d.status==="manager_approved"&&<div style={{display:"flex",alignItems:"center",background:T.infoBg,borderRadius:"2px",padding:"8px 12px",marginBottom:"16px"}}><span style={{fontSize:"11px",color:T.info,fontWeight:600}}>Manager approved — admin final sign-off needed.</span></div>}
+              {d.reapprovalNote&&<div style={{background:"#FEF3C7",border:"1px solid #F59E0B55",borderLeft:"3px solid #D97706",borderRadius:"2px",padding:"8px 12px",marginBottom:"16px"}}><div style={{fontSize:"10px",fontWeight:800,color:"#B45309",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"3px"}}>⚠ Edited after approval — review changes</div><div style={{fontSize:"11px",color:T.text,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{d.reapprovalNote}</div></div>}
               <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:"10px"}}>
                 <Btn v="primary" sm onClick={()=>setConfirmAction({title:"Approve Deal",msg:"Approve and lock "+fAmt(d.amount)+" for "+d.inf+"?",onConfirm:()=>{approveDeal(d);setConfirmAction(null)}})}>Approve</Btn>
                 <Btn v="outline" sm onClick={()=>setConfirmAction({title:"Request Renegotiation",msg:"Renegotiate "+d.inf+" deal?",onConfirm:()=>{renegDeal(d);setConfirmAction(null)}})}>Renegotiate</Btn>
@@ -3617,7 +3640,7 @@ return (
               else if(d.status==="acknowledged"&&!d.ship) { actionLabel="Acknowledged ✓ — Awaiting Logistics Dispatch"; actionColor="#10b981"; }
               else if(["shipped","delivered_prod","email_sent","acknowledged","partial_live"].includes(d.status)&&d.dels.some(dl=>dl.st==="pending")) { actionLabel=`${d.dels.filter(dl=>dl.st==="pending").length} deliverables to mark live`; actionColor=T.purple; }
               else if(d.amount>0&&["live","partial_live"].includes(d.status)&&!d.inv) { actionLabel="Submit Invoice"; actionColor=T.gold; }
-              else if(d.amount<=0&&["live","partial_live"].includes(d.status)) { actionLabel="Barter — content live, no payment"; actionColor=T.ok; }
+              else if(d.amount<=0&&["live","partial_live"].includes(d.status)) { actionLabel="Barter — content live"; actionColor=T.ok; }
               else if(d.status==="payment_requested") { actionLabel="Payment Requested - with Manager"; actionColor=T.info; }
               else { actionLabel="Review needed"; }
               return <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${actionColor}`,borderRadius:"2px",padding:"10px 12px",marginBottom:"6px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",transition:"all .12s"}}
@@ -5837,13 +5860,30 @@ return (
                 {lastLog&&<span style={{fontSize:"11px",color:T.sub,fontStyle:"italic",fontFamily:T.display}}>{lastLog.a} · {lastLog.u} · {lastLog.t}</span>}
               </div>
               {sel.status==="renegotiate"&&sel.renegotiationNote&&<div style={{padding:"10px 12px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"2px",marginBottom:"20px",fontSize:"13px"}}><div style={{fontSize:"10px",fontWeight:800,color:T.warn,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"3px"}}>Manager's Renegotiation Note</div><div style={{color:T.text,lineHeight:1.5}}>{sel.renegotiationNote}</div></div>}
+              {["pending","manager_approved"].includes(sel.status)&&sel.reapprovalNote&&<div style={{padding:"10px 12px",background:"#FEF3C7",border:"1px solid #F59E0B55",borderLeft:"3px solid #D97706",borderRadius:"2px",marginBottom:"20px",fontSize:"13px"}}><div style={{fontSize:"10px",fontWeight:800,color:"#B45309",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px"}}>⚠ Edited after approval — changes need re-approval</div><div style={{color:T.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{sel.reapprovalNote}</div></div>}
               <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"14px"}}>Commercials</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderTop:`1px solid ${T.border}`,marginBottom:"20px"}}>
                 {commercials.map(([l,v],i)=>{const left=i%2===0;return <div key={l} style={{padding:left?"14px 20px 14px 0":"14px 0 14px 20px",borderBottom:`1px solid ${T.borderSoft}`,borderRight:left?`1px solid ${T.borderSoft}`:"none"}}><div style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"5px"}}>{l}</div><div style={{fontSize:"13px",fontWeight:600,wordBreak:"break-word"}}>{v}</div></div>;})}
               </div>
               {sel.profile&&<div style={{fontSize:"12px",marginBottom:"12px"}}><span style={{color:T.sub}}>Profile · </span><a href={ensureUrl(sel.profile)} target="_blank" rel="noreferrer" style={{color:T.info,wordBreak:"break-all"}}>{sel.profile}</a></div>}
               {sel.address&&<div style={{padding:"10px 12px",background:T.infoBg,borderRadius:"2px",marginBottom:"20px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>📍 Address:</span> {sel.address}</div>}
-              {sel.amount>0 ? <>
+              {(()=>{
+                // Past collaborations with this influencer that already existed when THIS deal was created — the history a manager had at approval time.
+                const past = deals.filter(x=>x.inf===sel.inf && x.id!==sel.id && new Date(x.at) < new Date(sel.at)).sort((a,b)=>new Date(b.at)-new Date(a.at));
+                return <div style={{marginBottom:"22px"}}>
+                  <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"10px"}}>Previous Collaborations at Approval <span style={{color:T.gold}}>({past.length})</span></div>
+                  {past.length===0
+                    ? <div style={{fontSize:"12px",color:T.sub,fontStyle:"italic"}}>First collaboration with {sel.inf}.</div>
+                    : <div style={{border:`1px solid ${T.border}`,borderRadius:"2px",overflow:"hidden"}}>
+                        {past.slice(0,6).map(p=><div key={p.id} onClick={()=>{setSel(p);setDealTab("overview")}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px",padding:"8px 10px",borderBottom:`1px solid ${T.borderSoft}`,cursor:"pointer",fontSize:"12px"}}>
+                          <span style={{color:T.sub}}><b style={{color:T.text}}>{p.collabId||"—"}</b> · {(p.at||"").slice(0,10)} · {getCamp(p.cid)?.name||"—"}</span>
+                          <span style={{display:"flex",gap:"8px",alignItems:"center",flexShrink:0}}><b style={{color:T.gold}}>{fAmt(p.amount)}</b><Badge s={p.status}/></span>
+                        </div>)}
+                        {past.length>6&&<div style={{padding:"6px 10px",fontSize:"11px",color:T.sub}}>+ {past.length-6} more earlier collab{past.length-6===1?"":"s"}</div>}
+                      </div>}
+                </div>;
+              })()}
+              {sel.amount>0 && <>
               <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"18px"}}>Payment Workflow</div>
               <div style={{display:"flex",alignItems:"flex-start",marginBottom:"28px"}}>
                 {steps.map((s,i)=><div key={i} style={{flex:1,textAlign:"center",position:"relative"}}>
@@ -5851,7 +5891,7 @@ return (
                   <div style={{fontSize:"10px",fontWeight:700,color:s.done?T.text:T.sub}}>{s.label}</div>
                   {i<steps.length-1&&<div style={{position:"absolute",top:"13px",left:"62%",right:"-38%",height:"1px",background:T.border}}/>}
                 </div>)}
-              </div></> : <div style={{padding:"12px 14px",background:T.surfaceAlt,borderRadius:"2px",marginBottom:"28px",fontSize:"13px",color:T.sub,fontWeight:600}}>🎁 Barter collab — no payment workflow. Completes once all content is live.</div>}
+              </div></>}
               <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"14px"}}>Deliverables</div>
               <div style={{borderTop:`1px solid ${T.border}`}}>
                 {sel.dels.map((dl,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"13px 0",borderBottom:i<sel.dels.length-1?`1px solid ${T.borderSoft}`:"none"}}><span style={{fontSize:"13px",fontWeight:600}}>{dl.type}{dl.desc&&<span style={{fontSize:"11px",color:T.sub,fontWeight:400}}> · {dl.desc}</span>}</span><DBadge s={dl.st}/></div>)}
@@ -5980,10 +6020,10 @@ return (
                     {dl.link&&<div style={{fontSize:"12px",color:T.info,marginBottom:"6px"}}>🔗 <a href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info}}>{dl.link}</a></div>}
                     {latestFile&&<div style={{fontSize:"12px",marginBottom:"8px",padding:"6px 8px",background:T.surface,borderRadius:"2px"}}>📁 Latest upload: <b>{latestFile.file_name}</b>{latestFile.web_view_link&&<a href={latestFile.web_view_link} target="_blank" rel="noopener noreferrer" style={{color:T.info,marginLeft:"8px",fontWeight:700}}>Download ↗</a>}</div>}
                     <div style={{display:"flex",gap:"6px",marginBottom:"8px"}}>
-                      <Btn v="ok" sm onClick={()=>approveContent(sel,i)}>✅ Approve Content</Btn>
+                      <Btn v="ok" sm onClick={()=>approveContent(sel,i,revisionFeedback[dl.id]||"")}>✅ Approve Content</Btn>
                       <Btn v="danger" sm onClick={()=>{const fb=revisionFeedback[dl.id];if(!fb){notify("Enter feedback before requesting revision","err");return;}requestRevision(sel,i,fb)}}>↩ Request Revision</Btn>
                     </div>
-                    <Textarea value={revisionFeedback[dl.id]||""} onChange={e=>setRevisionFeedback({...revisionFeedback,[dl.id]:e.target.value})} rows={3} placeholder="Feedback for revision (required if requesting changes)"/>
+                    <Textarea value={revisionFeedback[dl.id]||""} onChange={e=>setRevisionFeedback({...revisionFeedback,[dl.id]:e.target.value})} rows={3} placeholder="Comment — optional when approving, required when requesting a revision"/>
                   </div>}
 
                   {/* Negotiator: Mark approved content as live */}
@@ -6147,7 +6187,6 @@ return (
               {(role==="negotiator"||role==="logistics"||role==="admin")&&sel.status==="acknowledged"&&!sel.ship&&!sel.productOnHand&&<Btn v="outline" sm onClick={()=>skipShipment(sel)}>⏭ Already has product — skip shipment</Btn>}
               {(role==="logistics"||role==="admin")&&sel.status==="email_sent"&&!sel.ship&&<div style={{padding:"8px 12px",background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"2px",fontSize:"12px",color:"#92400e"}}>⏳ Awaiting influencer acknowledgement before dispatch</div>}
               {(role==="negotiator"||role==="admin")&&sel.amount>0&&["partial_live","live"].includes(sel.status)&&!isPaymentEligible(sel)&&!sel.paymentDetailsAt&&<div style={{fontSize:"12px",color:T.warn,fontWeight:600,padding:"6px 10px",background:T.warnBg,borderRadius:"2px"}}>⏳ Payment opens once all required (non-Story) content is live. Stories are optional.</div>}
-              {sel.amount<=0&&["partial_live","live"].includes(sel.status)&&<div style={{fontSize:"12px",color:T.sub,fontWeight:600,padding:"6px 10px",background:T.surfaceAlt,borderRadius:"2px"}}>🎁 Barter collab — no payment required.</div>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&isPaymentEligible(sel)&&!sel.paymentDetailsAt&&<label style={{display:"inline-flex",alignItems:"center",gap:"6px",fontSize:"12px",color:T.sub,cursor:"pointer",padding:"6px 10px",background:sel.agencyManaged?T.goldSoft:"transparent",border:`1px solid ${sel.agencyManaged?T.gold:T.border}`,borderRadius:"2px"}}><input type="checkbox" checked={!!sel.agencyManaged} onChange={()=>toggleAgencyManaged(sel)} style={{cursor:"pointer"}}/>🏢 Agency-managed (agency raises GST invoice)</label>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&isPaymentEligible(sel)&&!sel.paymentDetailsAt&&!sel.agencyManaged&&<Btn v="primary" onClick={()=>setModal("collectPayment")}>{sel.paymentFormSent?"✅ Form Sent — Resend":"📩 Send Payment Details Form"}</Btn>}
               {(role==="negotiator"||role==="admin")&&["live","partial_live","payment_details_received"].includes(sel.status)&&isPaymentEligible(sel)&&!sel.paymentDetailsAt&&sel.agencyManaged&&<Btn v="gold" onClick={()=>openAgencyModal(sel)}>🏢 Attach Agency Invoice &amp; Details</Btn>}

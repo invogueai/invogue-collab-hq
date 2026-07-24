@@ -128,6 +128,7 @@ async function loadFromSupabase() {
       link:dl.live_link||'',
       feedback:dl.feedback||'',
       submitNote:dl.submit_note||'',
+      variations:Array.isArray(dl.variations)?dl.variations:[],
       history:Array.isArray(dl.history)?dl.history:[],
     });
   });
@@ -395,6 +396,7 @@ export default function InvogueCollabHQ() {
   const [dropReasonF, setDropReasonF] = useState(""); // drop collab reason modal
   const [deliverableLinkF, setDeliverableLinkF] = useState({}); // unique state per deliverable {delId: url}
   const [deliverableNoteF, setDeliverableNoteF] = useState({}); // negotiator's comment on submission {delId: note}
+  const [variationF, setVariationF] = useState({}); // ad-variation input per deliverable {delId: {label, link}}
   const [attachmentMode, setAttachmentMode] = useState({}); // {delId: "link"|"attachment"}
   const [attachmentDesc, setAttachmentDesc] = useState({}); // {delId: description}
   const [revisionFeedback, setRevisionFeedback] = useState({}); // {delId: feedback text}
@@ -527,6 +529,7 @@ export default function InvogueCollabHQ() {
               link:dl.live_link||'',
               feedback:dl.feedback||'',
               submitNote:dl.submit_note||'',
+              variations:Array.isArray(dl.variations)?dl.variations:[],
               history:Array.isArray(dl.history)?dl.history:[],
             });
           });
@@ -916,6 +919,14 @@ export default function InvogueCollabHQ() {
       notify(isRaw ? `Raw clip uploaded (${file.name})` : `Uploaded ${initData.finalFileName}`);
       clearProgress();
       await loadDriveFiles(deal.id);
+      // Keep the deliverable's content link pointed at the LATEST uploaded file so
+      // "View content" everywhere (homepage review, drawer) always shows the newest version.
+      const newLink = finData.file?.web_view_link;
+      if(!isRaw && deliverable?.id && newLink && deliverable.st!=="live"){
+        supabase.from('deliverables').update({live_link:newLink}).eq('id',deliverable.id).then(({error})=>{if(error) console.error("live_link sync failed:",error);});
+        setDeals(ds=>ds.map(d=>d.id===deal.id?{...d,dels:(d.dels||[]).map(x=>x.id===deliverable.id?{...x,link:newLink}:x)}:d));
+        setSel(prev=>prev&&prev.id===deal.id?{...prev,dels:(prev.dels||[]).map(x=>x.id===deliverable.id?{...x,link:newLink}:x)}:prev);
+      }
       return finData.file;
     } catch(e) {
       console.error('uploadDriveFile error:', e);
@@ -2162,6 +2173,36 @@ export default function InvogueCollabHQ() {
     setAttachmentMode(prev=>{const copy={...prev};delete copy[delId];return copy;});
     setAttachmentDesc(prev=>{const copy={...prev};delete copy[delId];return copy;});
     notify("Deliverable marked live!");
+  };
+
+  // ─── AD VARIATIONS ─── one deliverable can carry several usable cuts for ads.
+  const addVariation = async (deal, delIdx, {label, link, source="link"}) => {
+    if(!link) return notify("Add a link or upload a file for the variation","err");
+    if(source==="link" && !validUrl(link)) return notify("Invalid URL — must be a valid link","err");
+    const dl0 = deal.dels[delIdx];
+    const delId = dl0.id;
+    const ts = new Date().toISOString();
+    const variation = { id: uid(), label:(label||"").trim()||`Variation ${(dl0.variations||[]).length+1}`, link, source, addedBy: loggedIn?.name||"You", addedAt: ts };
+    const newVars = [...(dl0.variations||[]), variation];
+    const { error } = await supabase.from('deliverables').update({ variations: newVars }).eq('id', delId);
+    if(error){ console.error("Add variation failed:", error); return notify("Couldn't save variation: "+error.message, "err"); }
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl, variations:newVars}:dl);
+    upDeal(deal.id,{dels:newDels});
+    addLog(deal.id, loggedIn?.name||"You", "Ad variation added", `${dl0.type}: ${variation.label}`);
+    setSel(prev=>prev?{...prev, dels:newDels}:null);
+    setVariationF(prev=>({...prev, [delId]:{label:"", link:""}}));
+    notify("Variation added!");
+  };
+
+  const removeVariation = async (deal, delIdx, varId) => {
+    const dl0 = deal.dels[delIdx];
+    const delId = dl0.id;
+    const newVars = (dl0.variations||[]).filter(v=>v.id!==varId);
+    const { error } = await supabase.from('deliverables').update({ variations: newVars }).eq('id', delId);
+    if(error){ console.error("Remove variation failed:", error); return notify("Couldn't remove variation: "+error.message, "err"); }
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl, variations:newVars}:dl);
+    upDeal(deal.id,{dels:newDels});
+    setSel(prev=>prev?{...prev, dels:newDels}:null);
   };
 
   // ─── CONTENT APPROVAL WORKFLOW ───
@@ -4473,6 +4514,20 @@ return (
                       ? <span onClick={action.fn} style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,color:"#fff",background:T.brand,padding:"7px 12px",borderRadius:"2px",alignSelf:"flex-end",cursor:"pointer"}}>{action.l}</span>
                       : <span onClick={action.fn||undefined} style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,color:action.fn?T.brand:T.faint,alignSelf:"flex-end",cursor:action.fn?"pointer":"default"}}>{action.l}</span>}
                   </div>}
+              {/* Ad variations available to run */}
+              {(()=>{
+                const vars = (d.dels||[]).flatMap(dl=>(dl.variations||[]).map(v=>({...v, delType:dl.type})));
+                if(vars.length===0) return null;
+                return <div style={{marginTop:"10px",borderTop:`1px solid ${T.borderSoft}`,paddingTop:"8px"}}>
+                  <div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px",fontWeight:700}}>🎬 Ad Variations ({vars.length})</div>
+                  {vars.slice(0,4).map(v=><a key={v.id} href={ensureUrl(v.link)} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:"6px",fontSize:"11px",color:T.info,padding:"2px 0",textDecoration:"none"}}>
+                    <span style={{background:T.purple+"22",color:T.purple,fontSize:"8px",fontWeight:800,padding:"1px 5px",borderRadius:"2px"}}>{v.delType}</span>
+                    <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.label}</span>
+                    <span style={{fontWeight:700}}>Open ↗</span>
+                  </a>)}
+                  {vars.length>4&&<div style={{fontSize:"10px",color:T.faint}}>+ {vars.length-4} more (open deal)</div>}
+                </div>;
+              })()}
             </div>
           </div>;
         };
@@ -6034,6 +6089,39 @@ return (
                       <Btn v="ok" sm onClick={()=>markDelLive(sel,i,url||dl.link)}>Mark Live</Btn>
                     </div>
                   </div>}
+
+                  {/* Ad Variations — one deliverable can carry several usable cuts for ads */}
+                  {(()=>{
+                    const canManageVars = (role==="negotiator"||role==="admin") && !["pending","renegotiate","rejected"].includes(sel.status);
+                    const vars = dl.variations||[];
+                    if(vars.length===0 && !canManageVars) return null;
+                    return <div style={{marginTop:"8px",background:T.surfaceAlt,borderRadius:"2px",padding:"10px 12px"}}>
+                      <div style={{fontSize:"11px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>🎬 Ad Variations ({vars.length}) <span style={{fontWeight:400,textTransform:"none",letterSpacing:0,color:T.faint}}>· alternate cuts for the performance team</span></div>
+                      {vars.map(v=><div key={v.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"12px",borderBottom:`1px dashed ${T.border}`}}>
+                        <span style={{background:T.purple+"22",color:T.purple,fontSize:"9px",fontWeight:800,padding:"2px 6px",borderRadius:"2px"}}>{v.source==="drive"?"DRIVE":"LINK"}</span>
+                        <span style={{flex:1,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.label}</span>
+                        <a href={ensureUrl(v.link)} target="_blank" rel="noopener noreferrer" style={{color:T.info,fontSize:"11px",fontWeight:700}}>Open ↗</a>
+                        {canManageVars&&<span onClick={()=>removeVariation(sel,i,v.id)} style={{cursor:"pointer",color:T.err,fontWeight:700,fontSize:"13px"}}>✕</span>}
+                      </div>)}
+                      {vars.length===0&&<div style={{fontSize:"11px",color:T.faint,fontStyle:"italic",marginBottom:"4px"}}>No variations yet — add alternate cuts below.</div>}
+                      {canManageVars&&<div style={{marginTop:"8px"}}>
+                        <div style={{display:"flex",gap:"6px",alignItems:"center",marginBottom:"5px"}}>
+                          <div style={{width:"110px"}}><Inp value={variationF[dl.id]?.label||""} onChange={e=>setVariationF({...variationF,[dl.id]:{...(variationF[dl.id]||{}),label:e.target.value}})} placeholder="Label (e.g. Hook A)"/></div>
+                          <div style={{flex:1}}><Inp value={variationF[dl.id]?.link||""} onChange={e=>setVariationF({...variationF,[dl.id]:{...(variationF[dl.id]||{}),link:e.target.value}})} placeholder="Variation URL"/></div>
+                          <Btn v="outline" sm onClick={()=>addVariation(sel,i,{label:variationF[dl.id]?.label,link:variationF[dl.id]?.link,source:"link"})}>+ Add</Btn>
+                        </div>
+                        <label style={{display:"inline-block",cursor:"pointer"}}>
+                          <input type="file" style={{display:"none"}} accept="image/*,video/*,.mp4,.mov,.jpg,.jpeg,.png,.gif,.webp,.mkv,.webm" onChange={async e=>{
+                            const file=e.target.files?.[0]; e.target.value='';
+                            if(!file) return;
+                            const uploaded=await uploadDriveFile({deal:sel, deliverable:dl, isRaw:false, file});
+                            if(uploaded?.web_view_link) addVariation(sel,i,{label:variationF[dl.id]?.label||file.name, link:uploaded.web_view_link, source:"drive"});
+                          }}/>
+                          <span style={{fontSize:"11px",color:T.info,fontWeight:700,textDecoration:"underline"}}>⬆ Upload a variation file to Drive</span>
+                        </label>
+                      </div>}
+                    </div>;
+                  })()}
 
                   {/* Awaiting delivery message */}
                   {(role==="negotiator"||role==="admin")&&dl.st==="pending"&&!productDelivered&&!["pending","renegotiate","rejected"].includes(sel.status)&&

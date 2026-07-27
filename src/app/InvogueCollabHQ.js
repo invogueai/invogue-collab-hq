@@ -2126,7 +2126,7 @@ export default function InvogueCollabHQ() {
   };
 
   const markDelLive = (deal,delIdx,contentUrl) => {
-    if(!deal.ship || deal.ship.st !== "delivered") {
+    if(!((deal.ship && deal.ship.st === "delivered") || deal.productOnHand)) {
       return notify("Product must be delivered before content can go live","err");
     }
     const currentDel = deal.dels[delIdx];

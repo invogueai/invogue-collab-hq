@@ -5923,18 +5923,18 @@ return (
               {sel.profile&&<div style={{fontSize:"12px",marginBottom:"12px"}}><span style={{color:T.sub}}>Profile · </span><a href={ensureUrl(sel.profile)} target="_blank" rel="noreferrer" style={{color:T.info,wordBreak:"break-all"}}>{sel.profile}</a></div>}
               {sel.address&&<div style={{padding:"10px 12px",background:T.infoBg,borderRadius:"2px",marginBottom:"20px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>📍 Address:</span> {sel.address}</div>}
               {(()=>{
-                // Past collaborations with this influencer that already existed when THIS deal was created — the history a manager had at approval time.
-                const past = deals.filter(x=>x.inf===sel.inf && x.id!==sel.id && new Date(x.at) < new Date(sel.at)).sort((a,b)=>new Date(b.at)-new Date(a.at));
+                // All other collaborations with this creator (any status, any date), most recent first.
+                const past = deals.filter(x=>x.inf===sel.inf && x.id!==sel.id).sort((a,b)=>new Date(b.at)-new Date(a.at));
                 return <div style={{marginBottom:"22px"}}>
-                  <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"10px"}}>Previous Collaborations at Approval <span style={{color:T.gold}}>({past.length})</span></div>
+                  <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"10px"}}>Previous Collaborations <span style={{color:T.gold}}>({past.length})</span></div>
                   {past.length===0
                     ? <div style={{fontSize:"12px",color:T.sub,fontStyle:"italic"}}>First collaboration with {sel.inf}.</div>
                     : <div style={{border:`1px solid ${T.border}`,borderRadius:"2px",overflow:"hidden"}}>
-                        {past.slice(0,6).map(p=><div key={p.id} onClick={()=>{setSel(p);setDealTab("overview")}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px",padding:"8px 10px",borderBottom:`1px solid ${T.borderSoft}`,cursor:"pointer",fontSize:"12px"}}>
+                        {past.slice(0,8).map(p=><div key={p.id} onClick={()=>{setSel(p);setDealTab("overview")}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px",padding:"8px 10px",borderBottom:`1px solid ${T.borderSoft}`,cursor:"pointer",fontSize:"12px"}}>
                           <span style={{color:T.sub}}><b style={{color:T.text}}>{p.collabId||"—"}</b> · {(p.at||"").slice(0,10)} · {getCamp(p.cid)?.name||"—"}</span>
                           <span style={{display:"flex",gap:"8px",alignItems:"center",flexShrink:0}}><b style={{color:T.gold}}>{fAmt(p.amount)}</b><Badge s={p.status}/></span>
                         </div>)}
-                        {past.length>6&&<div style={{padding:"6px 10px",fontSize:"11px",color:T.sub}}>+ {past.length-6} more earlier collab{past.length-6===1?"":"s"}</div>}
+                        {past.length>8&&<div style={{padding:"6px 10px",fontSize:"11px",color:T.sub}}>+ {past.length-8} more collab{past.length-8===1?"":"s"}</div>}
                       </div>}
                 </div>;
               })()}

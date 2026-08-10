@@ -511,8 +511,7 @@ export default function InvogueCollabHQ() {
   useEffect(() => {
     if(!loaded) return;
 
-    const channel = supabase.channel('collab-hq-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'deals' }, async () => {
+    const refetchDeals = async () => {
         const {data} = await supabase.from('deals').select('*').order('created_at', { ascending: false });
         if(data) {
           // Re-fetch deliverables, payments, shipments, audit logs for updated deals
@@ -573,7 +572,13 @@ export default function InvogueCollabHQ() {
           setDeals(deals.filter(x=>!x.deleted));
           setDeletedDeals(deals.filter(x=>x.deleted));
         }
-      })
+    };
+    const channel = supabase.channel('collab-hq-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deals' }, refetchDeals)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deliverables' }, refetchDeals)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'audit_log' }, refetchDeals)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, refetchDeals)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shipments' }, refetchDeals)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns' }, async () => {
         const {data} = await supabase.from('campaigns').select('*');
         if(data){

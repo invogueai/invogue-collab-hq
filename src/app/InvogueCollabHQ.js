@@ -165,7 +165,7 @@ async function loadFromSupabase() {
     inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
     shipHistory:d.ship_history||[],
     renegotiationNote:d.renegotiation_note||"", reapprovalNote:d.reapproval_note||"",
-    managerNote:d.manager_note||"",
+    managerNote:d.manager_note||"", rejectionReason:d.rejection_reason||"",
     productOnHand:d.no_shipment||false,
     deleted:d.deleted||false,
     dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
@@ -564,7 +564,7 @@ export default function InvogueCollabHQ() {
             inv:d.invoice_amount!=null?{amount:d.invoice_amount,match:d.invoice_match,at:d.invoice_at,note:d.invoice_note,link:d.invoice_note}:null,
             shipHistory:d.ship_history||[],
             renegotiationNote:d.renegotiation_note||"", reapprovalNote:d.reapproval_note||"",
-            managerNote:d.manager_note||"",
+            managerNote:d.manager_note||"", rejectionReason:d.rejection_reason||"",
             productOnHand:d.no_shipment||false,
             deleted:d.deleted||false,
             dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
@@ -2989,10 +2989,11 @@ ${bodies}</body></html>`);
       onConfirm: () => {
         const userName = loggedIn?.name || "Manager";
         const ts = new Date().toISOString();
+        const bulkReason = `Bulk rejected by ${userName}`;
         toReject.forEach(d => {
-          supabase.from('deals').update({status:'rejected',approved_by:userName,approved_at:ts}).eq('id',d.id).then(({error})=>{if(error) console.error("Bulk reject save failed for "+d.id+":",error);});
-          upDeal(d.id, {status:"rejected",appBy:userName,appAt:ts});
-          addLog(d.id, userName, "Bulk rejected", "Batch rejection");
+          supabase.from('deals').update({status:'rejected',approved_by:userName,approved_at:ts,rejection_reason:bulkReason}).eq('id',d.id).then(({error})=>{if(error) console.error("Bulk reject save failed for "+d.id+":",error);});
+          upDeal(d.id, {status:"rejected",appBy:userName,appAt:ts,rejectionReason:bulkReason});
+          addLog(d.id, userName, "Rejected", `Reason: ${bulkReason}`);
         });
         setBulkSelected(new Set());
         setBulkSelectAll(false);
@@ -5917,6 +5918,7 @@ return (
               </div>
               {sel.status==="renegotiate"&&sel.renegotiationNote&&<div style={{padding:"10px 12px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderLeft:`3px solid ${T.warn}`,borderRadius:"2px",marginBottom:"20px",fontSize:"13px"}}><div style={{fontSize:"10px",fontWeight:800,color:T.warn,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"3px"}}>Manager's Renegotiation Note</div><div style={{color:T.text,lineHeight:1.5}}>{sel.renegotiationNote}</div></div>}
               {["pending","manager_approved"].includes(sel.status)&&sel.reapprovalNote&&<div style={{padding:"10px 12px",background:"#FEF3C7",border:"1px solid #F59E0B55",borderLeft:"3px solid #D97706",borderRadius:"2px",marginBottom:"20px",fontSize:"13px"}}><div style={{fontSize:"10px",fontWeight:800,color:"#B45309",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px"}}>⚠ Edited after approval — changes need re-approval</div><div style={{color:T.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{sel.reapprovalNote}</div></div>}
+              {sel.status==="rejected"&&<div style={{padding:"10px 12px",background:T.errBg,border:`1px solid ${T.err}33`,borderLeft:`3px solid ${T.err}`,borderRadius:"2px",marginBottom:"20px",fontSize:"13px"}}><div style={{fontSize:"10px",fontWeight:800,color:T.err,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"4px"}}>✕ Rejected{sel.appBy?` · by ${sel.appBy}`:""}</div><div style={{color:T.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{sel.rejectionReason||"No reason recorded."}</div></div>}
               <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"14px"}}>Commercials</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderTop:`1px solid ${T.border}`,marginBottom:"20px"}}>
                 {commercials.map(([l,v],i)=>{const left=i%2===0;return <div key={l} style={{padding:left?"14px 20px 14px 0":"14px 0 14px 20px",borderBottom:`1px solid ${T.borderSoft}`,borderRight:left?`1px solid ${T.borderSoft}`:"none"}}><div style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"5px"}}>{l}</div><div style={{fontSize:"13px",fontWeight:600,wordBreak:"break-word"}}>{v}</div></div>;})}

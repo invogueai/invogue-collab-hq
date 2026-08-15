@@ -2267,6 +2267,24 @@ export default function InvogueCollabHQ() {
     notify("Revision requested. Negotiator will be notified.","warn");
   };
 
+  // Undo an accidental approval — sends an approved deliverable back to "submitted"
+  // so the reviewer can re-review (e.g. request a revision instead). Admin/Manager only.
+  const unapproveContent = async (deal, delIdx) => {
+    if(role!=="admin"&&role!=="approver") return notify("Only Admin or Manager can undo an approval","err");
+    const dl0 = deal.dels[delIdx];
+    if(dl0.st!=="approved") return notify("Only approved content can be sent back to review","err");
+    const delId = dl0.id;
+    const ts = new Date().toISOString();
+    const newHistory = [...(dl0.history||[]),{action:"unapproved",by:loggedIn?.name||"You",at:ts}];
+    const {error} = await supabase.from('deliverables').update({status:'submitted',approved_at:null,history:newHistory}).eq('id',delId);
+    if(error){ console.error("Unapprove failed:",error); return notify("Couldn't undo approval: "+error.message,"err"); }
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"submitted",history:newHistory}:dl);
+    upDeal(deal.id,{dels:newDels});
+    addLog(deal.id,loggedIn?.name||"You","Approval undone — back to review",`${dl0.type}: ${dl0.desc||""}`);
+    setSel(prev=>prev?{...prev,dels:newDels}:null);
+    notify("Approval undone — content is back under review.","warn");
+  };
+
   // ─── PERFORMANCE MARKETER FUNCTIONS ───
   const updateAdStatus = (deal, newAdStatus) => {
     const userName = loggedIn?.name||"You";
@@ -6014,9 +6032,9 @@ return (
                   {dl.history&&dl.history.length>0&&<div style={{marginBottom:"10px",borderLeft:`2px solid ${T.border}`,paddingLeft:"10px"}}>
                     <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>Activity Trail</div>
                     {dl.history.map((h,hi)=>{
-                      const icon = h.action==="submitted"?"📤":h.action==="approved"?"✅":h.action==="revision_requested"?"✏️":"📋";
-                      const label = h.action==="submitted"?"Content submitted":h.action==="approved"?"Content approved":h.action==="revision_requested"?"Revision requested":"Action";
-                      const color = h.action==="submitted"?T.info:h.action==="approved"?T.ok:h.action==="revision_requested"?T.err:T.sub;
+                      const icon = h.action==="submitted"?"📤":h.action==="approved"?"✅":h.action==="revision_requested"?"✏️":h.action==="unapproved"?"↩":"📋";
+                      const label = h.action==="submitted"?"Content submitted":h.action==="approved"?"Content approved":h.action==="revision_requested"?"Revision requested":h.action==="unapproved"?"Approval undone":"Action";
+                      const color = h.action==="submitted"?T.info:h.action==="approved"?T.ok:h.action==="revision_requested"?T.err:h.action==="unapproved"?T.warn:T.sub;
                       return <div key={hi} style={{marginBottom:"6px",fontSize:"12px"}}>
                         <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
                           <span>{icon}</span>
@@ -6096,6 +6114,11 @@ return (
                       <div style={{flex:1}}><Inp value={url} onChange={e=>setDeliverableLinkF({...deliverableLinkF,[dl.id]:e.target.value})} placeholder="Final live URL (if different)"/></div>
                       <Btn v="ok" sm onClick={()=>markDelLive(sel,i,url||dl.link)}>Mark Live</Btn>
                     </div>
+                  </div>}
+
+                  {/* Admin/Manager: undo an accidental approval (before it's live) */}
+                  {dl.st==="approved"&&(role==="admin"||role==="approver")&&<div style={{marginTop:"6px"}}>
+                    <Btn v="ghost" sm onClick={()=>setConfirmAction({title:"Undo Approval",msg:`Send "${dl.type}" back to review? This undoes the approval so you can request a revision instead.`,onConfirm:()=>{unapproveContent(sel,i);setConfirmAction(null)}})}>↩ Undo approval — send back to review</Btn>
                   </div>}
 
                   {/* Ad Variations — one deliverable can carry several usable cuts for ads */}

@@ -85,8 +85,23 @@ const cleanPhone = v => { const d = (v||'').replace(/[\s\-+]/g,'').replace(/^91/
 const validUrl = v => { if(!v) return false; const s = v.trim(); return /^https?:\/\/.+/.test(s) || /^[a-zA-Z0-9][\w\-]*\.[a-zA-Z]{2,}/.test(s); };
 
 // ─── SUPABASE DATA LAYER ───
+// audit_log grows past Supabase's 1000-row select cap, which silently dropped the
+// newest deals' history. Page through it so every deal keeps its full audit trail.
+async function fetchAllAuditLogs() {
+  const all = []; let from = 0; const size = 1000;
+  for(;;){
+    const { data, error } = await supabase.from('audit_log').select('*').order('created_at', { ascending: true }).range(from, from+size-1);
+    if(error){ console.error('audit_log fetch failed:', error); break; }
+    if(!data || data.length===0) break;
+    all.push(...data);
+    if(data.length < size) break;
+    from += size;
+  }
+  return all;
+}
+
 async function loadFromSupabase() {
-  const [usersRes, campaignsRes, influencersRes, dealsRes, deliverablesRes, paymentsRes, shipmentsRes, auditRes] = await Promise.all([
+  const [usersRes, campaignsRes, influencersRes, dealsRes, deliverablesRes, paymentsRes, shipmentsRes, auditRows] = await Promise.all([
     supabase.from('users').select('*'),
     supabase.from('campaigns').select('*'),
     supabase.from('influencers').select('*'),
@@ -94,8 +109,9 @@ async function loadFromSupabase() {
     supabase.from('deliverables').select('*'),
     supabase.from('payments').select('*'),
     supabase.from('shipments').select('*'),
-    supabase.from('audit_log').select('*').order('created_at', { ascending: true }),
+    fetchAllAuditLogs(),
   ]);
+  const auditRes = { data: auditRows };
 
   const users = (usersRes.data||[]).map(u => ({
     id:u.id, name:u.name, email:u.email,
@@ -515,12 +531,13 @@ export default function InvogueCollabHQ() {
         const {data} = await supabase.from('deals').select('*').order('created_at', { ascending: false });
         if(data) {
           // Re-fetch deliverables, payments, shipments, audit logs for updated deals
-          const [delRes, payRes, shipRes, logRes] = await Promise.all([
+          const [delRes, payRes, shipRes, logRows] = await Promise.all([
             supabase.from('deliverables').select('*'),
             supabase.from('payments').select('*'),
             supabase.from('shipments').select('*'),
-            supabase.from('audit_log').select('*').order('created_at', { ascending: true }),
+            fetchAllAuditLogs(),
           ]);
+          const logRes = { data: logRows };
           const delsByDeal={}, paysByDeal={}, shipByDeal={}, logsByDeal={};
           (delRes.data||[]).forEach(dl => {
             if(!delsByDeal[dl.deal_id]) delsByDeal[dl.deal_id]=[];
@@ -6117,8 +6134,9 @@ return (
                   </div>}
 
                   {/* Admin/Manager: undo an accidental approval (before it's live) */}
-                  {dl.st==="approved"&&(role==="admin"||role==="approver")&&<div style={{marginTop:"6px"}}>
-                    <Btn v="ghost" sm onClick={()=>setConfirmAction({title:"Undo Approval",msg:`Send "${dl.type}" back to review? This undoes the approval so you can request a revision instead.`,onConfirm:()=>{unapproveContent(sel,i);setConfirmAction(null)}})}>↩ Undo approval — send back to review</Btn>
+                  {dl.st==="approved"&&(role==="admin"||role==="approver")&&<div style={{marginTop:"8px",padding:"8px 12px",background:T.warnBg,border:`1px solid ${T.warn}44`,borderRadius:"2px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
+                    <span style={{fontSize:"11px",color:T.warn,fontWeight:600}}>Approved by mistake?</span>
+                    <Btn v="outline" sm onClick={()=>setConfirmAction({title:"Undo Approval",msg:`Send "${dl.type}" back to review? This undoes the approval so you can request a revision instead.`,onConfirm:()=>{unapproveContent(sel,i);setConfirmAction(null)}})}>↩ Undo approval — send back to review</Btn>
                   </div>}
 
                   {/* Ad Variations — one deliverable can carry several usable cuts for ads */}

@@ -4696,7 +4696,6 @@ return (
               {[
                 {l:"Total Influencers",v:influencers.length,c:T.text},
                 {l:"Active Collabs",v:deals.filter(d=>!ACTIVE_NOT.includes(d.status)).length,c:T.brand},
-                {l:"Total Committed",v:f(influencers.reduce((s,inf)=>s+getInfTotalCommitted(inf),0)),c:T.text},
                 {l:"Total Paid",v:f(influencers.reduce((s,inf)=>s+getInfTotalSpend(inf),0)),c:T.ok},
               ].map((m,i,arr)=><div key={i} style={{flex:"1 1 160px",padding:"18px 22px",borderRight:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
                 <div style={{fontSize:"10px",letterSpacing:"2px",textTransform:"uppercase",color:T.sub,marginBottom:"10px"}}>{m.l}</div>
@@ -4772,15 +4771,14 @@ return (
               </div>
 
               {/* Financial Summary */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"8px",marginBottom:"14px"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"14px"}}>
                 <StatBox l="Total Collabs" v={infDeals.length} c={T.brand}/>
-                <StatBox l="Committed" v={f(totalCommitted)} c={T.gold}/>
                 <StatBox l="Total Paid" v={f(totalPaidAmt)} c={T.ok}/>
                 <StatBox l="Deliverables" v={`${doneDels}/${totalDels}`} c={T.purple}/>
               </div>
 
-              {/* Bank & Payment Details */}
-              {(inf.bankHolder||inf.bankAccount||inf.panNumber||inf.upiId)&&<div style={{padding:"10px 12px",background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:"2px",marginBottom:"14px"}}>
+              {/* Bank & Payment Details — hidden from negotiators (sensitive financial PII) */}
+              {role!=="negotiator"&&(inf.bankHolder||inf.bankAccount||inf.panNumber||inf.upiId)&&<div style={{padding:"10px 12px",background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:"2px",marginBottom:"14px"}}>
                 <div style={{fontSize:"11px",fontWeight:700,color:"#0284c7",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px"}}>💳 Bank & Payment Details</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
                   {[["Account Holder",inf.bankHolder],["Account Number",inf.bankAccount],["IFSC",inf.bankIfsc],["PAN",inf.panNumber],["UPI ID",inf.upiId],["Default Terms",{next_15th:"15th of Next Month","45_days":"45 Days","60_days":"60 Days",advance:"Advance",immediate:"Immediate",custom:"Custom"}[inf.defaultPaymentTerms]||inf.defaultPaymentTerms]].filter(([,v])=>v).map(([l,v])=><div key={l} style={{padding:"4px 8px",background:"#fff",borderRadius:"2px",fontSize:"12px"}}><span style={{fontWeight:700,color:T.sub,fontSize:"10px"}}>{l}:</span> {v}</div>)}

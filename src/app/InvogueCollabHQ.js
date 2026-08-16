@@ -2170,9 +2170,15 @@ export default function InvogueCollabHQ() {
 
     const link = liveUrl;
     const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"live",link}:dl);
-    const allLive = newDels.every(dl=>dl.st==="live");
-    const newStatus = allLive ? "live" : "partial_live";
-    const shouldUpdateStatus = ["email_sent","acknowledged","shipped","delivered_prod","partial_live"].includes(deal.status);
+    // The Reel (non-story) is the deliverable that makes a collab "live". Stories are a
+    // by-product and never move the collab into partial_live/live on their own.
+    const requiredDels = newDels.filter(dl=>!STORY_RE.test(dl.type||""));
+    const checkDels = requiredDels.length>0 ? requiredDels : newDels; // story-only collabs fall back to stories
+    const anyRequiredLive = checkDels.some(dl=>dl.st==="live");
+    const allRequiredLive = checkDels.every(dl=>dl.st==="live");
+    const newStatus = allRequiredLive ? "live" : "partial_live";
+    // Only advance the collab once a required (Reel) deliverable is actually live.
+    const shouldUpdateStatus = anyRequiredLive && ["email_sent","acknowledged","shipped","delivered_prod","partial_live"].includes(deal.status);
     const delId = deal.dels[delIdx].id;
 
     supabase.from('deliverables').update({status:'live',live_link:link,marked_live_at:new Date().toISOString()}).eq('id',delId).then(({error})=>{if(error) console.error("Mark live save failed:",error);});
@@ -2202,7 +2208,7 @@ export default function InvogueCollabHQ() {
     setDeliverableLinkF(prev=>{const copy={...prev};delete copy[delId];return copy;});
     setAttachmentMode(prev=>{const copy={...prev};delete copy[delId];return copy;});
     setAttachmentDesc(prev=>{const copy={...prev};delete copy[delId];return copy;});
-    notify("Deliverable marked live!");
+    notify(STORY_RE.test(currentDel?.type||"") && !anyRequiredLive ? "Story marked live — collab stays pending until the Reel goes live." : "Deliverable marked live!");
   };
 
   // ─── AD VARIATIONS ─── one deliverable can carry several usable cuts for ads.
@@ -4475,8 +4481,10 @@ return (
       {((view==="dashboard"&&role==="performance_marketer")||(view==="creatives"&&role==="admin"))&&(()=>{
         // All live/completed creatives for the performance marketer
         const liveStatuses = ["partial_live","live","invoice_ok","invoice_pending_approval","payment_requested","payment_approved","partial_paid","paid"];
-        // Stories aren't usable ad creatives — a story-only collab never shows in the hub.
-        const allCreatives = deals.filter(d=>liveStatuses.includes(d.status) && (d.dels||[]).some(dl=>!STORY_RE.test(dl.type||"")));
+        // Stories aren't usable ad creatives — only show a collab if it has a NON-story
+        // deliverable that is actually approved/live (i.e. real uploaded creative content).
+        // A collab whose only live/uploaded part is a Story never appears in the hub.
+        const allCreatives = deals.filter(d=>liveStatuses.includes(d.status) && (d.dels||[]).some(dl=>!STORY_RE.test(dl.type||"") && ["approved","live"].includes(dl.st)));
 
         const freshCreatives = allCreatives.filter(d=>d.adStatus==="fresh"||!d.adStatus);
         const runningCreatives = allCreatives.filter(d=>d.adStatus==="running");

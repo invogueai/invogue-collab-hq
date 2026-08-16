@@ -964,6 +964,17 @@ export default function InvogueCollabHQ() {
   // Payment eligibility: required deliverable types (Reels/Videos/etc.) must be live.
   // Stories are optional and don't block payment. If a deal is stories-only, all must be live.
   const STORY_RE = /story|stories/i;
+  // Usage window derives from the usage-rights label (e.g. "6 months"), NOT the legacy
+  // usage_days field. Returns the end Date measured from `fromDate`, or null (perpetual/none).
+  const computeUsageEnd = (usageLabel, fromDate) => {
+    const u = (usageLabel||"").toLowerCase();
+    if(!u || u.includes("perpetual")) return null;
+    const base = new Date(fromDate);
+    const mo = u.match(/(\d+)\s*month/); if(mo){ const e=new Date(base); e.setMonth(e.getMonth()+parseInt(mo[1])); return e; }
+    const yr = u.match(/(\d+)\s*year/);  if(yr){ const e=new Date(base); e.setFullYear(e.getFullYear()+parseInt(yr[1])); return e; }
+    const dy = u.match(/(\d+)\s*day/);   if(dy){ const e=new Date(base); e.setDate(e.getDate()+parseInt(dy[1])); return e; }
+    return null;
+  };
   const isPaymentEligible = (deal) => {
     // Barter collabs (₹0) have no commercials — they never enter the payment flow.
     if(!(deal?.amount>0)) return false;
@@ -2171,11 +2182,7 @@ export default function InvogueCollabHQ() {
     if(newStatus==="live"&&!deal.adStatus) {
       dealUpdates.ad_status = 'fresh';
       localUpdates.adStatus = 'fresh';
-      if(deal.usageDays && !deal.usageEndDate && !(deal.usage||"").toLowerCase().includes("perpetual")) {
-        const endD = new Date(); endD.setDate(endD.getDate()+deal.usageDays);
-        dealUpdates.usage_end_date = endD.toISOString().slice(0,10);
-        localUpdates.usageEndDate = dealUpdates.usage_end_date;
-      }
+      // Usage window is NOT started here — it begins only when the ad starts running.
     }
     // Auto-calculate payment due date when deal goes fully live
     if(newStatus==="live"&&!deal.paymentDueDate) {
@@ -2307,12 +2314,11 @@ export default function InvogueCollabHQ() {
     const userName = loggedIn?.name||"You";
     const updates = {ad_status:newAdStatus};
     const patch = {adStatus:newAdStatus};
-    // Only auto-set usage_end_date if usageDays is set, no end date yet, and rights aren't perpetual
-    if(deal.usageDays && !deal.usageEndDate && !(deal.usage||"").toLowerCase().includes("perpetual")) {
-      const endD = new Date(); endD.setDate(endD.getDate()+deal.usageDays);
-      const endDate = endD.toISOString().slice(0,10);
-      updates.usage_end_date = endDate;
-      patch.usageEndDate = endDate;
+    // The usage window starts the moment the ad starts running — set the end date
+    // then, derived from the usage-rights label (not a legacy day count).
+    if(newAdStatus==="running" && !deal.usageEndDate){
+      const endD = computeUsageEnd(deal.usage, new Date());
+      if(endD){ const endDate = endD.toISOString().slice(0,10); updates.usage_end_date = endDate; patch.usageEndDate = endDate; }
     }
     supabase.from('deals').update(updates).eq('id',deal.id).then(({error})=>{if(error){console.error("Ad status update failed:",error);notify("Failed to update status","err");}});
     upDeal(deal.id,patch);
@@ -4469,7 +4475,8 @@ return (
       {((view==="dashboard"&&role==="performance_marketer")||(view==="creatives"&&role==="admin"))&&(()=>{
         // All live/completed creatives for the performance marketer
         const liveStatuses = ["partial_live","live","invoice_ok","invoice_pending_approval","payment_requested","payment_approved","partial_paid","paid"];
-        const allCreatives = deals.filter(d=>liveStatuses.includes(d.status));
+        // Stories aren't usable ad creatives — a story-only collab never shows in the hub.
+        const allCreatives = deals.filter(d=>liveStatuses.includes(d.status) && (d.dels||[]).some(dl=>!STORY_RE.test(dl.type||"")));
 
         const freshCreatives = allCreatives.filter(d=>d.adStatus==="fresh"||!d.adStatus);
         const runningCreatives = allCreatives.filter(d=>d.adStatus==="running");
@@ -4520,7 +4527,7 @@ return (
             : d.adStatus==="tested"?{l:"Tested",c:T.teal,bg:T.tealBg}
             : {l:"Fresh",c:"#1B7A3D",bg:"#E2F3E8"};
           const fmt = d.platform==="YouTube"?"video · 16:9":"reel · vertical 9:16";
-          const usageStr = isPerpetual(d)?"Perpetual":(daysLeft!==null?(isExpired?`Expired ${Math.abs(daysLeft)}d`:`${daysLeft} day${daysLeft===1?"":"s"}`):(d.usageDays?`${d.usageDays} days`:"Perpetual"));
+          const usageStr = isPerpetual(d)?"Perpetual":(daysLeft!==null?(isExpired?`Expired ${Math.abs(daysLeft)}d`:`${daysLeft} day${daysLeft===1?"":"s"}`):(d.usage?`${d.usage} · on ad run`:"—"));
           // single contextual action (preserves existing handlers)
           const action = d.reuseRequested ? {l:"Reuse sent",fill:false,fn:null}
             : isExpiring ? {l:"Request reuse",fill:true,fn:()=>requestReuse(d)}
@@ -4540,7 +4547,7 @@ return (
               <div style={{fontSize:"10px",color:T.sub,margin:"4px 0 12px"}}>{d.platform} · {d.product}</div>
               {/* Approved creative(s) ready to run — shown up top for the performance team */}
               {(()=>{
-                const approved = (d.dels||[]).filter(dl=>["approved","live"].includes(dl.st)&&dl.link);
+                const approved = (d.dels||[]).filter(dl=>["approved","live"].includes(dl.st)&&dl.link&&!STORY_RE.test(dl.type||""));
                 if(approved.length===0) return null;
                 return <div style={{marginBottom:"12px",background:T.okBg,borderRadius:"2px",padding:"8px 10px"}}>
                   <div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.ok,marginBottom:"4px",fontWeight:700}}>✅ Approved Creative ({approved.length})</div>
@@ -4572,7 +4579,7 @@ return (
                   </div>}
               {/* Ad variations available to run */}
               {(()=>{
-                const vars = (d.dels||[]).flatMap(dl=>(dl.variations||[]).map(v=>({...v, delType:dl.type})));
+                const vars = (d.dels||[]).filter(dl=>!STORY_RE.test(dl.type||"")).flatMap(dl=>(dl.variations||[]).map(v=>({...v, delType:dl.type})));
                 if(vars.length===0) return null;
                 return <div style={{marginTop:"10px",borderTop:`1px solid ${T.borderSoft}`,paddingTop:"8px"}}>
                   <div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px",fontWeight:700}}>🎬 Ad Variations ({vars.length})</div>

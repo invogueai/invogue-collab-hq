@@ -4538,6 +4538,20 @@ return (
                 <span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:st.c,background:st.bg,padding:"3px 7px",borderRadius:"2px",fontWeight:700}}>{st.l}</span>
               </div>
               <div style={{fontSize:"10px",color:T.sub,margin:"4px 0 12px"}}>{d.platform} · {d.product}</div>
+              {/* Approved creative(s) ready to run — shown up top for the performance team */}
+              {(()=>{
+                const approved = (d.dels||[]).filter(dl=>["approved","live"].includes(dl.st)&&dl.link);
+                if(approved.length===0) return null;
+                return <div style={{marginBottom:"12px",background:T.okBg,borderRadius:"2px",padding:"8px 10px"}}>
+                  <div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.ok,marginBottom:"4px",fontWeight:700}}>✅ Approved Creative ({approved.length})</div>
+                  {approved.slice(0,3).map(dl=><a key={dl.id} href={ensureUrl(dl.link)} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:"6px",fontSize:"11px",color:T.info,padding:"2px 0",textDecoration:"none"}}>
+                    <span style={{background:T.ok+"22",color:T.ok,fontSize:"8px",fontWeight:800,padding:"1px 5px",borderRadius:"2px"}}>{dl.type}</span>
+                    <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dl.desc||dl.type}</span>
+                    <span style={{fontWeight:700}}>Open ↗</span>
+                  </a>)}
+                  {approved.length>3&&<div style={{fontSize:"10px",color:T.faint}}>+ {approved.length-3} more (open deal)</div>}
+                </div>;
+              })()}
               {isEditing
                 ? <div onClick={e=>e.stopPropagation()} style={{borderTop:`1px solid ${T.borderSoft}`,paddingTop:"12px"}}>
                     <Inp value={adNotesF.link} onChange={e=>setAdNotesF({...adNotesF,link:e.target.value})} placeholder="Meta/Google ad link..." />
@@ -4599,9 +4613,9 @@ return (
           {/* Expiring alerts */}
           {expiringCreatives.length>0&&<div style={{background:"#fef3c7",border:"1px solid #f59e0b33",borderRadius:"2px",padding:"10px 14px",marginBottom:"14px"}}>
             <div style={{fontSize:"12px",fontWeight:700,color:"#92400e",marginBottom:"4px"}}>⚠️ EXPIRING CREATIVES ({expiringCreatives.length})</div>
-            {expiringCreatives.slice(0,3).map(d=>{const dl=getDaysLeft(d);return <div key={d.id} style={{fontSize:"12px",color:"#92400e",padding:"2px 0"}}>
-              <b>{d.inf}</b> — {d.product} — {dl<=0?<span style={{color:T.err,fontWeight:700}}>EXPIRED</span>:<span>{dl} day{dl!==1?"s":""} left</span>}
-              {!d.reuseRequested&&<span onClick={()=>requestReuse(d)} style={{marginLeft:"8px",color:T.info,cursor:"pointer",fontWeight:600,fontSize:"11px"}}>🔄 Request Reuse</span>}
+            {expiringCreatives.slice(0,3).map(d=>{const dl=getDaysLeft(d);return <div key={d.id} onClick={()=>{setSel(d);setDealTab("deliverables");setModal("detail")}} style={{fontSize:"12px",color:"#92400e",padding:"3px 0",cursor:"pointer"}}>
+              <b style={{textDecoration:"underline"}}>{d.inf}</b> — {d.product} — {dl<=0?<span style={{color:T.err,fontWeight:700}}>EXPIRED</span>:<span>{dl} day{dl!==1?"s":""} left</span>}
+              {!d.reuseRequested&&<span onClick={e=>{e.stopPropagation();requestReuse(d)}} style={{marginLeft:"8px",color:T.info,cursor:"pointer",fontWeight:600,fontSize:"11px"}}>🔄 Request Reuse</span>}
             </div>;})}
             {expiringCreatives.length>3&&<div style={{fontSize:"11px",color:"#92400e",marginTop:"2px"}}>+ {expiringCreatives.length-3} more — switch to Expiring tab to see all</div>}
           </div>}
@@ -5902,8 +5916,10 @@ return (
           const lastLog=(sel.logs||[])[(sel.logs||[]).length-1];
           const locked=["approved","email_sent","acknowledged","shipped","delivered_prod","partial_live","live","invoice_ok","disputed","partial_paid","paid"].includes(sel.status);
           const steps=[{label:"Content Live",done:isPaymentEligible(sel)},{label:sel.agencyManaged?"Agency Inv.":"Form Sent",done:sel.agencyManaged?!!sel.agencyInvoiceUrl:!!sel.paymentFormSent},{label:"Details In",done:!!sel.paymentDetailsAt},{label:"Paid",done:sel.status==="paid"}];
-          const commercials=[["Campaign",camp?.name||"—"],["Usage Rights",sel.usage||"—"],["Payment Terms",ptLabel(sel.paymentTerms||"next_15th")],["Deadline",sel.deadline||"—"],["Product",sel.products?sel.products.map(p=>p.name).join(", "):sel.product||"—"],["Platform",`${sel.platform||"—"}${sel.followers?` · ${sel.followers}`:""}`],["Phone",sel.phone||"—"],["Email",sel.email||"Not provided"]];
-          const TABS=[{k:"overview",l:"Overview"},{k:"deliverables",l:"Deliverables"},{k:"shipment",l:"Shipment"},...(sel.amount>0?[{k:"payment",l:"Payment"}]:[]),{k:"activity",l:"Activity"}];
+          // Performance marketers don't see personal/commercial info (phone, address, amount, payment).
+          const perfHide = role==="performance_marketer";
+          const commercials=[["Campaign",camp?.name||"—"],["Usage Rights",sel.usage||"—"],...(perfHide?[]:[["Payment Terms",ptLabel(sel.paymentTerms||"next_15th")]]),["Deadline",sel.deadline||"—"],["Product",sel.products?sel.products.map(p=>p.name).join(", "):sel.product||"—"],["Platform",`${sel.platform||"—"}${sel.followers?` · ${sel.followers}`:""}`],...(perfHide?[]:[["Phone",sel.phone||"—"]]),["Email",sel.email||"Not provided"]];
+          const TABS=[{k:"overview",l:"Overview"},{k:"deliverables",l:"Deliverables"},...(perfHide?[]:[{k:"shipment",l:"Shipment"}]),...((sel.amount>0&&!perfHide)?[{k:"payment",l:"Payment"}]:[]),{k:"activity",l:"Activity"}];
           return <>
             {/* Drawer header */}
             <div style={{padding:"24px 28px 0",background:"#FBFAF7",borderBottom:`1px solid ${T.borderHead}`,flexShrink:0}}>
@@ -5919,10 +5935,10 @@ return (
                   <div style={{fontFamily:T.display,fontSize:"28px",fontWeight:500,letterSpacing:"-0.5px",lineHeight:1.1}}>{sel.inf}</div>
                   <div style={{fontSize:"11px",color:T.sub,marginTop:"5px"}}>{subline}</div>
                 </div>
-                <div style={{textAlign:"right",flexShrink:0}}>
+                {!perfHide&&<div style={{textAlign:"right",flexShrink:0}}>
                   <div style={{fontFamily:T.display,fontSize:"24px",fontWeight:600,color:Number(sel.amount)===0?T.gold:undefined}}>{fAmt(sel.amount)}</div>
                   <div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginTop:"2px"}}>{Number(sel.amount)===0?"Product-only collab":(locked?"Amount Locked":"Proposed")}{paid>0?` · ${f(paid)} paid`:""}</div>
-                </div>
+                </div>}
               </div>
               <div style={{display:"flex",gap:"22px",flexWrap:"wrap"}}>
                 {TABS.map(t=><span key={t.k} onClick={()=>setDealTab(t.k)} style={{fontSize:"11px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:dealTab===t.k?700:400,color:dealTab===t.k?T.brand:T.sub,borderBottom:dealTab===t.k?`2px solid ${T.brand}`:"2px solid transparent",paddingBottom:"12px",cursor:"pointer"}}>{t.l}</span>)}
@@ -5964,7 +5980,7 @@ return (
                 {commercials.map(([l,v],i)=>{const left=i%2===0;return <div key={l} style={{padding:left?"14px 20px 14px 0":"14px 0 14px 20px",borderBottom:`1px solid ${T.borderSoft}`,borderRight:left?`1px solid ${T.borderSoft}`:"none"}}><div style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"5px"}}>{l}</div><div style={{fontSize:"13px",fontWeight:600,wordBreak:"break-word"}}>{v}</div></div>;})}
               </div>
               {sel.profile&&<div style={{fontSize:"12px",marginBottom:"12px"}}><span style={{color:T.sub}}>Profile · </span><a href={ensureUrl(sel.profile)} target="_blank" rel="noreferrer" style={{color:T.info,wordBreak:"break-all"}}>{sel.profile}</a></div>}
-              {sel.address&&<div style={{padding:"10px 12px",background:T.infoBg,borderRadius:"2px",marginBottom:"20px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>📍 Address:</span> {sel.address}</div>}
+              {sel.address&&!perfHide&&<div style={{padding:"10px 12px",background:T.infoBg,borderRadius:"2px",marginBottom:"20px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>📍 Address:</span> {sel.address}</div>}
               {(()=>{
                 // All other collaborations with this creator (any status, any date), most recent first.
                 const past = deals.filter(x=>x.inf===sel.inf && x.id!==sel.id).sort((a,b)=>new Date(b.at)-new Date(a.at));
@@ -5975,13 +5991,13 @@ return (
                     : <div style={{border:`1px solid ${T.border}`,borderRadius:"2px",overflow:"hidden"}}>
                         {past.slice(0,8).map(p=><div key={p.id} onClick={()=>{setSel(p);setDealTab("overview")}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px",padding:"8px 10px",borderBottom:`1px solid ${T.borderSoft}`,cursor:"pointer",fontSize:"12px"}}>
                           <span style={{color:T.sub}}><b style={{color:T.text}}>{p.collabId||"—"}</b> · {(p.at||"").slice(0,10)} · {getCamp(p.cid)?.name||"—"}</span>
-                          <span style={{display:"flex",gap:"8px",alignItems:"center",flexShrink:0}}><b style={{color:T.gold}}>{fAmt(p.amount)}</b><Badge s={p.status}/></span>
+                          <span style={{display:"flex",gap:"8px",alignItems:"center",flexShrink:0}}>{!perfHide&&<b style={{color:T.gold}}>{fAmt(p.amount)}</b>}<Badge s={p.status}/></span>
                         </div>)}
                         {past.length>8&&<div style={{padding:"6px 10px",fontSize:"11px",color:T.sub}}>+ {past.length-8} more collab{past.length-8===1?"":"s"}</div>}
                       </div>}
                 </div>;
               })()}
-              {sel.amount>0 && <>
+              {sel.amount>0 && !perfHide && <>
               <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"18px"}}>Payment Workflow</div>
               <div style={{display:"flex",alignItems:"flex-start",marginBottom:"28px"}}>
                 {steps.map((s,i)=><div key={i} style={{flex:1,textAlign:"center",position:"relative"}}>
@@ -5996,7 +6012,7 @@ return (
               </div>
             </>}
 
-            {dealTab==="payment"&&<>
+            {dealTab==="payment"&&!perfHide&&<>
               <div style={{background:T.goldSoft,border:`1px dashed ${T.goldMid}`,borderRadius:"2px",padding:"12px",marginBottom:"16px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
                   <div><div style={{fontSize:"10px",fontWeight:800,color:T.sub,textTransform:"uppercase"}}>{Number(sel.amount)===0?"Barter (product-only)":(locked?"🔒 Locked Amount":"Proposed Amount")}</div><div style={{fontSize:"22px",fontWeight:900,color:T.gold,fontFamily:T.display}}>{fAmt(sel.amount)}</div></div>
@@ -6204,7 +6220,7 @@ return (
             </Section>}
             </>}
 
-            {dealTab==="shipment"&&<>
+            {dealTab==="shipment"&&!perfHide&&<>
             {sel.productOnHand&&!sel.ship&&<div style={{padding:"12px 14px",background:T.okBg,border:`1px solid ${T.ok}33`,borderLeft:`3px solid ${T.ok}`,borderRadius:"2px",marginBottom:"16px",fontSize:"13px"}}><b style={{color:T.ok}}>⏭ Shipment skipped</b> — the influencer already had the product, so dispatch was bypassed and content submission was unlocked directly.</div>}
             {/* Shipment & Logistics History */}
             {(sel.ship||(sel.shipHistory||[]).length>0)&&<Section title="Shipment & Logistics" icon="📦">
@@ -6279,7 +6295,7 @@ return (
                 Dear {sel.inf},<br/><br/>
                 Thank you for partnering with <b>Invogue</b>! Confirmed terms:<br/><br/>
                 <b>Product:</b> {sel.products?sel.products.map(p=>p.name).join(", "):sel.product}<br/>
-                <b>Amount:</b> <span style={{color:T.gold,fontWeight:800}}>{fAmt(sel.amount)}</span><br/>
+                {!perfHide&&<><b>Amount:</b> <span style={{color:T.gold,fontWeight:800}}>{fAmt(sel.amount)}</span><br/></>}
                 <b>Deliverables:</b> {sel.dels.map(d=>d.type).join(", ")} ({sel.dels.length} total)<br/>
                 <b>Usage Rights:</b> {sel.usage}<br/>
                 <b>Deadline:</b> {sel.deadline}<br/>

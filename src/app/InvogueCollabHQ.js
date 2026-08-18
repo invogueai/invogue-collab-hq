@@ -4035,20 +4035,28 @@ return (
         const exportBatchCSV = () => {
           const selectedDeals = deals.filter(d=>batchSelected[d.id]);
           if(selectedDeals.length===0) return notify("No deals selected for export","err");
-          const rows = [["Collab ID","Influencer","Platform","Product","Deal Amount","Already Paid","Amount Due","Payment Terms","Due Date","Account Holder","Account Number","IFSC","PAN","UPI ID","FY Total Paid","TDS Applicable","TDS Rate %","TDS Amount","Net Payable"]];
+          const rows = [["Collab ID","Influencer","Platform","Product","Deal Amount","Already Paid","Amount Due","Payment Terms","Due Date","Account Holder","Bank Name","Account Number","IFSC","PAN","UPI ID","FY Total Paid","TDS Applicable","TDS Rate %","TDS Amount","Net Payable"]];
           selectedDeals.forEach(d=>{
             const inf = influencers.find(x=>x.name===d.inf);
+            const pd = d.paymentDetails || {}; // details the influencer/agency submitted via the secure form
             const rem = remaining(d);
             const fyTotal = getFYTotalForInfluencer(d.inf);
             const tdsApply = isTDSApplicable(d.inf, rem);
             const tdsAmt = tdsApply ? calcTDSAmount(rem, d.tdsRate||10) : 0;
             const netPay = rem - tdsAmt;
             const terms = d.payment_terms || inf?.defaultPaymentTerms || "next_15th";
+            // Prefer the submitted form details (deal.paymentDetails), fall back to the influencer profile.
+            const acctHolder = pd.beneficiary || pd.panName || inf?.bankHolder || "";
+            const bankName = pd.bank || "";
+            const acctNumber = pd.account || inf?.bankAccount || "";
+            const ifsc = pd.ifsc || inf?.bankIfsc || "";
+            const pan = pd.pan || inf?.panNumber || d.pan_number || "";
+            const upi = pd.upi || inf?.upiId || "";
             rows.push([
               d.collabId||d.id.slice(0,8), d.inf, d.platform||"", d.products?d.products.map(p=>p.name).join("+"):d.product,
               d.amount, totalPaid(d), rem, PAYMENT_TERMS_LABELS[terms]||terms, d.paymentDueDate||"Not set",
-              inf?.bankHolder||"", inf?.bankAccount||"", inf?.bankIfsc||"", inf?.panNumber||d.pan_number||"",
-              inf?.upiId||"", fyTotal, tdsApply?"Yes":"No", tdsApply?(d.tdsRate||10):0, tdsAmt, netPay
+              acctHolder, bankName, acctNumber, ifsc, pan,
+              upi, fyTotal, tdsApply?"Yes":"No", tdsApply?(d.tdsRate||10):0, tdsAmt, netPay
             ]);
           });
           const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");

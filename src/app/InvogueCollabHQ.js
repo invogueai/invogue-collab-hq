@@ -4031,40 +4031,102 @@ return (
         const toggleBatch = (id) => setBatchSelected(prev=>({...prev,[id]:!prev[id]}));
         const selectAllInGroup = (dls) => { const obj={}; dls.forEach(d=>{obj[d.id]=true}); setBatchSelected(prev=>({...prev,...obj})); };
 
-        // Export to CSV
-        const exportBatchCSV = () => {
+        // Company debit account for the HDFC PAB_VENDOR bank-upload file
+        const DEBIT_ACC_NO = "336005001274";
+        const downloadBlob = (buf, name, mime) => {
+          const blob = new Blob([buf], {type:mime});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a"); a.href=url; a.download=name; a.click();
+          setTimeout(()=>URL.revokeObjectURL(url), 1500);
+        };
+
+        // Export → builds TWO files: (1) complete details xlsx with highlighting for
+        // name mismatches / duplicate payees, and (2) HDFC PAB_VENDOR/NEFT bank-upload xlsx.
+        const exportBatchCSV = async () => {
           const selectedDeals = deals.filter(d=>batchSelected[d.id]);
           if(selectedDeals.length===0) return notify("No deals selected for export","err");
-          const rows = [["Collab ID","Influencer","Platform","Product","Deal Amount","Already Paid","Amount Due","Payment Terms","Due Date","Account Holder","Bank Name","Account Number","IFSC","PAN","UPI ID","FY Total Paid","TDS Applicable","TDS Rate %","TDS Amount","Net Payable"]];
-          selectedDeals.forEach(d=>{
+          let ExcelJS;
+          try {
+            const mod = await import('exceljs/dist/exceljs.min.js');
+            ExcelJS = (mod && mod.Workbook) ? mod : (mod?.default?.Workbook ? mod.default : (mod?.default || mod));
+            if(!ExcelJS?.Workbook) throw new Error("ExcelJS shape unresolved");
+          } catch(e){ console.error("ExcelJS load failed:",e); return notify("Couldn't load the export library. Try again.","err"); }
+
+          const dateStr = new Date().toLocaleDateString('en-GB').split('/').join('-'); // dd-mm-yyyy
+
+          const rowsData = selectedDeals.map(d=>{
             const inf = influencers.find(x=>x.name===d.inf);
             const pd = d.paymentDetails || {}; // details the influencer/agency submitted via the secure form
             const rem = remaining(d);
-            const fyTotal = getFYTotalForInfluencer(d.inf);
             const tdsApply = isTDSApplicable(d.inf, rem);
             const tdsAmt = tdsApply ? calcTDSAmount(rem, d.tdsRate||10) : 0;
             const netPay = rem - tdsAmt;
-            const terms = d.payment_terms || inf?.defaultPaymentTerms || "next_15th";
-            // Prefer the submitted form details (deal.paymentDetails), fall back to the influencer profile.
-            const acctHolder = pd.beneficiary || pd.panName || inf?.bankHolder || "";
-            const bankName = pd.bank || "";
-            const acctNumber = pd.account || inf?.bankAccount || "";
-            const ifsc = pd.ifsc || inf?.bankIfsc || "";
-            const pan = pd.pan || inf?.panNumber || d.pan_number || "";
-            const upi = pd.upi || inf?.upiId || "";
-            rows.push([
-              d.collabId||d.id.slice(0,8), d.inf, d.platform||"", d.products?d.products.map(p=>p.name).join("+"):d.product,
-              d.amount, totalPaid(d), rem, PAYMENT_TERMS_LABELS[terms]||terms, d.paymentDueDate||"Not set",
-              acctHolder, bankName, acctNumber, ifsc, pan,
-              upi, fyTotal, tdsApply?"Yes":"No", tdsApply?(d.tdsRate||10):0, tdsAmt, netPay
-            ]);
+            return {
+              d, inf,
+              beneficiary: pd.beneficiary || pd.panName || inf?.bankHolder || "",
+              bankName: pd.bank || "",
+              account: String(pd.account || inf?.bankAccount || ""),
+              ifsc: pd.ifsc || inf?.bankIfsc || "",
+              pan: pd.pan || inf?.panNumber || d.pan_number || "",
+              upi: pd.upi || inf?.upiId || "",
+              mobile: String(pd.phone || inf?.phone || ""),
+              rem, tdsApply, tdsAmt, netPay,
+              terms: PAYMENT_TERMS_LABELS[d.payment_terms || inf?.defaultPaymentTerms || "next_15th"] || (d.payment_terms||"next_15th"),
+              fyTotal: getFYTotalForInfluencer(d.inf),
+            };
           });
-          const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
-          const blob = new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8;"});
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a"); a.href=url; a.download=`payment_batch_${today}.csv`; a.click();
-          URL.revokeObjectURL(url);
-          notify(`Exported ${selectedDeals.length} deals to CSV!`);
+
+          // Duplicate detection: same beneficiary name OR same account number appearing more than once.
+          const beneCount={}, acctCount={};
+          rowsData.forEach(r=>{ const b=(r.beneficiary||"").trim().toLowerCase(); if(b)beneCount[b]=(beneCount[b]||0)+1; const a=(r.account||"").trim(); if(a)acctCount[a]=(acctCount[a]||0)+1; });
+
+          // ── FILE 1: complete export with highlighting ──
+          const wb = new ExcelJS.Workbook();
+          const ws = wb.addWorksheet('Payments');
+          const headers = ["Collab ID","Creator","Beneficiary Name","Name Match?","Bank Name","Account Number","IFSC","PAN","UPI ID","Mobile","Deal Amount","Already Paid","Amount Due","TDS","Net Payable","Payment Terms","Due Date","FY Total Paid","Flags"];
+          ws.addRow(headers);
+          ws.getRow(1).font = {bold:true};
+          ws.getRow(1).fill = {type:'pattern',pattern:'solid',fgColor:{argb:'FFEDE7D6'}};
+          rowsData.forEach(r=>{
+            const nameMismatch = (r.beneficiary||"").trim().toLowerCase() !== (r.d.inf||"").trim().toLowerCase();
+            const isDup = ((beneCount[(r.beneficiary||"").trim().toLowerCase()]||0)>1) || ((acctCount[(r.account||"").trim()]||0)>1);
+            const flags = [nameMismatch?"Name mismatch":"", isDup?"Duplicate payee":""].filter(Boolean).join(" · ");
+            const row = ws.addRow([
+              r.d.collabId||r.d.id.slice(0,8), r.d.inf, r.beneficiary, nameMismatch?"DIFFERENT":"match",
+              r.bankName, r.account, r.ifsc, r.pan, r.upi, r.mobile,
+              r.d.amount, totalPaid(r.d), r.rem, r.tdsAmt, r.netPay, r.terms, r.d.paymentDueDate||"Not set", r.fyTotal, flags
+            ]);
+            // account / ifsc / pan / mobile as text so long numbers don't turn scientific
+            [6,7,8,10].forEach(ci=>{ row.getCell(ci).numFmt='@'; });
+            const fillArgb = isDup ? 'FFF6C9CC' : (nameMismatch ? 'FFFDECC8' : null);
+            if(fillArgb) row.eachCell({includeEmpty:true},c=>{ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:fillArgb}}; });
+          });
+          const widths=[14,20,22,11,16,20,14,14,20,14,12,12,12,10,12,20,12,12,24];
+          ws.columns.forEach((col,i)=>{ col.width = widths[i]||14; });
+          // Legend
+          ws.addRow([]);
+          const lg1 = ws.addRow(["Legend:","Yellow = beneficiary name differs from creator","","Red = duplicate payee (same name/account appears more than once)"]);
+          lg1.getCell(2).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFDECC8'}};
+          lg1.getCell(4).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF6C9CC'}};
+          const completeBuf = await wb.xlsx.writeBuffer();
+
+          // ── FILE 2: HDFC PAB_VENDOR / NEFT bank-upload file ──
+          const bwb = new ExcelJS.Workbook();
+          const bws = bwb.addWorksheet('Sheet0');
+          bws.addRow(["PYMT_PROD_TYPE_CODE","PYMT_MODE","DEBIT_ACC_NO","BNF_NAME","BENE_ACC_NO","BENE_IFSC","AMOUNT","DEBIT_NARR","CREDIT_NARR","MOBILE_NUM","EMAIL_ID","REMARK","PYMT_DATE","REF_NO","ADDL_INFO1","ADDL_INFO2","ADDL_INFO3","ADDL_INFO4","ADDL_INFO5"]);
+          const bankRows = rowsData.filter(r=>r.account && r.ifsc);
+          bankRows.forEach(r=>{
+            const br = bws.addRow(["PAB_VENDOR","NEFT",DEBIT_ACC_NO, r.beneficiary, r.account, r.ifsc, r.netPay, "","","","","", dateStr, "","","","","",""]);
+            [3,5,6].forEach(ci=>{ br.getCell(ci).numFmt='@'; }); // debit acc, bene acc, ifsc as text
+          });
+          const bankBuf = await bwb.xlsx.writeBuffer();
+
+          const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+          downloadBlob(completeBuf, `payment_complete_${today}.xlsx`, XLSX_MIME);
+          setTimeout(()=>downloadBlob(bankBuf, `bank_payment_${today}.xlsx`, XLSX_MIME), 600);
+
+          const skipped = rowsData.length - bankRows.length;
+          notify(`Exported ${rowsData.length} rows. Bank file: ${bankRows.length} payable${skipped?` · ${skipped} skipped (no bank details)`:""}.`);
         };
 
         return <>
@@ -4074,7 +4136,7 @@ return (
               <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Payment Center</div>
             </div>
             <div style={{display:"flex",gap:"8px"}}>
-              {batchMode&&<Btn v="ok" sm onClick={exportBatchCSV}>Export {Object.values(batchSelected).filter(Boolean).length} Selected</Btn>}
+              {batchMode&&<Btn v="ok" sm onClick={exportBatchCSV}>⬇ Export {Object.values(batchSelected).filter(Boolean).length} · Bank + Complete</Btn>}
               {batchMode&&<Btn v="primary" sm onClick={bulkGenerateInvoices}>Generate Invoices ({Object.values(batchSelected).filter(Boolean).length})</Btn>}
               <Btn v={batchMode?"danger":"gold"} sm onClick={()=>{setBatchMode(!batchMode);if(batchMode)setBatchSelected({})}}>{batchMode?"Exit Batch":"Batch Export"}</Btn>
             </div>

@@ -4550,7 +4550,7 @@ return (
          ═══════════════════════════════════════════════════════ */}
       {((view==="dashboard"&&role==="performance_marketer")||(view==="creatives"&&role==="admin"))&&(()=>{
         // All live/completed creatives for the performance marketer
-        const liveStatuses = ["partial_live","live","invoice_ok","invoice_pending_approval","payment_requested","payment_approved","partial_paid","paid"];
+        const liveStatuses = ["partial_live","live","payment_details_received","invoice_ok","invoice_pending_approval","payment_requested","payment_approved","partial_paid","paid"];
         // Stories aren't usable ad creatives — only show a collab if it has a NON-story
         // deliverable that is actually approved/live (i.e. real uploaded creative content).
         // A collab whose only live/uploaded part is a Story never appears in the hub.

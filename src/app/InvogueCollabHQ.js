@@ -446,7 +446,7 @@ export default function InvogueCollabHQ() {
     {id:'p16',name:'High Compression Tummy Tucker',sizes:['S','M','L','XL','2XL','3XL'],colors:['Brief Cut - High Rise','Mid Thigh - Mid Rise']},
     {id:'p17',name:'Zipper Shapewear Swimsuit',sizes:['S','M','L','XL','2XL','3XL'],colors:[]},
     {id:'p18',name:'Plunge Neck Shapewear Swimsuit',sizes:['XS','S','M','L','XL','2XL','3XL'],colors:[]},
-    {id:'p19',name:'Thong: Malaika X Invogue',sizes:['S','M','L','XL','2XL','3XL'],colors:['Black','Olive','Red']},
+    {id:'p19',name:'Thong: Malaika X Invogue',sizes:['S','M','L','XL','2XL','3XL'],colors:['Black','Olive','Red','Pink']},
   ]);
   const [showProductMgmt, setShowProductMgmt] = useState(false);
   const [newProduct, setNewProduct] = useState({name:'',sizes:'',colors:''});

@@ -1021,7 +1021,16 @@ export default function InvogueCollabHQ() {
     const arr=[];
     deals.forEach(d=>{
       (d.shipHistory||[]).forEach((h,i)=>{
-        if(h.type==="pickup"&&h.status==="pickup_requested") arr.push({...h,histIdx:i,dealId:d.id,inf:d.inf,product:d.product,products:d.products,address:d.address,phone:d.phone});
+        if(h.type==="pickup"&&h.status==="pickup_requested"&&!h.cancelRequested) arr.push({...h,histIdx:i,dealId:d.id,inf:d.inf,product:d.product,products:d.products,address:d.address,phone:d.phone});
+      });
+    });
+    return arr;
+  },[deals]);
+  const pickupCancelRequests = useMemo(()=>{
+    const arr=[];
+    deals.forEach(d=>{
+      (d.shipHistory||[]).forEach((h,i)=>{
+        if(h.type==="pickup"&&h.cancelRequested&&!["pickup_cancelled","product_returned","pickup_skipped"].includes(h.status)) arr.push({...h,histIdx:i,dealId:d.id,inf:d.inf,product:d.product,products:d.products});
       });
     });
     return arr;
@@ -1030,7 +1039,7 @@ export default function InvogueCollabHQ() {
     const arr=[];
     deals.forEach(d=>{
       (d.shipHistory||[]).forEach((h,i)=>{
-        if(h.type==="pickup"&&h.status==="pickup_dispatched") arr.push({...h,histIdx:i,dealId:d.id,inf:d.inf,product:d.product,products:d.products});
+        if(h.type==="pickup"&&h.status==="pickup_dispatched"&&!h.cancelRequested) arr.push({...h,histIdx:i,dealId:d.id,inf:d.inf,product:d.product,products:d.products});
       });
     });
     return arr;
@@ -1096,10 +1105,11 @@ export default function InvogueCollabHQ() {
       revisionNeeded: revisionNeeded.length,
       pickupRequests: pickupRequests.length,
       pickupsInTransit: pickupsInTransit.length,
+      pickupCancelReqs: pickupCancelRequests.length,
       reshipPending: reshipPending.length,
       reshipInTransit: reshipInTransit.length,
     };
-  },[deals,pendingDels,pendingShip,awaitingReview,revisionNeeded,pickupRequests,pickupsInTransit,reshipPending,reshipInTransit]);
+  },[deals,pendingDels,pendingShip,awaitingReview,revisionNeeded,pickupRequests,pickupsInTransit,pickupCancelRequests,reshipPending,reshipInTransit]);
 
   // ── FEATURE 1: ANALYTICS HELPERS ──
   const generateAnalyticsData = () => {
@@ -2109,6 +2119,43 @@ export default function InvogueCollabHQ() {
     addLog(deal.id,userName,"Pickup skipped",note||"No pickup needed");
     setSel(prev=>prev?{...prev,shipHistory}:null);
     notify("Pickup marked as not needed");
+  };
+
+  // ── Pickup cancellation: negotiator requests, logistics/admin approves ──
+  const requestPickupCancellation = (deal, histIdx, note) => {
+    if(!(role==="negotiator"||role==="admin")) return notify("Only the negotiator or admin can request a pickup cancellation","err");
+    const userName = loggedIn?.name||"You";
+    const ts = new Date().toISOString();
+    const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,cancelRequested:true,cancelReason:note||"",cancelRequestedBy:userName,cancelRequestedAt:ts}:h);
+    supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error){console.error("Pickup cancel request save failed:",error);notify("Couldn't send request: "+error.message,"err");}});
+    upDeal(deal.id,{shipHistory});
+    addLog(deal.id,userName,"Pickup cancellation requested",note?`Reason: ${note}`:"");
+    setSel(prev=>prev?{...prev,shipHistory}:null);
+    notify("Cancellation request sent to logistics/admin.");
+  };
+
+  const approvePickupCancellation = (deal, histIdx) => {
+    if(!(role==="logistics"||role==="admin")) return notify("Only logistics or admin can approve a cancellation","err");
+    const userName = loggedIn?.name||"You (Logistics)";
+    const ts = new Date().toISOString();
+    const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,status:"pickup_cancelled",cancelRequested:false,cancelledBy:userName,cancelledAt:ts}:h);
+    supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error){console.error("Pickup cancel approve save failed:",error);notify("Couldn't save: "+error.message,"err");}});
+    upDeal(deal.id,{shipHistory});
+    addLog(deal.id,userName,"Pickup cancelled","Pickup cancellation approved");
+    setSel(prev=>prev?{...prev,shipHistory}:null);
+    notify("Pickup cancelled.");
+  };
+
+  const declinePickupCancellation = (deal, histIdx, note) => {
+    if(!(role==="logistics"||role==="admin")) return notify("Only logistics or admin can decline a cancellation","err");
+    const userName = loggedIn?.name||"You (Logistics)";
+    const ts = new Date().toISOString();
+    const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,cancelRequested:false,cancelDeclinedBy:userName,cancelDeclinedAt:ts,cancelDeclineNote:note||""}:h);
+    supabase.from('deals').update({ship_history:shipHistory}).eq('id',deal.id).then(({error})=>{if(error) console.error("Pickup cancel decline save failed:",error);});
+    upDeal(deal.id,{shipHistory});
+    addLog(deal.id,userName,"Pickup cancellation declined",note?`Reason: ${note}`:"");
+    setSel(prev=>prev?{...prev,shipHistory}:null);
+    notify("Cancellation declined — pickup remains active.","warn");
   };
 
   const requestReshipment = (deal, products, note, newAddress, phone) => {
@@ -3267,7 +3314,7 @@ return (
         negotiator: [{k:"dashboard",l:"My Dashboard",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"dropped",l:"Dropped Collabs",i:"🚫",n:stats.dropped},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
         approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.awaitingReview||stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
         finance: [{k:"dashboard",l:"Payment Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"}],
-        logistics: [{k:"dashboard",l:"Shipment Center",i:"🔵"},{k:"shipments",l:"All Shipments",i:"🚚",n:stats.pendingShip+inTransit.length+stats.pickupRequests+stats.reshipPending}],
+        logistics: [{k:"dashboard",l:"Shipment Center",i:"🔵"},{k:"shipments",l:"All Shipments",i:"🚚",n:stats.pendingShip+inTransit.length+stats.pickupRequests+stats.pickupCancelReqs+stats.reshipPending}],
         performance_marketer: [{k:"dashboard",l:"Creative Hub",i:"📈"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"influencers",l:"Influencer DB",i:"⭐"}],
       };
       const items = navItems[role]||navItems.negotiator;
@@ -4324,6 +4371,7 @@ return (
             <StatBox l="Ready to Ship" v={pendingShip.length} c={pendingShip.length>0?T.err:T.ok} sub="Ship these now"/>
             <StatBox l="In Transit" v={inTransit.length} c={inTransit.length>0?T.purple:T.ok}/>
             <StatBox l="Pickup Requests" v={pickupRequests.length} c={pickupRequests.length>0?T.warn:T.ok} sub="Arrange returns"/>
+            {pickupCancelRequests.length>0&&<StatBox l="Cancel Requests" v={pickupCancelRequests.length} c={T.err} sub="Approve / decline"/>}
             <StatBox l="Re-ship Pending" v={reshipPending.length} c={reshipPending.length>0?T.err:T.ok} sub="New products to send"/>
             <StatBox l="Delivered" v={delivered.length} c={T.ok}/>
           </div>
@@ -4358,6 +4406,25 @@ return (
           </Section>
 
           {/* PICKUP REQUESTS */}
+          {pickupCancelRequests.length>0&&<Section title={`Pickup Cancellation Requests (${pickupCancelRequests.length})`} icon="🚫" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700}}>Approve / Decline</span>}>
+            {pickupCancelRequests.map(h=>{
+              const deal = deals.find(d=>d.id===h.dealId);
+              return <div key={h.dealId+"-cancel-"+h.histIdx} style={{background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.err}`,borderRadius:"2px",padding:"12px 14px",marginBottom:"7px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"10px",flexWrap:"wrap"}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:"13px"}}>{h.inf} <span style={{fontSize:"11px",fontWeight:400,color:T.sub}}>· Cancel pickup ({h.reason||"pickup"})</span></div>
+                    {h.cancelReason&&<div style={{fontSize:"12px",color:T.sub,marginTop:"2px"}}>Reason: {h.cancelReason}</div>}
+                    <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>Requested by {h.cancelRequestedBy} · {h.cancelRequestedAt?new Date(h.cancelRequestedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):""}</div>
+                  </div>
+                  <div style={{display:"flex",gap:"6px"}}>
+                    <Btn v="ok" sm onClick={()=>setConfirmAction({title:"Approve Cancellation",msg:`Cancel this pickup for ${h.inf}?`,onConfirm:()=>{approvePickupCancellation(deal,h.histIdx);setConfirmAction(null)}})}>✓ Approve</Btn>
+                    <Btn v="outline" sm onClick={()=>declinePickupCancellation(deal,h.histIdx,"")}>Decline</Btn>
+                  </div>
+                </div>
+              </div>;
+            })}
+          </Section>}
+
           {pickupRequests.length>0&&<Section title={`Pickup Requests (${pickupRequests.length})`} icon="🔄" action={<span style={{fontSize:"11px",color:T.warn,fontWeight:700}}>Arrange Returns</span>}>
             {pickupRequests.map((h,idx)=>{
               const deal = deals.find(d=>d.id===h.dealId);
@@ -4549,12 +4616,13 @@ return (
           PERFORMANCE MARKETER DASHBOARD — Creative Hub
          ═══════════════════════════════════════════════════════ */}
       {((view==="dashboard"&&role==="performance_marketer")||(view==="creatives"&&role==="admin"))&&(()=>{
-        // All live/completed creatives for the performance marketer
-        const liveStatuses = ["partial_live","live","payment_details_received","invoice_ok","invoice_pending_approval","payment_requested","payment_approved","partial_paid","paid"];
-        // Stories aren't usable ad creatives — only show a collab if it has a NON-story
-        // deliverable that is actually approved/live (i.e. real uploaded creative content).
-        // A collab whose only live/uploaded part is a Story never appears in the hub.
-        const allCreatives = deals.filter(d=>liveStatuses.includes(d.status) && (d.dels||[]).some(dl=>!STORY_RE.test(dl.type||"") && ["approved","live"].includes(dl.st)));
+        // A collab enters the Creative Hub the moment a NON-story deliverable is marked live,
+        // and stays there regardless of the deal status afterward (payment stages, paid, etc.).
+        // Stories aren't usable ad creatives, so a story-only-live collab never appears.
+        const allCreatives = deals.filter(d=>
+          !["dropped","drop_requested","rejected","pending","renegotiate"].includes(d.status)
+          && (d.dels||[]).some(dl=>!STORY_RE.test(dl.type||"") && dl.st==="live")
+        );
 
         const freshCreatives = allCreatives.filter(d=>d.adStatus==="fresh"||!d.adStatus);
         const runningCreatives = allCreatives.filter(d=>d.adStatus==="running");
@@ -6323,11 +6391,11 @@ return (
                   const isReship = h.type==="reship";
                   const icon = isPickup?"🔄":"📦";
                   const statusLabels = {
-                    pickup_requested:"Pickup Requested",pickup_dispatched:"Return In Transit",product_returned:"Product Returned",pickup_skipped:"Pickup Skipped",
+                    pickup_requested:"Pickup Requested",pickup_dispatched:"Return In Transit",product_returned:"Product Returned",pickup_skipped:"Pickup Skipped",pickup_cancelled:"Pickup Cancelled",
                     reship_pending:"Re-shipment Pending",re_dispatched:"Re-shipped",re_delivered:"Re-delivery Confirmed"
                   };
                   const statusColors = {
-                    pickup_requested:T.warn,pickup_dispatched:T.info,product_returned:T.ok,pickup_skipped:T.sub,
+                    pickup_requested:T.warn,pickup_dispatched:T.info,product_returned:T.ok,pickup_skipped:T.sub,pickup_cancelled:T.err,
                     reship_pending:T.warn,re_dispatched:T.purple,re_delivered:T.ok
                   };
                   return <div key={hi} style={{marginBottom:"10px",fontSize:"12px"}}>
@@ -6349,7 +6417,19 @@ return (
                       {h.reDispatchedBy&&` · Dispatched by ${h.reDispatchedBy}`}
                       {h.reDeliveredBy&&` · Delivered by ${h.reDeliveredBy}`}
                       {h.skippedBy&&` · Skipped by ${h.skippedBy}`}
+                      {h.cancelledBy&&` · Cancelled by ${h.cancelledBy}`}
                     </div>
+                    {/* Pickup cancellation flow */}
+                    {isPickup&&h.cancelRequested&&<div style={{marginLeft:"22px",marginTop:"5px",padding:"7px 9px",background:T.warnBg,border:`1px solid ${T.warn}33`,borderRadius:"2px"}}>
+                      <div style={{fontSize:"11px",color:T.warn,fontWeight:700}}>🚫 Cancellation requested{h.cancelRequestedBy?` by ${h.cancelRequestedBy}`:""}{h.cancelReason?` — ${h.cancelReason}`:""}</div>
+                      {(role==="logistics"||role==="admin")&&<div style={{display:"flex",gap:"6px",marginTop:"5px"}}>
+                        <Btn v="ok" sm onClick={()=>setConfirmAction({title:"Approve Cancellation",msg:`Cancel this pickup for ${sel.inf}?`,onConfirm:()=>{approvePickupCancellation(sel,hi);setConfirmAction(null)}})}>✓ Approve cancellation</Btn>
+                        <Btn v="outline" sm onClick={()=>declinePickupCancellation(sel,hi,"")}>Decline</Btn>
+                      </div>}
+                    </div>}
+                    {isPickup&&!h.cancelRequested&&["pickup_requested","pickup_dispatched"].includes(h.status)&&(role==="negotiator"||role==="admin")&&<div style={{marginLeft:"22px",marginTop:"5px"}}>
+                      <Btn v="outline" sm onClick={()=>setConfirmAction({title:"Request Pickup Cancellation",msg:`Ask logistics/admin to cancel this pickup for ${sel.inf}?`,onConfirm:()=>{requestPickupCancellation(sel,hi,"");setConfirmAction(null)}})}>🚫 Request pickup cancellation</Btn>
+                    </div>}
                   </div>;
                 })}
               </div>}

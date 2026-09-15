@@ -182,7 +182,7 @@ async function loadFromSupabase() {
     shipHistory:d.ship_history||[],
     renegotiationNote:d.renegotiation_note||"", reapprovalNote:d.reapproval_note||"",
     managerNote:d.manager_note||"", rejectionReason:d.rejection_reason||"",
-    productOnHand:d.no_shipment||false,
+    productOnHand:d.no_shipment||false, creatorArmy:d.creator_army||false, armyMonth:d.army_month||null,
     deleted:d.deleted||false,
     dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
     ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
@@ -346,6 +346,17 @@ export default function InvogueCollabHQ() {
   const [deletedCampaigns, setDeletedCampaigns] = useState([]);
   const [users, setUsers] = useState([]);
   const [influencers, setInfluencers] = useState([]);
+  // ── Creator Army ──
+  const [armyMembers, setArmyMembers] = useState([]);
+  const [creatorProducts, setCreatorProducts] = useState([]);
+  const [creatorIncentives, setCreatorIncentives] = useState([]);
+  const [creatorRetainers, setCreatorRetainers] = useState([]);
+  const [armyTab, setArmyTab] = useState("overview"); // overview | roster | planner | incentives
+  const [armyProfile, setArmyProfile] = useState(null); // member being viewed
+  const [armyPlanMonth, setArmyPlanMonth] = useState(new Date().toISOString().slice(0,7));
+  const [armyEnrollF, setArmyEnrollF] = useState({inf:"",quota:"5",retainer:"",poc:"",notes:""});
+  const [armyProductF, setArmyProductF] = useState({product:"",variant:"",source:"gift",note:""});
+  const [armyIncentiveF, setArmyIncentiveF] = useState({description:"",amount:""});
   const [infProfile, setInfProfile] = useState(null); // selected influencer for profile view
   const [infSearch, setInfSearch] = useState("");
   const [infFilter, setInfFilter] = useState("all"); // all | active
@@ -581,7 +592,7 @@ export default function InvogueCollabHQ() {
             shipHistory:d.ship_history||[],
             renegotiationNote:d.renegotiation_note||"", reapprovalNote:d.reapproval_note||"",
             managerNote:d.manager_note||"", rejectionReason:d.rejection_reason||"",
-            productOnHand:d.no_shipment||false,
+            productOnHand:d.no_shipment||false, creatorArmy:d.creator_army||false, armyMonth:d.army_month||null,
             deleted:d.deleted||false,
             dels:delsByDeal[d.id]||[], pays:paysByDeal[d.id]||[],
             ship:shipByDeal[d.id]||null, logs:logsByDeal[d.id]||[],
@@ -633,6 +644,31 @@ export default function InvogueCollabHQ() {
 
     return () => { supabase.removeChannel(channel); };
   }, [loaded]);
+
+  // ── Creator Army data (load + realtime) ──
+  useEffect(() => {
+    if(!loggedIn) return;
+    const load = async () => {
+      const [m,p,inc,ret] = await Promise.all([
+        supabase.from('creator_army_members').select('*'),
+        supabase.from('creator_products').select('*'),
+        supabase.from('creator_incentives').select('*'),
+        supabase.from('creator_retainers').select('*'),
+      ]);
+      if(m.data) setArmyMembers(m.data.map(x=>({id:x.id, infId:x.influencer_id, inf:x.influencer_name, status:x.status, quota:x.monthly_quota??5, retainer:x.monthly_retainer||0, tier:x.tier||"", poc:x.poc||"", joinedAt:x.joined_at, notes:x.notes||""})));
+      if(p.data) setCreatorProducts(p.data.map(x=>({id:x.id, inf:x.influencer_name, product:x.product, variant:x.variant||"", source:x.source, dealId:x.deal_id, receivedAt:x.received_at, note:x.note||""})));
+      if(inc.data) setCreatorIncentives(inc.data.map(x=>({id:x.id, memberId:x.member_id, inf:x.influencer_name, month:x.month, description:x.description||"", amount:x.amount||0, status:x.status, addedBy:x.added_by, at:x.created_at})));
+      if(ret.data) setCreatorRetainers(ret.data.map(x=>({id:x.id, memberId:x.member_id, inf:x.influencer_name, month:x.month, amount:x.amount||0, status:x.status, paidBy:x.paid_by, paidAt:x.paid_at})));
+    };
+    load();
+    const ch = supabase.channel('creator-army-rt')
+      .on('postgres_changes',{event:'*',schema:'public',table:'creator_army_members'},load)
+      .on('postgres_changes',{event:'*',schema:'public',table:'creator_products'},load)
+      .on('postgres_changes',{event:'*',schema:'public',table:'creator_incentives'},load)
+      .on('postgres_changes',{event:'*',schema:'public',table:'creator_retainers'},load)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [loggedIn]);
 
   // ── Reset deals pagination when tab or filter changes ──
   useEffect(()=>{
@@ -1322,6 +1358,7 @@ export default function InvogueCollabHQ() {
       payment_terms:nDeal.paymentTerms||"Net 15 days",
       email:nDeal.email,
       products_json:JSON.stringify(nDeal.products||[]),
+      creator_army:!!nDeal.creatorArmy, army_month:nDeal.armyMonth||null,
     });
     if(dealErr) { console.error("Deal insert failed:",dealErr); return notify("Failed to save deal: "+dealErr.message,"err"); }
 
@@ -1380,6 +1417,7 @@ export default function InvogueCollabHQ() {
       ship:null,
       inv:null,
       dels:dbDels.map(dl=>({id:dl.id,type:dl.type,desc:dl.description,st:'pending',link:''})),
+      creatorArmy:!!nDeal.creatorArmy, armyMonth:nDeal.armyMonth||null,
       logs:[{t:ts,u:userName,a:"Deal created",d:`${f(nDeal.amount)} | ${nDeal.dels.length} deliverables`}]
     };
 
@@ -1852,6 +1890,99 @@ export default function InvogueCollabHQ() {
   };
   // POC name for a given influencer — so logistics know who to contact about a shipment.
   const pocNameFor = (infName) => (influencers.find(x=>x.name===infName)?.poc || "").trim();
+
+  // ─── CREATOR ARMY ───
+  const PRODUCT_RECEIVED = ["shipped","delivered_prod","partial_live","live","payment_details_received","invoice_ok","invoice_pending_approval","payment_requested","payment_approved","partial_paid","paid"];
+  const reelLive = (d) => (d.dels||[]).some(dl=>!STORY_RE.test(dl.type||"") && dl.st==="live");
+  const armyDealsFor = (name) => deals.filter(d=>d.creatorArmy && d.inf===name);
+  const armyMonthsActive = (member) => {
+    const [fy,fm] = (member.joinedAt||"").slice(0,7).split("-").map(Number);
+    const [ty,tm] = currentMonth().split("-").map(Number);
+    if(!fy||!ty) return 1;
+    return Math.max(1, (ty-fy)*12 + (tm-fm) + 1);
+  };
+  // Products a creator holds: everything from collabs that reached them + manual/gift entries.
+  const productsHeldBy = (name) => {
+    const fromDeals = deals.filter(d=>d.inf===name && (PRODUCT_RECEIVED.includes(d.status)||d.productOnHand))
+      .flatMap(d=>((d.products&&d.products.length)?d.products:[{name:d.product}]).filter(p=>p&&p.name)
+        .map(p=>({product:p.name, variant:[p.color,p.cut,p.size].filter(Boolean).join(", "), source:d.creatorArmy?"army collab":"collab", at:(d.at||"").slice(0,10), dealId:d.id})));
+    const manual = creatorProducts.filter(p=>p.inf===name).map(p=>({product:p.product, variant:p.variant, source:p.source, at:(p.receivedAt||"").slice(0,10), id:p.id, manual:true, note:p.note}));
+    return [...manual, ...fromDeals];
+  };
+  const armyStats = (member) => {
+    const cm = currentMonth();
+    const all = armyDealsFor(member.inf);
+    const totalCompleted = all.filter(reelLive).length;
+    const activeMonths = armyMonthsActive(member);
+    const owed = (member.quota||5) * activeMonths;
+    const left = member.status==="active" ? Math.max(0, owed - totalCompleted) : 0;
+    const assignedThisMonth = all.filter(d=>d.armyMonth===cm).length;
+    const completedThisMonth = all.filter(d=>d.armyMonth===cm && reelLive(d)).length;
+    return {totalCompleted, owed, left, assignedThisMonth, completedThisMonth, quota:member.quota||5, activeMonths, deals:all};
+  };
+  const isArmyMember = (name) => armyMembers.some(m=>m.inf===name);
+
+  const enrollArmyMember = async ({infName, quota, retainer, poc, notes}) => {
+    if(role!=="admin") return notify("Only admin can enrol creators into the Army","err");
+    if(!infName) return notify("Pick a creator","err");
+    if(isArmyMember(infName)) return notify(infName+" is already in the Creator Army","err");
+    const inf = influencers.find(x=>x.name===infName);
+    const {error} = await supabase.from('creator_army_members').insert({influencer_id:inf?.id||null, influencer_name:infName, monthly_quota:+quota||5, monthly_retainer:+retainer||0, poc:poc||inf?.poc||"", notes:notes||"", joined_at:new Date().toISOString().slice(0,10)});
+    if(error){ console.error(error); return notify("Couldn't enrol: "+error.message,"err"); }
+    notify(infName+" added to the Creator Army!");
+  };
+  const updateArmyMember = async (id, patch) => {
+    if(role!=="admin") return notify("Only admin can edit membership","err");
+    const db={}; if(patch.quota!=null)db.monthly_quota=+patch.quota; if(patch.retainer!=null)db.monthly_retainer=+patch.retainer; if(patch.status)db.status=patch.status; if(patch.poc!=null)db.poc=patch.poc; if(patch.notes!=null)db.notes=patch.notes;
+    const {error}=await supabase.from('creator_army_members').update(db).eq('id',id);
+    if(error){ console.error(error); return notify("Couldn't update: "+error.message,"err"); }
+    notify("Membership updated.");
+  };
+  const addCreatorProduct = async ({infName, product, variant, source, note}) => {
+    if(!product) return notify("Enter a product","err");
+    const inf = influencers.find(x=>x.name===infName);
+    const {error}=await supabase.from('creator_products').insert({influencer_id:inf?.id||null, influencer_name:infName, product, variant:variant||null, source:source||"gift", note:note||null});
+    if(error){ console.error(error); return notify("Couldn't add product: "+error.message,"err"); }
+    notify("Product added to "+infName+"'s inventory.");
+  };
+  const removeCreatorProduct = async (id) => { const {error}=await supabase.from('creator_products').delete().eq('id',id); if(error)notify("Couldn't remove","err"); };
+  const addIncentive = async ({member, description, amount}) => {
+    if(!description||!amount) return notify("Add a description and amount","err");
+    const {error}=await supabase.from('creator_incentives').insert({member_id:member.id, influencer_name:member.inf, month:currentMonth(), description, amount:+amount, status:'pending', added_by:loggedIn?.name||"You"});
+    if(error){ console.error(error); return notify("Couldn't add reward: "+error.message,"err"); }
+    notify("Performance reward logged (pending approval).");
+  };
+  const setIncentiveStatus = async (inc, status) => {
+    if(status==="approved"&&!(role==="admin"||role==="approver")) return notify("Only admin/manager can approve","err");
+    if(status==="paid"&&!(role==="admin"||role==="finance")) return notify("Only admin/finance can mark paid","err");
+    const {error}=await supabase.from('creator_incentives').update({status, resolved_by:loggedIn?.name||"You"}).eq('id',inc.id);
+    if(error){ console.error(error); return notify("Couldn't update: "+error.message,"err"); }
+    notify(status==="approved"?"Reward approved.":status==="paid"?"Reward marked paid.":"Updated.");
+  };
+  const generateRetainer = async (member, month) => {
+    if(!(role==="admin"||role==="finance")) return notify("Only admin/finance can generate retainers","err");
+    if(creatorRetainers.some(r=>r.memberId===member.id&&r.month===month)) return notify("Retainer already generated for "+month,"err");
+    const {error}=await supabase.from('creator_retainers').insert({member_id:member.id, influencer_name:member.inf, month, amount:member.retainer||0, status:'pending'});
+    if(error){ console.error(error); return notify("Couldn't generate: "+error.message,"err"); }
+    notify("Retainer generated for "+member.inf+" · "+month);
+  };
+  const payRetainer = async (r) => {
+    if(!(role==="admin"||role==="finance")) return notify("Only admin/finance can pay retainers","err");
+    const {error}=await supabase.from('creator_retainers').update({status:'paid', paid_by:loggedIn?.name||"You", paid_at:new Date().toISOString()}).eq('id',r.id);
+    if(error){ console.error(error); return notify("Couldn't update: "+error.message,"err"); }
+    notify("Retainer marked paid.");
+  };
+  // Assign a collab to an army creator for a month — opens the New Deal modal pre-tagged.
+  const assignArmyCollab = (member, month) => {
+    if(!(role==="negotiator"||role==="admin"||role==="approver")) return notify("You can't assign collabs","err");
+    const inf = influencers.find(x=>x.name===member.inf);
+    const addr = inf?.address;
+    setEditingDealId(null);
+    setNDeal({inf:member.inf, email:inf?.email||"", platform:inf?.platform||"Instagram", followers:inf?.followers||"", products:[], usage:"6 months", deadline:"", profile:inf?.profile||"", phone:inf?.phone||"", address:(typeof addr==='object'&&addr)?addr:{street:typeof addr==='string'?addr:"",city:"",state:"",pincode:""}, paymentTerms:"next_15th", cid:campaigns[0]?.id||"c1", dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}], creatorArmy:true, armyMonth:month});
+    setFormErrors({});
+    setArmyProfile(null);
+    setModal("newDeal");
+  };
 
   const sendEmail = async (d, isResend=false, overrideEmail=null) => {
     const toEmail = (overrideEmail || d.email || "").trim();
@@ -3330,10 +3461,10 @@ return (
       const unreads = recentNotifs.filter(n => new Date(n.time) > new Date(lastSeenTime)).length;
 
       const navItems = {
-        admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"creatives",l:"Creative Hub",i:"📈"},{k:"analytics",l:"Analytics",i:"📊"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"payments",l:"Payments",i:"💰",n:deals.filter(d=>d.amount>0&&["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0).length},{k:"audit",l:"Audit Log",i:"📜"},{k:"deleted",l:"Deleted",i:"🗑",n:deletedDeals.length+deletedCampaigns.length}],
-        negotiator: [{k:"dashboard",l:"My Dashboard",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"dropped",l:"Dropped Collabs",i:"🚫",n:stats.dropped},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
-        approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.awaitingReview||stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
-        finance: [{k:"dashboard",l:"Payment Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"}],
+        admin: [{k:"dashboard",l:"Admin Dashboard",i:"⚙️"},{k:"creatives",l:"Creative Hub",i:"📈"},{k:"analytics",l:"Analytics",i:"📊"},{k:"users",l:"Team & Users",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"army",l:"Creator Army",i:"🎖"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length},{k:"payments",l:"Payments",i:"💰",n:deals.filter(d=>d.amount>0&&["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0).length},{k:"audit",l:"Audit Log",i:"📜"},{k:"deleted",l:"Deleted",i:"🗑",n:deletedDeals.length+deletedCampaigns.length}],
+        negotiator: [{k:"dashboard",l:"My Dashboard",i:"👥"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"army",l:"Creator Army",i:"🎖"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"dropped",l:"Dropped Collabs",i:"🚫",n:stats.dropped},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.pendingDels}],
+        approver: [{k:"dashboard",l:"Command Center",i:"🔵"},{k:"analytics",l:"Analytics",i:"📊"},{k:"influencers",l:"Influencer DB",i:"⭐"},{k:"army",l:"Creator Army",i:"🎖"},{k:"deals",l:"All Collabs",i:"📋"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"deliverables",l:"Deliverables",i:"📦",n:stats.awaitingReview||stats.pendingDels},{k:"shipments",l:"Shipments",i:"🚚",n:stats.pendingShip+inTransit.length}],
+        finance: [{k:"dashboard",l:"Payment Center",i:"🔵"},{k:"army",l:"Creator Army",i:"🎖"},{k:"analytics",l:"Analytics",i:"📊"}],
         logistics: [{k:"dashboard",l:"Shipment Center",i:"🔵"},{k:"shipments",l:"All Shipments",i:"🚚",n:stats.pendingShip+inTransit.length+stats.pickupRequests+stats.pickupCancelReqs+stats.reshipPending}],
         performance_marketer: [{k:"dashboard",l:"Creative Hub",i:"📈"},{k:"campaigns",l:"Campaigns",i:"🎯"},{k:"influencers",l:"Influencer DB",i:"⭐"}],
       };
@@ -4901,6 +5032,182 @@ return (
           </>;
         })()}
 
+        {/* ═══════════════ CREATOR ARMY ═══════════════ */}
+        {view==="army"&&(()=>{
+          const cm = currentMonth();
+          const active = armyMembers.filter(m=>m.status==="active");
+          const stat = m=>armyStats(m);
+          const totalLeft = active.reduce((s,m)=>s+stat(m).left,0);
+          const completedThisMonth = active.reduce((s,m)=>s+stat(m).completedThisMonth,0);
+          const targetThisMonth = active.reduce((s,m)=>s+(m.quota||5),0);
+          const fillPct = targetThisMonth>0?Math.round(completedThisMonth/targetThisMonth*100):0;
+          const retainersDue = active.reduce((s,m)=>s+(m.retainer||0),0);
+          const pendingRewards = creatorIncentives.filter(i=>i.status!=="paid");
+          const canEnrol = role==="admin";
+          const MemberCard = ({m})=>{ const s=stat(m); const pct=s.quota>0?Math.round(s.completedThisMonth/s.quota*100):0; return (
+            <div onClick={()=>setArmyProfile(m)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"16px",cursor:"pointer"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
+                <div><div style={{fontSize:"14px",fontWeight:700}}>{m.inf}</div><div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>Quota {m.quota}/mo · {fAmt(m.retainer)} retainer</div></div>
+                <span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,padding:"3px 7px",borderRadius:"2px",background:m.status==="active"?T.okBg:T.warnBg,color:m.status==="active"?T.ok:T.warn}}>{m.status}</span>
+              </div>
+              <div style={{fontSize:"10px",color:T.sub,marginBottom:"4px"}}>This month: {s.completedThisMonth}/{m.quota} live · {s.assignedThisMonth} assigned</div>
+              <div style={{height:"6px",borderRadius:"3px",background:T.border,overflow:"hidden",marginBottom:"10px"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>=100?T.ok:T.gold,borderRadius:"3px"}}/></div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:"11px",color:s.left>0?T.warn:T.ok,fontWeight:700}}>{s.left} collab{s.left===1?"":"s"} left</span>
+                {(role==="negotiator"||role==="admin"||role==="approver")&&<span onClick={e=>{e.stopPropagation();assignArmyCollab(m,cm)}} style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,color:"#fff",background:T.brand,padding:"6px 10px",borderRadius:"2px",cursor:"pointer"}}>Assign</span>}
+              </div>
+            </div>);
+          };
+          return <>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:"18px",flexWrap:"wrap",gap:"12px"}}>
+              <div>
+                <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{active.length} active · {new Date(cm+"-01").toLocaleDateString("en-IN",{month:"long",year:"numeric"})}</div>
+                <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>🎖 Creator Army</div>
+              </div>
+              {canEnrol&&<Btn v="primary" onClick={()=>{setArmyEnrollF({inf:"",quota:"5",retainer:"",poc:"",notes:""});setModal("enrollArmy")}}>+ Enrol Creator</Btn>}
+            </div>
+            <div style={{display:"flex",gap:"24px",marginBottom:"20px",borderBottom:`1px solid ${T.border}`,flexWrap:"wrap"}}>
+              {[{k:"overview",l:"Overview"},{k:"roster",l:"Roster"},{k:"planner",l:"Monthly Planner"},{k:"incentives",l:"Rewards & Retainers"}].map(t=>
+                <div key={t.k} onClick={()=>setArmyTab(t.k)} style={{fontSize:"12px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,cursor:"pointer",color:armyTab===t.k?T.brand:T.sub,borderBottom:armyTab===t.k?`2px solid ${T.brand}`:"2px solid transparent",paddingBottom:"12px"}}>{t.l}</div>)}
+            </div>
+
+            {armyTab==="overview"&&<>
+              <div style={{display:"flex",borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,marginBottom:"22px",flexWrap:"wrap"}}>
+                {[{l:"Army Size",v:armyMembers.length,c:T.text},{l:"Active",v:active.length,c:T.brand},{l:"Month Fill",v:fillPct+"%",c:fillPct>=80?T.ok:T.warn},{l:"Collabs Left",v:totalLeft,c:totalLeft>0?T.warn:T.ok},{l:"Retainers / mo",v:f(retainersDue),c:T.gold},{l:"Rewards Pending",v:pendingRewards.length,c:pendingRewards.length>0?T.purple:"#C9C1B2"}].map((m,i,a)=>
+                  <div key={i} style={{flex:"1 1 130px",padding:"16px 20px",borderRight:i<a.length-1?`1px solid ${T.border}`:"none"}}><div style={{fontSize:"10px",letterSpacing:"2px",textTransform:"uppercase",color:T.sub,marginBottom:"8px"}}>{m.l}</div><div style={{fontFamily:DISPLAY,fontSize:"30px",fontWeight:500,lineHeight:1,color:m.c}}>{m.v}</div></div>)}
+              </div>
+              {active.filter(m=>stat(m).completedThisMonth<m.quota).length>0&&<Section title="Behind on this month's quota" icon="⚠️">
+                {active.filter(m=>stat(m).completedThisMonth<m.quota).map(m=>{const s=stat(m);return <div key={m.id} onClick={()=>setArmyProfile(m)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",borderBottom:`1px solid ${T.borderSoft}`,cursor:"pointer",fontSize:"13px"}}>
+                  <span><b>{m.inf}</b> <span style={{color:T.sub}}>· {s.completedThisMonth}/{m.quota} this month · {s.left} left overall</span></span>
+                  {(role==="negotiator"||role==="admin"||role==="approver")&&<span onClick={e=>{e.stopPropagation();assignArmyCollab(m,cm)}} style={{fontSize:"11px",color:T.brand,fontWeight:700,cursor:"pointer"}}>Assign →</span>}
+                </div>;})}
+              </Section>}
+              {armyMembers.length===0&&<div style={{padding:"40px",textAlign:"center",color:T.sub,fontSize:"14px"}}>No creators in the Army yet.{canEnrol?" Click “Enrol Creator” to add one.":""}</div>}
+            </>}
+
+            {armyTab==="roster"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:"14px"}}>
+              {armyMembers.map(m=><MemberCard key={m.id} m={m}/>)}
+              {armyMembers.length===0&&<div style={{color:T.sub,fontSize:"13px"}}>No creators enrolled yet.</div>}
+            </div>}
+
+            {armyTab==="planner"&&<>
+              <div style={{display:"flex",gap:"10px",alignItems:"center",marginBottom:"14px"}}>
+                <span style={{fontSize:"11px",color:T.sub,fontWeight:700,textTransform:"uppercase",letterSpacing:"1px"}}>Month</span>
+                <div style={{width:"160px"}}><Inp type="month" value={armyPlanMonth} onChange={e=>setArmyPlanMonth(e.target.value)}/></div>
+              </div>
+              <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",overflow:"hidden"}}>
+                <div style={{display:"grid",gridTemplateColumns:"1.6fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr",padding:"9px 14px",background:T.brand,fontSize:"10px",fontWeight:800,color:"#F6DFC1",textTransform:"uppercase",letterSpacing:".5px"}}>
+                  <div>Creator</div><div>Quota</div><div>Assigned</div><div>Live</div><div>Left</div><div></div>
+                </div>
+                {active.map(m=>{const all=armyDealsFor(m.inf);const asg=all.filter(d=>d.armyMonth===armyPlanMonth).length;const done=all.filter(d=>d.armyMonth===armyPlanMonth&&reelLive(d)).length;const s=stat(m);return <div key={m.id} style={{display:"grid",gridTemplateColumns:"1.6fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr",padding:"9px 14px",borderBottom:`1px solid ${T.borderSoft}`,fontSize:"13px",alignItems:"center"}}>
+                  <div style={{fontWeight:600,cursor:"pointer"}} onClick={()=>setArmyProfile(m)}>{m.inf}</div>
+                  <div>{m.quota}</div><div>{asg}</div><div style={{color:done>=m.quota?T.ok:T.text}}>{done}</div><div style={{color:s.left>0?T.warn:T.ok,fontWeight:700}}>{s.left}</div>
+                  <div>{(role==="negotiator"||role==="admin"||role==="approver")&&<Btn v="gold" sm onClick={()=>assignArmyCollab(m,armyPlanMonth)}>+ Assign collab</Btn>}</div>
+                </div>;})}
+                {active.length===0&&<div style={{padding:"18px",fontSize:"13px",color:T.sub}}>No active members.</div>}
+              </div>
+            </>}
+
+            {armyTab==="incentives"&&<>
+              <Section title="Performance Rewards" icon="🏆" action={<span style={{fontSize:"11px",color:T.sub}}>{creatorIncentives.filter(i=>i.status==="pending").length} pending</span>}>
+                {creatorIncentives.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"6px 0"}}>No rewards logged yet. Add one from a creator's profile.</div>}
+                {creatorIncentives.slice().sort((a,b)=>new Date(b.at)-new Date(a.at)).map(inc=><div key={inc.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px",padding:"9px 12px",borderBottom:`1px solid ${T.borderSoft}`,fontSize:"13px",flexWrap:"wrap"}}>
+                  <div><b>{inc.inf}</b> <span style={{color:T.sub}}>· {inc.description} · {inc.month}</span></div>
+                  <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+                    <b style={{color:T.gold}}>{f(inc.amount)}</b>
+                    <span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,padding:"3px 7px",borderRadius:"2px",background:inc.status==="paid"?T.okBg:inc.status==="approved"?T.infoBg:T.warnBg,color:inc.status==="paid"?T.ok:inc.status==="approved"?T.info:T.warn}}>{inc.status}</span>
+                    {inc.status==="pending"&&(role==="admin"||role==="approver")&&<Btn v="ok" sm onClick={()=>setIncentiveStatus(inc,"approved")}>Approve</Btn>}
+                    {inc.status==="approved"&&(role==="admin"||role==="finance")&&<Btn v="gold" sm onClick={()=>setIncentiveStatus(inc,"paid")}>Mark paid</Btn>}
+                  </div>
+                </div>)}
+              </Section>
+              <Section title="Monthly Retainers" icon="💰" action={(role==="admin"||role==="finance")?<Btn v="outline" sm onClick={()=>{active.forEach(m=>{if(!creatorRetainers.some(r=>r.memberId===m.id&&r.month===cm))generateRetainer(m,cm)})}}>Generate {new Date(cm+"-01").toLocaleDateString("en-IN",{month:"short"})} retainers</Btn>:null}>
+                {creatorRetainers.filter(r=>r.month===cm).length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"6px 0"}}>No retainers generated for this month yet.</div>}
+                {creatorRetainers.filter(r=>r.month===cm).map(r=><div key={r.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px",padding:"9px 12px",borderBottom:`1px solid ${T.borderSoft}`,fontSize:"13px"}}>
+                  <div><b>{r.inf}</b> <span style={{color:T.sub}}>· {r.month}</span></div>
+                  <div style={{display:"flex",gap:"8px",alignItems:"center"}}><b style={{color:T.gold}}>{f(r.amount)}</b><span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,padding:"3px 7px",borderRadius:"2px",background:r.status==="paid"?T.okBg:T.warnBg,color:r.status==="paid"?T.ok:T.warn}}>{r.status}</span>{r.status==="pending"&&(role==="admin"||role==="finance")&&<Btn v="gold" sm onClick={()=>payRetainer(r)}>Mark paid</Btn>}</div>
+                </div>)}
+              </Section>
+            </>}
+          </>;
+        })()}
+
+        {/* ═══ ENROL CREATOR MODAL ═══ */}
+        {modal==="enrollArmy"&&<Modal open={true} onClose={()=>setModal(null)} title="Enrol Creator into the Army" w={460}>
+          <Field label="Creator"><Sel value={armyEnrollF.inf} onChange={e=>{const inf=influencers.find(x=>x.name===e.target.value);setArmyEnrollF({...armyEnrollF,inf:e.target.value,poc:inf?.poc||armyEnrollF.poc})}} options={[{v:"",l:"Select a creator…"},...influencers.filter(i=>!isArmyMember(i.name)).map(i=>({v:i.name,l:i.name}))]}/></Field>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
+            <Field label="Monthly Quota"><Inp type="number" value={armyEnrollF.quota} onChange={e=>setArmyEnrollF({...armyEnrollF,quota:e.target.value})} placeholder="5"/></Field>
+            <Field label="Monthly Retainer (₹)"><Inp type="number" value={armyEnrollF.retainer} onChange={e=>setArmyEnrollF({...armyEnrollF,retainer:e.target.value})} prefix="₹" placeholder="0"/></Field>
+          </div>
+          <Field label="POC"><Inp value={armyEnrollF.poc} onChange={e=>setArmyEnrollF({...armyEnrollF,poc:e.target.value})} placeholder="Team member"/></Field>
+          <Field label="Notes"><Textarea value={armyEnrollF.notes} onChange={e=>setArmyEnrollF({...armyEnrollF,notes:e.target.value})} rows={2} placeholder="Benefits, terms, anything to remember"/></Field>
+          <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"12px"}}>
+            <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
+            <Btn v="primary" onClick={async()=>{await enrollArmyMember(armyEnrollF);setModal(null)}}>Enrol Creator</Btn>
+          </div>
+        </Modal>}
+
+        {/* ═══ CREATOR ARMY MEMBER PROFILE ═══ */}
+        {armyProfile&&(()=>{ const m=armyProfile; const s=armyStats(m); const held=productsHeldBy(m.inf); const myRewards=creatorIncentives.filter(i=>i.memberId===m.id); const myRetainers=creatorRetainers.filter(r=>r.memberId===m.id); const canEdit=role==="admin"; const pct=s.quota>0?Math.round(s.completedThisMonth/s.quota*100):0; return (
+          <Modal open={true} onClose={()=>setArmyProfile(null)} title={"🎖 "+m.inf} w={680}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px",flexWrap:"wrap",gap:"8px"}}>
+              <div style={{fontSize:"12px",color:T.sub}}>Since {(m.joinedAt||"").slice(0,10)} · POC {m.poc||"—"} · <span style={{color:m.status==="active"?T.ok:T.warn,fontWeight:700}}>{m.status}</span></div>
+              {canEdit&&<div style={{display:"flex",gap:"6px"}}>
+                {m.status==="active"?<Btn v="outline" sm onClick={()=>updateArmyMember(m.id,{status:"paused"})}>Pause</Btn>:<Btn v="ok" sm onClick={()=>updateArmyMember(m.id,{status:"active"})}>Reactivate</Btn>}
+              </div>}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"8px",marginBottom:"8px"}}>
+              <StatBox l="Quota / mo" v={m.quota} c={T.brand}/>
+              <StatBox l="Retainer" v={f(m.retainer)} c={T.gold}/>
+              <StatBox l="This Month" v={`${s.completedThisMonth}/${m.quota}`} c={pct>=100?T.ok:T.warn}/>
+              <StatBox l="Collabs Left" v={s.left} c={s.left>0?T.warn:T.ok}/>
+            </div>
+            {canEdit&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"14px"}}>
+              <Field label="Monthly Quota"><Inp type="number" value={m.quota} onChange={e=>setArmyProfile({...m,quota:+e.target.value})} onBlur={e=>updateArmyMember(m.id,{quota:e.target.value})}/></Field>
+              <Field label="Monthly Retainer (₹)"><Inp type="number" prefix="₹" value={m.retainer} onChange={e=>setArmyProfile({...m,retainer:+e.target.value})} onBlur={e=>updateArmyMember(m.id,{retainer:e.target.value})}/></Field>
+            </div>}
+            <div style={{marginBottom:"6px",fontSize:"11px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,color:T.sub}}>Cumulative: {s.totalCompleted} live of {s.owed} owed over {s.activeMonths} month{s.activeMonths===1?"":"s"} · rollover balance {s.left}</div>
+
+            <Section title={`Products Held (${held.length})`} icon="📦">
+              {held.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"4px 0"}}>No products on record.</div>}
+              {held.map((p,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",borderBottom:`1px solid ${T.borderSoft}`,fontSize:"12px"}}>
+                <span><b>{p.product}</b>{p.variant?` · ${p.variant}`:""} <span style={{color:T.faint,fontSize:"10px"}}>· {p.source}{p.at?` · ${p.at}`:""}</span></span>
+                {p.manual&&(role==="admin"||role==="negotiator")&&<span onClick={()=>removeCreatorProduct(p.id)} style={{cursor:"pointer",color:T.err,fontWeight:700}}>✕</span>}
+              </div>)}
+              <div style={{display:"flex",gap:"6px",alignItems:"center",marginTop:"8px"}}>
+                <div style={{flex:1}}><Inp value={armyProductF.product} onChange={e=>setArmyProductF({...armyProductF,product:e.target.value})} placeholder="Add a gifted product…"/></div>
+                <div style={{width:"110px"}}><Inp value={armyProductF.variant} onChange={e=>setArmyProductF({...armyProductF,variant:e.target.value})} placeholder="Variant"/></div>
+                <Btn v="outline" sm onClick={()=>{addCreatorProduct({infName:m.inf,product:armyProductF.product,variant:armyProductF.variant,source:"gift",note:""});setArmyProductF({product:"",variant:"",source:"gift",note:""})}}>+ Add</Btn>
+              </div>
+            </Section>
+
+            <Section title="Performance Rewards" icon="🏆">
+              {myRewards.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"4px 0"}}>No rewards yet.</div>}
+              {myRewards.map(inc=><div key={inc.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",borderBottom:`1px solid ${T.borderSoft}`,fontSize:"12px"}}>
+                <span>{inc.description} <span style={{color:T.faint}}>· {inc.month}</span></span>
+                <span style={{display:"flex",gap:"6px",alignItems:"center"}}><b style={{color:T.gold}}>{f(inc.amount)}</b><span style={{fontSize:"9px",textTransform:"uppercase",fontWeight:700,color:inc.status==="paid"?T.ok:inc.status==="approved"?T.info:T.warn}}>{inc.status}</span></span>
+              </div>)}
+              <div style={{display:"flex",gap:"6px",alignItems:"center",marginTop:"8px"}}>
+                <div style={{flex:1}}><Inp value={armyIncentiveF.description} onChange={e=>setArmyIncentiveF({...armyIncentiveF,description:e.target.value})} placeholder="Reason (e.g. reel crossed 500k views)"/></div>
+                <div style={{width:"100px"}}><Inp type="number" prefix="₹" value={armyIncentiveF.amount} onChange={e=>setArmyIncentiveF({...armyIncentiveF,amount:e.target.value})} placeholder="Amount"/></div>
+                <Btn v="outline" sm onClick={()=>{addIncentive({member:m,description:armyIncentiveF.description,amount:armyIncentiveF.amount});setArmyIncentiveF({description:"",amount:""})}}>+ Log</Btn>
+              </div>
+            </Section>
+
+            <Section title={`Army Collabs (${s.deals.length})`} icon="📋">
+              {s.deals.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"4px 0"}}>No collabs assigned yet.</div>}
+              {s.deals.slice().sort((a,b)=>new Date(b.at)-new Date(a.at)).map(d=><div key={d.id} onClick={()=>{setArmyProfile(null);setSel(d);setModal("detail")}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 10px",borderBottom:`1px solid ${T.borderSoft}`,cursor:"pointer",fontSize:"12px"}}>
+                <span><b>{d.collabId||"—"}</b> <span style={{color:T.sub}}>· {d.armyMonth||""} · {d.products?d.products.map(p=>p.name).join(", "):d.product}</span></span>
+                <Badge s={d.status} sm/>
+              </div>)}
+            </Section>
+
+            {myRetainers.length>0&&<Section title="Retainers" icon="💰">
+              {myRetainers.map(r=><div key={r.id} style={{display:"flex",justifyContent:"space-between",padding:"6px 10px",borderBottom:`1px solid ${T.borderSoft}`,fontSize:"12px"}}><span>{r.month}</span><span><b style={{color:T.gold}}>{f(r.amount)}</b> · {r.status}</span></div>)}
+            </Section>}
+          </Modal>);
+        })()}
+
         {/* ═══ INFLUENCER PROFILE MODAL ═══ */}
         {infProfile&&<Modal open={!!infProfile} onClose={()=>setInfProfile(null)} title={infProfile.name} w={680}>
           {(()=>{
@@ -5654,6 +5961,7 @@ return (
       {/* NEW DEAL */}
       <Modal open={modal==="newDeal"&&nDeal} onClose={()=>{setModal(null);setEditingDealId(null)}} title={editingDealId?"Edit Collaboration":"New Collaboration"} w={580} noBackdropClose>
         {nDeal&&<>
+          {nDeal.creatorArmy&&<div style={{padding:"8px 12px",background:T.goldSoft,border:`1px solid ${T.gold}44`,borderRadius:"2px",marginBottom:"12px",fontSize:"12px",color:T.brand,fontWeight:600}}>🎖 Creator Army collab · {nDeal.armyMonth}</div>}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 10px"}}>
             <Field label="Campaign *"><Sel value={nDeal.cid} onChange={e=>setNDeal({...nDeal,cid:e.target.value})} options={campaigns.map(c=>({v:c.id,l:c.name}))}/></Field>
             <Field label="Influencer *"><Inp value={nDeal.inf} onChange={e=>setNDeal({...nDeal,inf:e.target.value})} placeholder="Priya Sharma" error={formErrors.inf}/></Field>

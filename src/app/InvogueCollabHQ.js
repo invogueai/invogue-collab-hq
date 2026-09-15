@@ -2216,7 +2216,9 @@ export default function InvogueCollabHQ() {
     if(!validUrl(liveUrl)) return notify("Invalid URL — must be a valid link","err");
 
     const link = liveUrl;
-    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"live",link}:dl);
+    const liveTs = new Date().toISOString();
+    const liveHistory = [...(currentDel.history||[]),{action:"live",by:loggedIn?.name||"You",at:liveTs,link}];
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"live",link,history:liveHistory}:dl);
     // The Reel (non-story) is the deliverable that makes a collab "live". Stories are a
     // by-product and never move the collab into partial_live/live on their own.
     const requiredDels = newDels.filter(dl=>!STORY_RE.test(dl.type||""));
@@ -2228,7 +2230,7 @@ export default function InvogueCollabHQ() {
     const shouldUpdateStatus = anyRequiredLive && ["email_sent","acknowledged","shipped","delivered_prod","partial_live"].includes(deal.status);
     const delId = deal.dels[delIdx].id;
 
-    supabase.from('deliverables').update({status:'live',live_link:link,marked_live_at:new Date().toISOString()}).eq('id',delId).then(({error})=>{if(error) console.error("Mark live save failed:",error);});
+    supabase.from('deliverables').update({status:'live',live_link:link,marked_live_at:liveTs,history:liveHistory}).eq('id',delId).then(({error})=>{if(error) console.error("Mark live save failed:",error);});
     // Auto-set ad_status when deal first goes live; usage_end_date only if usageDays is set
     const dealUpdates = shouldUpdateStatus ? {status:newStatus} : {};
     const localUpdates = {};
@@ -2306,6 +2308,24 @@ export default function InvogueCollabHQ() {
     setDeliverableLinkF(prev=>{const copy={...prev};delete copy[delId];return copy;});
     setDeliverableNoteF(prev=>{const copy={...prev};delete copy[delId];return copy;});
     notify("Content submitted for manager review!");
+  };
+
+  // Negotiator withdraws a submission made by mistake (before the manager reviews it):
+  // reverts the deliverable to pending so it leaves the review queue, keeping the link
+  // available so it can be corrected and re-submitted.
+  const withdrawSubmission = (deal, delIdx) => {
+    if(!(role==="negotiator"||role==="admin")) return notify("Only the negotiator or admin can withdraw a submission","err");
+    const dl0 = deal.dels[delIdx];
+    if(dl0.st!=="submitted") return notify("Only a submitted (not-yet-reviewed) deliverable can be withdrawn","err");
+    const delId = dl0.id;
+    const ts = new Date().toISOString();
+    const newHistory = [...(dl0.history||[]),{action:"withdrawn",by:loggedIn?.name||"You",at:ts}];
+    const newDels = deal.dels.map((dl,i)=>i===delIdx?{...dl,st:"pending",submitNote:"",history:newHistory}:dl);
+    supabase.from('deliverables').update({status:'pending',submitted_at:null,submit_note:null,history:newHistory}).eq('id',delId).then(({error})=>{if(error){console.error("Withdraw submission failed:",error);notify("Couldn't withdraw: "+error.message,"err");}});
+    upDeal(deal.id,{dels:newDels});
+    addLog(deal.id,loggedIn?.name||"You","Submission withdrawn",`${dl0.type}: ${dl0.desc||""}`);
+    setSel(prev=>prev?{...prev,dels:newDels}:null);
+    notify("Submission withdrawn — it's back to you to correct and re-submit.","warn");
   };
 
   const approveContent = async (deal, delIdx, comment="") => {
@@ -4228,7 +4248,7 @@ return (
                 return <div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderRadius:"2px",padding:"22px"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"16px"}}>
                     <div onClick={()=>{setSel(d);setModal("detail")}} style={{cursor:"pointer",display:"flex",gap:"8px",alignItems:"flex-start"}}>
-                      {batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{marginTop:"6px",cursor:"pointer"}}/>}
+                      {batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{marginTop:"6px",cursor:"pointer"}}/>}
                       <div>
                         <div style={{fontFamily:DISPLAY,fontSize:"19px",fontWeight:600}}>{d.inf}</div>
                         <div style={{fontSize:"10px",color:T.sub,marginTop:"3px"}}>{d.products?d.products.map(p=>p.name).join(", "):d.product}{isAgency?<> · <span style={{color:T.gold}}>Agency: {d.paymentDetails?.beneficiary||d.agencyName||"agency"}</span></>:` · ${inf?.upiId?"UPI":"Bank"} · ${panOk?"PAN verified":"PAN missing"}`}</div>
@@ -4283,21 +4303,21 @@ return (
             {/* Overdue */}
             {overdueDates.map(dateKey=><Section key={dateKey} title={`⚠ OVERDUE — ${new Date(dateKey).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}`} icon="" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700}}>{byDueDate[dateKey].length} deal{byDueDate[dateKey].length>1?"s":""} · {f(byDueDate[dateKey].reduce((s,d)=>s+remaining(d),0))}</span>}>
               {byDueDate[dateKey].map(d=><div key={d.id} style={{background:T.errBg,border:`1px solid ${T.err}22`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>{setSel(d);setModal("detail")}}>
-                <div style={{display:"flex",alignItems:"center",gap:"6px"}}>{batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{cursor:"pointer"}}/>}<div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.product}</span></div></div>
+                <div style={{display:"flex",alignItems:"center",gap:"6px"}}>{batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{cursor:"pointer"}}/>}<div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.product}</span></div></div>
                 <div style={{textAlign:"right"}}><span style={{color:T.err,fontWeight:700}}>{f(remaining(d))} due</span></div>
               </div>)}
             </Section>)}
             {/* Upcoming */}
             {upcomingDates.map(dateKey=><Section key={dateKey} title={`📅 ${new Date(dateKey).toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short",year:"numeric"})}`} icon="" action={<span style={{fontSize:"11px",color:T.sub,fontWeight:700}}>{byDueDate[dateKey].length} deal{byDueDate[dateKey].length>1?"s":""} · {f(byDueDate[dateKey].reduce((s,d)=>s+remaining(d),0))}</span>}>
               {byDueDate[dateKey].map(d=>{const inf=influencers.find(x=>x.name===d.inf);return <div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>{setSel(d);setModal("detail")}}>
-                <div style={{display:"flex",alignItems:"center",gap:"6px"}}>{batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{cursor:"pointer"}}/>}<div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.product} · {PAYMENT_TERMS_LABELS[d.payment_terms||inf?.defaultPaymentTerms||"next_15th"]||""}</span></div></div>
+                <div style={{display:"flex",alignItems:"center",gap:"6px"}}>{batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{cursor:"pointer"}}/>}<div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.product} · {PAYMENT_TERMS_LABELS[d.payment_terms||inf?.defaultPaymentTerms||"next_15th"]||""}</span></div></div>
                 <div style={{display:"flex",alignItems:"center",gap:"6px"}}><span style={{fontWeight:700}}>{f(remaining(d))}</span>{isTDSApplicable(d.inf,remaining(d))&&<span style={{padding:"1px 5px",borderRadius:"3px",fontSize:"9px",fontWeight:700,background:"#f5f3ff",color:"#7c3aed"}}>TDS</span>}{["invoice_ok","payment_requested","payment_approved","partial_paid"].includes(d.status)&&<Btn v="ok" sm onClick={e=>{e.stopPropagation();setSel(d);setPayF({type:"final",amount:String(remaining(d)),note:"Paid ahead of due date"});setModal("payment")}}>Pay now</Btn>}</div>
               </div>;})}
             </Section>)}
             {/* Unscheduled */}
             {byDueDate.unscheduled&&byDueDate.unscheduled.length>0&&<Section title={`Unscheduled (${byDueDate.unscheduled.length})`} icon="❓" action={<span style={{fontSize:"11px",color:T.sub}}>No due date set</span>}>
               {byDueDate.unscheduled.map(d=><div key={d.id} style={{background:T.surface,border:`1px solid ${batchSelected[d.id]?T.gold:T.border}`,borderRadius:"2px",padding:"8px 10px",marginBottom:"4px",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>{setSel(d);setModal("detail")}}>
-                <div style={{display:"flex",alignItems:"center",gap:"6px"}}>{batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{cursor:"pointer"}}/>}<div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.product} · <Badge s={d.status} sm/></span></div></div>
+                <div style={{display:"flex",alignItems:"center",gap:"6px"}}>{batchMode&&<input type="checkbox" checked={!!batchSelected[d.id]} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();toggleBatch(d.id)}} style={{cursor:"pointer"}}/>}<div><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.product} · <Badge s={d.status} sm/></span></div></div>
                 <span style={{fontWeight:700}}>{f(remaining(d))}</span>
               </div>)}
             </Section>}
@@ -6216,9 +6236,9 @@ return (
                   {dl.history&&dl.history.length>0&&<div style={{marginBottom:"10px",borderLeft:`2px solid ${T.border}`,paddingLeft:"10px"}}>
                     <div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px",fontFamily:"Bodoni Moda,serif"}}>Activity Trail</div>
                     {dl.history.map((h,hi)=>{
-                      const icon = h.action==="submitted"?"📤":h.action==="approved"?"✅":h.action==="revision_requested"?"✏️":h.action==="unapproved"?"↩":"📋";
-                      const label = h.action==="submitted"?"Content submitted":h.action==="approved"?"Content approved":h.action==="revision_requested"?"Revision requested":h.action==="unapproved"?"Approval undone":"Action";
-                      const color = h.action==="submitted"?T.info:h.action==="approved"?T.ok:h.action==="revision_requested"?T.err:h.action==="unapproved"?T.warn:T.sub;
+                      const icon = h.action==="submitted"?"📤":h.action==="approved"?"✅":h.action==="revision_requested"?"✏️":h.action==="unapproved"?"↩":h.action==="live"?"🟢":h.action==="withdrawn"?"🗑":"📋";
+                      const label = h.action==="submitted"?"Content submitted":h.action==="approved"?"Content approved":h.action==="revision_requested"?"Revision requested":h.action==="unapproved"?"Approval undone":h.action==="live"?"Marked live":h.action==="withdrawn"?"Submission withdrawn":"Action";
+                      const color = h.action==="submitted"?T.info:h.action==="approved"?T.ok:h.action==="revision_requested"?T.err:h.action==="unapproved"?T.warn:h.action==="live"?T.ok:h.action==="withdrawn"?T.sub:T.sub;
                       return <div key={hi} style={{marginBottom:"6px",fontSize:"12px"}}>
                         <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
                           <span>{icon}</span>
@@ -6276,6 +6296,10 @@ return (
                       <Btn v="outline" sm onClick={()=>{const u=deliverableLinkF[dl.id]!==undefined?deliverableLinkF[dl.id]:dl.link; const n=deliverableNoteF[dl.id]!==undefined?deliverableNoteF[dl.id]:(dl.submitNote||""); submitContentForReview(sel,i,u,n);}}>Update</Btn>
                     </div>
                     <Textarea value={deliverableNoteF[dl.id]!==undefined?deliverableNoteF[dl.id]:(dl.submitNote||"")} onChange={e=>setDeliverableNoteF({...deliverableNoteF,[dl.id]:e.target.value})} placeholder="Comment for the manager (optional)" rows={2}/>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:"4px",gap:"8px",flexWrap:"wrap"}}>
+                      <span style={{fontSize:"10px",color:T.faint}}>Submitted by mistake? Withdraw it to correct or remove the request.</span>
+                      <Btn v="danger" sm onClick={()=>setConfirmAction({title:"Withdraw Submission",msg:`Withdraw this ${dl.type} submission? It leaves the manager's review queue and comes back to you to correct or re-submit.`,onConfirm:()=>{withdrawSubmission(sel,i);setConfirmAction(null)}})}>🗑 Withdraw request</Btn>
+                    </div>
                   </div>}
 
                   {/* Manager: Review & approve or request revision */}

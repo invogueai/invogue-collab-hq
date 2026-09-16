@@ -1891,6 +1891,56 @@ export default function InvogueCollabHQ() {
   // POC name for a given influencer — so logistics know who to contact about a shipment.
   const pocNameFor = (infName) => (influencers.find(x=>x.name===infName)?.poc || "").trim();
 
+  // ─── CREATOR IDENTITY: phone/email are the real key, names can collide ───
+  const normPhone = (p) => (p||"").replace(/\D/g,"").slice(-10);
+  const normEmail = (e) => (e||"").trim().toLowerCase();
+  // An existing profile that shares this phone or email (optionally excluding one id)
+  const findDupInfluencer = (phone, email, excludeId) => {
+    const np=normPhone(phone), ne=normEmail(email);
+    return influencers.find(x=>x.id!==excludeId && ((np && normPhone(x.phone)===np) || (ne && normEmail(x.email)===ne)));
+  };
+  // Other profiles that look like the same person as `inf` (share phone or email)
+  const duplicatesOf = (inf) => {
+    if(!inf) return [];
+    const np=normPhone(inf.phone), ne=normEmail(inf.email);
+    return influencers.filter(x=>x.id!==inf.id && ((np&&normPhone(x.phone)===np)||(ne&&normEmail(x.email)===ne)));
+  };
+  const duplicateCount = () => { const seen=new Set(); let n=0; influencers.forEach(x=>{ if(seen.has(x.id))return; const dups=duplicatesOf(x); if(dups.length){ [x,...dups].forEach(d=>seen.add(d.id)); n+=dups.length; } }); return n; };
+
+  // Merge one or more duplicate profiles into a primary: re-point every reference
+  // (deals, army tables, products) from the duplicate name to the primary name,
+  // fill any blank fields on the primary, then delete the duplicates. Admin only.
+  const mergeInfluencers = async (primaryId, dupIds) => {
+    if(role!=="admin") return notify("Only admin can merge profiles","err");
+    const primary = influencers.find(x=>x.id===primaryId);
+    const dups = (Array.isArray(dupIds)?dupIds:[dupIds]).map(id=>influencers.find(x=>x.id===id)).filter(Boolean).filter(x=>x.id!==primaryId);
+    if(!primary||dups.length===0) return notify("Nothing to merge","err");
+    const primaryIsMember = armyMembers.some(m=>m.inf===primary.name);
+    try {
+      // Fill blanks on the primary from the duplicates
+      const fields=[['phone','phone'],['email','email'],['handle','handle'],['profile','profile'],['address','address'],['city','city'],['poc','poc'],['category','category'],['followers','followers'],['bank_account_holder','bankHolder'],['bank_account_number','bankAccount'],['bank_ifsc','bankIfsc'],['pan_number','panNumber'],['upi_id','upiId']];
+      const patch={}, localPatch={};
+      for(const [col,key] of fields){ if(!(primary[key]&&String(primary[key]).trim())){ const src=dups.find(d=>d[key]&&String(d[key]).trim()); if(src){ patch[col]=src[key]; localPatch[key]=src[key]; } } }
+      if(Object.keys(patch).length) await supabase.from('influencers').update(patch).eq('id',primaryId);
+      for(const d of dups){
+        if(d.name!==primary.name){
+          await supabase.from('deals').update({influencer_name:primary.name}).eq('influencer_name',d.name);
+          await supabase.from('creator_products').update({influencer_name:primary.name, influencer_id:primaryId}).eq('influencer_name',d.name);
+          await supabase.from('creator_incentives').update({influencer_name:primary.name}).eq('influencer_name',d.name);
+          await supabase.from('creator_retainers').update({influencer_name:primary.name}).eq('influencer_name',d.name);
+        }
+        const dupMember = armyMembers.find(m=>m.inf===d.name);
+        if(dupMember){ if(primaryIsMember) await supabase.from('creator_army_members').delete().eq('id',dupMember.id); else await supabase.from('creator_army_members').update({influencer_name:primary.name, influencer_id:primaryId}).eq('id',dupMember.id); }
+        await supabase.from('influencers').delete().eq('id',d.id);
+      }
+      // Immediate local update (realtime will also refresh)
+      const dupNames = dups.map(d=>d.name); const dupIdSet = new Set(dups.map(d=>d.id));
+      setInfluencers(prev=>prev.filter(x=>!dupIdSet.has(x.id)).map(x=>x.id===primaryId?{...x,...localPatch}:x));
+      setDeals(prev=>prev.map(dl=>dupNames.includes(dl.inf)?{...dl,inf:primary.name}:dl));
+      notify(`Merged ${dups.length} profile${dups.length===1?"":"s"} into ${primary.name}.`);
+    } catch(e){ console.error("Merge failed:",e); notify("Merge failed: "+(e.message||"error"),"err"); }
+  };
+
   // ─── CREATOR ARMY ───
   const PRODUCT_RECEIVED = ["shipped","delivered_prod","partial_live","live","payment_details_received","invoice_ok","invoice_pending_approval","payment_requested","payment_approved","partial_paid","paid"];
   const reelLive = (d) => (d.dels||[]).some(dl=>!STORY_RE.test(dl.type||"") && dl.st==="live");
@@ -4981,6 +5031,10 @@ return (
               {(role==="negotiator"||role==="admin")&&<Btn v="primary" onClick={()=>setModal("newInfluencer")}>Add Influencer</Btn>}
             </div>
 
+            {role==="admin"&&(()=>{ const dc=duplicateCount(); if(dc===0) return null; return (
+              <div style={{padding:"9px 14px",background:T.warnBg,border:`1px solid ${T.warn}44`,borderRadius:"2px",marginBottom:"14px",fontSize:"12px",color:T.warn,fontWeight:600}}>⚠ {dc} possible duplicate profile{dc===1?"":"s"} detected (same phone/email). Open a creator to review and merge duplicates into it.</div>);
+            })()}
+
             {/* Stat strip */}
             <div style={{display:"flex",borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,marginBottom:"24px",flexWrap:"wrap"}}>
               {[
@@ -5005,7 +5059,7 @@ return (
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:"16px"}}>
               {influencers.filter(inf=>{
                 const q=infSearch.trim().toLowerCase();
-                if(q && !(`${inf.name} ${inf.handle||""} ${inf.poc||""}`.toLowerCase().includes(q))) return false;
+                if(q && !(`${inf.name} ${inf.handle||""} ${inf.poc||""} ${inf.phone||""} ${inf.email||""}`.toLowerCase().includes(q))) return false;
                 if(infFilter==="active" && getInfDeals(inf).filter(d=>!ACTIVE_NOT.includes(d.status)).length===0) return false;
                 return true;
               }).map(inf=>{
@@ -5236,6 +5290,21 @@ return (
                 {[["📱 Phone",inf.phone],["📧 Email",inf.email],["👤 POC",inf.poc],["🔗 Profile",inf.profile],["📍 Address",inf.address],["📅 Added",inf.added]].map(([l,v])=><div key={l} style={{padding:"7px 10px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}><div style={{fontSize:"10px",fontWeight:700,color:T.sub,textTransform:"uppercase"}}>{l}</div><div style={{fontSize:"13px",marginTop:"2px"}}>{v||"—"}</div></div>)}
               </div>
 
+              {/* Possible duplicate profiles (same phone/email) — admin can merge them in */}
+              {(()=>{ const dups=duplicatesOf(inf); if(dups.length===0) return null; return (
+                <div style={{padding:"10px 12px",background:T.warnBg,border:`1px solid ${T.warn}44`,borderRadius:"2px",marginBottom:"14px"}}>
+                  <div style={{fontSize:"11px",fontWeight:800,color:T.warn,textTransform:"uppercase",letterSpacing:".5px",marginBottom:"6px"}}>⚠ {dups.length} possible duplicate profile{dups.length===1?"":"s"} (same phone/email)</div>
+                  {dups.map(dp=>{ const dc=deals.filter(x=>x.inf===dp.name).length; return (
+                    <div key={dp.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px",padding:"5px 0",borderTop:`1px solid ${T.warn}22`,fontSize:"12px",flexWrap:"wrap"}}>
+                      <span><b>{dp.name}</b> <span style={{color:T.sub}}>· {dp.phone||"no phone"} · {dp.email||"no email"} · {dc} collab{dc===1?"":"s"}</span></span>
+                      {role==="admin"
+                        ? <Btn v="outline" sm onClick={()=>setConfirmAction({title:"Merge Profiles",msg:`Merge “${dp.name}” into “${inf.name}”? All of ${dp.name}'s collabs and records move to ${inf.name}, and the duplicate profile is deleted. This can't be undone.`,onConfirm:()=>{mergeInfluencers(inf.id,[dp.id]);setConfirmAction(null)}})}>⇄ Merge into this profile</Btn>
+                        : <span style={{fontSize:"10px",color:T.faint}}>Ask an admin to merge</span>}
+                    </div>);})}
+                  <div style={{fontSize:"10px",color:T.sub,marginTop:"6px"}}>Keep the profile you're viewing as the primary; merging moves everything from the duplicate into it.</div>
+                </div>);
+              })()}
+
               {/* Financial Summary */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"14px"}}>
                 <StatBox l="Total Collabs" v={infDeals.length} c={T.brand}/>
@@ -5342,6 +5411,8 @@ return (
                   if(!validPhone(nInf.phone)) { notify("Phone must be exactly 10 digits","err"); return; }
                   if(nInf.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nInf.email)) { notify("Invalid email format","err"); return; }
                   if(nInf.profile && !validUrl(nInf.profile)) { notify("Invalid profile URL","err"); return; }
+                  const dupe = findDupInfluencer(nInf.phone, nInf.email);
+                  if(dupe) { notify(`A profile with this phone/email already exists: “${dupe.name}”. Open that profile instead of creating a duplicate.`,"err"); return; }
                   const infId = uid();
                   const parsedTags = nInf.tags?nInf.tags.split(",").map(t=>t.trim().toLowerCase()).filter(Boolean):[];
                   supabase.from('influencers').insert({id:infId,name:nInf.name,platform:nInf.platform,handle:nInf.handle,profile:nInf.profile,followers:nInf.followers,category:nInf.category,city:nInf.city,phone:nInf.phone,email:nInf.email,address:nInf.address,poc:nInf.poc,avg_rate:+nInf.avgRate||0,rating:nInf.rating,notes:nInf.notes,tags:parsedTags,bank_account_holder:nInf.bankHolder||null,bank_account_number:nInf.bankAccount||null,bank_ifsc:nInf.bankIfsc||null,pan_number:nInf.panNumber||null,upi_id:nInf.upiId||null,default_payment_terms:nInf.defaultPaymentTerms||'next_15th'}).then(({error})=>{if(error){console.error("Add influencer failed:",error);notify("Failed to save: "+error.message,"err");}});

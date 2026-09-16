@@ -1923,13 +1923,14 @@ export default function InvogueCollabHQ() {
   const isArmyMember = (name) => armyMembers.some(m=>m.inf===name);
 
   const enrollArmyMember = async ({infName, quota, retainer, poc, notes}) => {
-    if(role!=="admin") return notify("Only admin can enrol creators into the Army","err");
-    if(!infName) return notify("Pick a creator","err");
-    if(isArmyMember(infName)) return notify(infName+" is already in the Creator Army","err");
+    if(role!=="admin"){ notify("Only admin can enrol creators into the Army","err"); return false; }
+    if(!infName){ notify("Pick a creator","err"); return false; }
+    if(isArmyMember(infName)){ notify(infName+" is already in the Creator Army","err"); return false; }
     const inf = influencers.find(x=>x.name===infName);
     const {error} = await supabase.from('creator_army_members').insert({influencer_id:inf?.id||null, influencer_name:infName, monthly_quota:+quota||5, monthly_retainer:+retainer||0, poc:poc||inf?.poc||"", notes:notes||"", joined_at:new Date().toISOString().slice(0,10)});
-    if(error){ console.error(error); return notify("Couldn't enrol: "+error.message,"err"); }
+    if(error){ console.error(error); notify("Couldn't enrol: "+error.message,"err"); return false; }
     notify(infName+" added to the Creator Army!");
+    return true;
   };
   const updateArmyMember = async (id, patch) => {
     if(role!=="admin") return notify("Only admin can edit membership","err");
@@ -5143,7 +5144,7 @@ return (
           <Field label="Notes"><Textarea value={armyEnrollF.notes} onChange={e=>setArmyEnrollF({...armyEnrollF,notes:e.target.value})} rows={2} placeholder="Benefits, terms, anything to remember"/></Field>
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"12px"}}>
             <Btn v="outline" onClick={()=>setModal(null)}>Cancel</Btn>
-            <Btn v="primary" onClick={async()=>{await enrollArmyMember(armyEnrollF);setModal(null)}}>Enrol Creator</Btn>
+            <Btn v="primary" onClick={async()=>{const ok=await enrollArmyMember({infName:armyEnrollF.inf,quota:armyEnrollF.quota,retainer:armyEnrollF.retainer,poc:armyEnrollF.poc,notes:armyEnrollF.notes});if(ok)setModal(null)}}>Enrol Creator</Btn>
           </div>
         </Modal>}
 

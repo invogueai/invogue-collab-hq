@@ -122,7 +122,7 @@ async function loadFromSupabase() {
   const campaigns = (campaignsRes.data||[]).map(c => ({
     id:c.id, name:c.name, budget:c.budget, target:c.target_influencers,
     status:c.status, created:c.created_at?.slice(0,10)||'', deadline:c.deadline,
-    brief:c.brief||"", deleted:c.deleted||false,
+    brief:c.brief||"", deleted:c.deleted||false, army:c.army||false,
   }));
 
   const influencers = (influencersRes.data||[]).map(i => ({
@@ -399,6 +399,7 @@ export default function InvogueCollabHQ() {
   const [agencyUploading, setAgencyUploading] = useState(false);
   const [nCamp, setNCamp] = useState(null);
   const [editingCampId, setEditingCampId] = useState(null);
+  const [campKind, setCampKind] = useState("regular"); // regular | army | all
   const [shipF, setShipF] = useState({track:"",carrier:"DTDC",orderId:""});
   const [payF, setPayF] = useState({type:"advance",amount:"",note:""});
   const [invF, setInvF] = useState("");
@@ -613,7 +614,7 @@ export default function InvogueCollabHQ() {
           const mapped = data.map(c => ({
             id:c.id, name:c.name, budget:c.budget, target:c.target_influencers,
             status:c.status, created:c.created_at?.slice(0,10)||'', deadline:c.deadline,
-            brief:c.brief||"", deleted:c.deleted||false,
+            brief:c.brief||"", deleted:c.deleted||false, army:c.army||false,
           }));
           setCampaigns(mapped.filter(c=>!c.deleted));
           setDeletedCampaigns(mapped.filter(c=>c.deleted));
@@ -1542,7 +1543,7 @@ export default function InvogueCollabHQ() {
 
   const openEditCampaign = (c) => {
     if(!(role==="admin"||role==="approver"||role==="finance")) return notify("Only admin / manager / finance can edit campaigns","err");
-    setNCamp({name:c.name, budget:c.budget!=null?String(c.budget):"", target:String(c.target||""), deadline:c.deadline||"", brief:c.brief||"", status:c.status||"active"});
+    setNCamp({name:c.name, budget:c.budget!=null?String(c.budget):"", target:String(c.target||""), deadline:c.deadline||"", brief:c.brief||"", status:c.status||"active", army:!!c.army});
     setEditingCampId(c.id);
     setModal("newCamp");
   };
@@ -1554,11 +1555,11 @@ export default function InvogueCollabHQ() {
 
     // ── EDIT existing campaign ──
     if(editingCampId){
-      const patch = {name:nCamp.name, budget:+nCamp.budget, target_influencers:+nCamp.target, status:nCamp.status||"active", deadline:nCamp.deadline||null, brief:nCamp.brief||null};
+      const patch = {name:nCamp.name, budget:+nCamp.budget, target_influencers:+nCamp.target, status:nCamp.status||"active", deadline:nCamp.deadline||null, brief:nCamp.brief||null, army:!!nCamp.army};
       const {error} = await supabase.from('campaigns').update(patch).eq('id',editingCampId);
       if(error){ console.error("Campaign update failed:",error); return notify("Failed to update campaign: "+error.message,"err"); }
-      setCampaigns(prev=>prev.map(c=>c.id===editingCampId?{...c,name:nCamp.name,budget:+nCamp.budget,target:+nCamp.target,status:nCamp.status||"active",deadline:nCamp.deadline,brief:nCamp.brief}:c));
-      if(selCamp&&selCamp.id===editingCampId) setSelCamp(c=>c?{...c,name:nCamp.name,budget:+nCamp.budget,target:+nCamp.target,status:nCamp.status||"active",deadline:nCamp.deadline,brief:nCamp.brief}:c);
+      setCampaigns(prev=>prev.map(c=>c.id===editingCampId?{...c,name:nCamp.name,budget:+nCamp.budget,target:+nCamp.target,status:nCamp.status||"active",deadline:nCamp.deadline,brief:nCamp.brief,army:!!nCamp.army}:c));
+      if(selCamp&&selCamp.id===editingCampId) setSelCamp(c=>c?{...c,name:nCamp.name,budget:+nCamp.budget,target:+nCamp.target,status:nCamp.status||"active",deadline:nCamp.deadline,brief:nCamp.brief,army:!!nCamp.army}:c);
       setModal(null); setNCamp(null); setEditingCampId(null);
       return notify("Campaign updated!");
     }
@@ -1572,7 +1573,8 @@ export default function InvogueCollabHQ() {
         target_influencers:+nCamp.target,
         status:'active',
         deadline:nCamp.deadline||null,
-        brief:nCamp.brief||null
+        brief:nCamp.brief||null,
+        army:!!nCamp.army
       });
       if(campErr) {
         console.error("Campaign insert failed:",campErr);
@@ -1590,7 +1592,8 @@ export default function InvogueCollabHQ() {
       status:"active",
       created:new Date().toISOString().slice(0,10),
       deadline:nCamp.deadline,
-      brief:nCamp.brief
+      brief:nCamp.brief,
+      army:!!nCamp.army
     }]);
     setModal(null);
     setNCamp(null);
@@ -2029,7 +2032,8 @@ export default function InvogueCollabHQ() {
     const inf = influencers.find(x=>x.name===member.inf);
     const addr = inf?.address;
     setEditingDealId(null);
-    setNDeal({inf:member.inf, email:inf?.email||"", platform:inf?.platform||"Instagram", followers:inf?.followers||"", products:[], usage:"6 months", deadline:"", profile:inf?.profile||"", phone:inf?.phone||"", address:(typeof addr==='object'&&addr)?addr:{street:typeof addr==='string'?addr:"",city:"",state:"",pincode:""}, paymentTerms:"next_15th", cid:campaigns[0]?.id||"c1", dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}], creatorArmy:true, armyMonth:month});
+    setNDeal({inf:member.inf, email:inf?.email||"", platform:inf?.platform||"Instagram", followers:inf?.followers||"", products:[], usage:"6 months", deadline:"", profile:inf?.profile||"", phone:inf?.phone||"", address:(typeof addr==='object'&&addr)?addr:{street:typeof addr==='string'?addr:"",city:"",state:"",pincode:""}, paymentTerms:"next_15th", cid:(campaigns.find(c=>c.army)?.id)||"", dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}], creatorArmy:true, armyMonth:month});
+    if(!campaigns.some(c=>c.army)) notify("Tip: create a Creator Army campaign first (Campaigns → New Campaign → tick “Creator Army campaign”).","warn");
     setFormErrors({});
     setArmyProfile(null);
     setModal("newDeal");
@@ -3694,7 +3698,7 @@ return (
           </Section>}
 
           {/* CAMPAIGN BUDGETS */}
-          <Section title="Campaign Budgets" action={<Btn v="gold" sm onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active"});setModal("newCamp")}}>+ New Campaign</Btn>}>
+          <Section title="Campaign Budgets" action={<Btn v="gold" sm onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:false});setModal("newCamp")}}>+ New Campaign</Btn>}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"14px"}}>
               {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"18px",cursor:"pointer"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"10px"}}><span style={{fontWeight:600,fontSize:"14px"}}>{c.name}</span><span style={{fontFamily:T.display,fontSize:"16px",fontWeight:600,color:pct>90?T.err:T.text}}>{pct}%</span></div>
@@ -3950,7 +3954,7 @@ return (
         return <>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
             <div><span style={{fontSize:"20px",fontWeight:800}}>👤 My Dashboard</span><span style={{fontSize:"13px",color:T.sub,marginLeft:"8px"}}>Your collaborations at a glance</span></div>
-            <Btn v="gold" sm onClick={()=>{setEditingDealId(null);setNDeal({inf:"",platform:"Instagram",followers:"",product:"",amount:"",usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>+ New Deal</Btn>
+            <Btn v="gold" sm onClick={()=>{setEditingDealId(null);setNDeal({inf:"",platform:"Instagram",followers:"",product:"",amount:"",usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},cid:(campaigns.find(c=>!c.army)?.id)||campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>+ New Deal</Btn>
           </div>
           {(()=>{
             const myName=loggedIn?.name||""; const cap=userMonthlyCap(myName); const used=userCommittedMonth(myName,currentMonth()); const rem=cap-used; const pct=cap>0?Math.round(used/cap*100):0; const over=used>cap;
@@ -5622,7 +5626,7 @@ return (
               <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{filtered.length===deals.length?`${deals.length} collaborations`:`${filtered.length} of ${deals.length} collaborations`}</div>
               <div style={{fontFamily:T.display,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>All Collabs</div>
             </div>
-            {(role==="negotiator"||role==="admin")&&<Btn v="primary" onClick={()=>{setEditingDealId(null);setNDeal({inf:"",email:"",platform:"Instagram",followers:"",products:[],usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},paymentTerms:"next_15th",cid:campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>New Collab</Btn>}
+            {(role==="negotiator"||role==="admin")&&<Btn v="primary" onClick={()=>{setEditingDealId(null);setNDeal({inf:"",email:"",platform:"Instagram",followers:"",products:[],usage:"6 months",deadline:"",profile:"",phone:"",address:{street:"",city:"",state:"",pincode:""},paymentTerms:"next_15th",cid:(campaigns.find(c=>!c.army)?.id)||campaigns[0]?.id||"c1",dels:[{id:uid(),type:"Reel",desc:"",st:"pending",link:""}]});setModal("newDeal")}}>New Collab</Btn>}
           </div>
 
           {/* Campaign filter — counts reflect the active POC/advanced filters AND the selected status tab */}
@@ -5768,15 +5772,18 @@ return (
               <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{campaigns.filter(c=>c.status==="active").length} active · {f(campaigns.reduce((s,c)=>s+campCommitted(c.id),0))} committed</div>
               <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Campaigns</div>
             </div>
-            {(role==="approver"||role==="finance"||role==="admin")&&<Btn v="gold" onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active"});setModal("newCamp")}}>+ New Campaign</Btn>}
+            {(role==="approver"||role==="finance"||role==="admin")&&<Btn v="gold" onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:campKind==="army"});setModal("newCamp")}}>+ New Campaign</Btn>}
+          </div>
+          <div style={{display:"flex",gap:"7px",marginBottom:"16px"}}>
+            {[{k:"regular",l:"Regular"},{k:"army",l:"🎖 Creator Army"},{k:"all",l:"All"}].map(t=><button key={t.k} onClick={()=>setCampKind(t.k)} style={{padding:"6px 12px",border:`1px solid ${campKind===t.k?T.brand:T.border}`,borderRadius:"2px",background:campKind===t.k?T.brand:T.surface,color:campKind===t.k?"#fff":T.sub,fontSize:"10px",fontWeight:700,letterSpacing:"0.5px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui}}>{t.l} ({campaigns.filter(c=>t.k==="all"?true:(t.k==="army"?c.army:!c.army)).length})</button>)}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:"18px"}}>
-            {campaigns.map(c=>{
+            {campaigns.filter(c=>campKind==="all"?true:(campKind==="army"?c.army:!c.army)).map(c=>{
               const comm=campCommitted(c.id),pd=campPaid(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0,lk=campLocked(c.id);
               const over=comm>c.budget&&c.budget>0;
               return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${over?"#E8C9C6":T.border}`,borderTop:over?`2px solid ${T.err}`:undefined,borderRadius:"2px",padding:"22px",cursor:"pointer"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
-                  <div style={{fontFamily:DISPLAY,fontSize:"20px",fontWeight:600,lineHeight:1.15}}>{c.name}</div>
+                  <div style={{fontFamily:DISPLAY,fontSize:"20px",fontWeight:600,lineHeight:1.15}}>{c.army&&<span style={{fontSize:"12px"}}>🎖 </span>}{c.name}</div>
                   <span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,padding:"3px 8px",borderRadius:"2px",whiteSpace:"nowrap",color:c.status==="active"?T.ok:c.status==="planning"?T.warn:T.sub,background:c.status==="active"?T.okBg:c.status==="planning"?T.warnBg:"#F2EEE4"}}>{c.status}</span>
                 </div>
                 <div style={{fontSize:"10px",color:c.deadline?T.sub:T.faint,marginBottom:"18px",fontStyle:c.deadline?"normal":"italic",fontFamily:c.deadline?T.ui:DISPLAY}}>{c.deadline?`Deadline · ${c.deadline}`:"No deadline set"}</div>
@@ -6035,7 +6042,7 @@ return (
         {nDeal&&<>
           {nDeal.creatorArmy&&<div style={{padding:"8px 12px",background:T.goldSoft,border:`1px solid ${T.gold}44`,borderRadius:"2px",marginBottom:"12px",fontSize:"12px",color:T.brand,fontWeight:600}}>🎖 Creator Army collab · {nDeal.armyMonth}</div>}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 10px"}}>
-            <Field label="Campaign *"><Sel value={nDeal.cid} onChange={e=>setNDeal({...nDeal,cid:e.target.value})} options={campaigns.map(c=>({v:c.id,l:c.name}))}/></Field>
+            <Field label={nDeal.creatorArmy?"Army Campaign *":"Campaign *"}><Sel value={nDeal.cid} onChange={e=>setNDeal({...nDeal,cid:e.target.value})} options={campaigns.filter(c=>!!c.army===!!nDeal.creatorArmy).map(c=>({v:c.id,l:c.name}))}/></Field>
             <Field label="Influencer *"><Inp value={nDeal.inf} onChange={e=>setNDeal({...nDeal,inf:e.target.value})} placeholder="Priya Sharma" error={formErrors.inf}/></Field>
             <Field label="Influencer Email" required><Inp value={nDeal.email} onChange={e=>setNDeal({...nDeal,email:e.target.value})} placeholder="influencer@gmail.com" error={formErrors.email}/></Field>
             <Field label="Profile" required><Inp value={nDeal.profile} onChange={e=>setNDeal({...nDeal,profile:e.target.value})} placeholder="instagram.com/handle" error={formErrors.profile}/></Field>
@@ -6125,6 +6132,10 @@ return (
           <Field label="Status"><Sel value={nCamp.status||"active"} onChange={e=>setNCamp({...nCamp,status:e.target.value})} options={[{v:"active",l:"Active"},{v:"planning",l:"Planning"},{v:"completed",l:"Completed"}]}/></Field>
           <Field label="Deadline"><Inp value={nCamp.deadline} onChange={e=>setNCamp({...nCamp,deadline:e.target.value})} type="date"/></Field>
           <Field label="Campaign Brief"><Textarea value={nCamp.brief} onChange={e=>setNCamp({...nCamp,brief:e.target.value})} placeholder="Describe the campaign objectives, target audience, key messages..." rows={4}/></Field>
+          <label style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",background:nCamp.army?T.goldSoft:"transparent",border:`1px solid ${nCamp.army?T.gold:T.border}`,borderRadius:"2px",cursor:"pointer",fontSize:"13px",marginTop:"4px"}}>
+            <input type="checkbox" checked={!!nCamp.army} onChange={e=>setNCamp({...nCamp,army:e.target.checked})} style={{cursor:"pointer"}}/>
+            <span>🎖 <b>Creator Army campaign</b> — used only for Creator Army monthly collabs</span>
+          </label>
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"12px"}}><Btn v="outline" onClick={()=>{setModal(null);setEditingCampId(null);setNCamp(null)}}>Cancel</Btn><Btn v="gold" onClick={createCampaign}>{editingCampId?"Save Changes":"Create"}</Btn></div>
         </>}
       </Modal>

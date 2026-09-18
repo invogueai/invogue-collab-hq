@@ -1976,7 +1976,7 @@ export default function InvogueCollabHQ() {
   const isArmyMember = (name) => armyMembers.some(m=>m.inf===name);
 
   const enrollArmyMember = async ({infName, quota, retainer, poc, notes}) => {
-    if(role!=="admin"){ notify("Only admin can enrol creators into the Army","err"); return false; }
+    if(!(role==="admin"||role==="negotiator")){ notify("You can't enrol creators into the Army","err"); return false; }
     if(!infName){ notify("Pick a creator","err"); return false; }
     if(isArmyMember(infName)){ notify(infName+" is already in the Creator Army","err"); return false; }
     const inf = influencers.find(x=>x.name===infName);
@@ -2771,6 +2771,31 @@ export default function InvogueCollabHQ() {
     setPayF({type:"advance",amount:"",note:""});
     setModal("detail");
     notify(`Payment of ${f(amt)} recorded!`);
+  };
+
+  // Bulk mark selected collabs as fully paid (records a final payment for each remaining balance).
+  const bulkMarkPaid = async () => {
+    if(role!=="finance"&&role!=="admin") return notify("Only Finance or Admin can record payments","err");
+    const selected = deals.filter(d=>batchSelected[d.id]);
+    const payable = selected.filter(d=>remaining(d)>0 && !["pending","renegotiate","rejected","dropped","drop_requested","disputed","paid"].includes(d.status));
+    if(payable.length===0) return notify("None of the selected collabs are payable.","err");
+    const ts = new Date().toISOString();
+    const userName = loggedIn?.name||"You (Finance)";
+    let done=0;
+    for(const d of payable){
+      const amt = remaining(d);
+      const payId = uid();
+      const {error:pe} = await supabase.from('payments').insert({id:payId,deal_id:d.id,type:'final',amount:amt,note:'Bulk marked paid',processed_by:userName,created_at:ts});
+      if(pe){ console.error("Bulk pay insert failed for "+d.id,pe); continue; }
+      await supabase.from('deals').update({status:'paid'}).eq('id',d.id);
+      const newPays=[...(d.pays||[]),{id:payId,type:'final',amount:amt,date:ts.slice(0,10),note:'Bulk marked paid'}];
+      upDeal(d.id,{pays:newPays,status:'paid'});
+      addLog(d.id,userName,'Final payment (bulk)',f(amt));
+      done++;
+    }
+    setBatchSelected({});
+    const skipped = selected.length - payable.length;
+    notify(`Marked ${done} collab${done===1?"":"s"} as paid${skipped?` · ${skipped} skipped (not payable)`:""}.`);
   };
 
   const sendForPayment = async (deal, panNumber, panName) => {
@@ -4391,6 +4416,7 @@ return (
             <div style={{display:"flex",gap:"8px"}}>
               {batchMode&&<Btn v="ok" sm onClick={exportBatchCSV}>⬇ Export {Object.values(batchSelected).filter(Boolean).length} · Bank + Complete</Btn>}
               {batchMode&&<Btn v="primary" sm onClick={bulkGenerateInvoices}>Generate Invoices ({Object.values(batchSelected).filter(Boolean).length})</Btn>}
+              {batchMode&&(role==="finance"||role==="admin")&&<Btn v="gold" sm onClick={()=>{const n=Object.values(batchSelected).filter(Boolean).length;if(n===0)return notify("Select collabs first","err");setConfirmAction({title:"Mark as Paid",msg:`Mark ${n} selected collab${n===1?"":"s"} as fully paid? A final payment for each remaining balance will be recorded.`,onConfirm:()=>{bulkMarkPaid();setConfirmAction(null)}})}}>✓ Mark {Object.values(batchSelected).filter(Boolean).length} Paid</Btn>}
               <Btn v={batchMode?"danger":"gold"} sm onClick={()=>{setBatchMode(!batchMode);if(batchMode)setBatchSelected({})}}>{batchMode?"Exit Batch":"Batch Export"}</Btn>
             </div>
           </div>
@@ -5102,7 +5128,7 @@ return (
           const fillPct = targetThisMonth>0?Math.round(completedThisMonth/targetThisMonth*100):0;
           const retainersDue = active.reduce((s,m)=>s+(m.retainer||0),0);
           const pendingRewards = creatorIncentives.filter(i=>i.status!=="paid");
-          const canEnrol = role==="admin";
+          const canEnrol = role==="admin"||role==="negotiator";
           const MemberCard = ({m})=>{ const s=stat(m); const pct=s.quota>0?Math.round(s.completedThisMonth/s.quota*100):0; return (
             <div onClick={()=>setArmyProfile(m)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"16px",cursor:"pointer"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>

@@ -3659,6 +3659,22 @@ return (
             </div>
           </Section>}
 
+          {/* DROP REQUESTS */}
+          {(()=>{const dropRequests=deals.filter(d=>d.status==="drop_requested");return dropRequests.length>0&&<Section title={`Drop Requests (${dropRequests.length})`} icon="🚫" action={<span style={{fontSize:"11px",color:T.warn,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}}>Needs Decision</span>}>
+            {dropRequests.map(d=><div key={d.id} style={{background:T.errBg,border:`1px solid ${T.err}33`,borderLeft:`3px solid ${T.err}`,borderRadius:"2px",padding:"11px 13px",marginBottom:"6px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"10px",flexWrap:"wrap"}}>
+                <div onClick={()=>{setSel(d);setModal("detail")}} style={{cursor:"pointer",flex:1}}>
+                  <div style={{fontSize:"13px",fontWeight:700}}>{d.inf} <span style={{fontSize:"11px",fontWeight:400,color:T.sub}}>· {fAmt(d.amount)} · by {d.by}</span></div>
+                  {(d.dropReason||d.renegotiationNote)&&<div style={{fontSize:"12px",color:T.sub,marginTop:"2px"}}>Reason: {d.dropReason||d.renegotiationNote}</div>}
+                </div>
+                <div style={{display:"flex",gap:"6px"}}>
+                  <Btn v="ok" sm onClick={()=>approveDropRequest(d)}>✓ Approve Drop</Btn>
+                  <Btn v="outline" sm onClick={()=>rejectDropRequest(d)}>✕ Reject</Btn>
+                </div>
+              </div>
+            </div>)}
+          </Section>;})()}
+
           {/* DISPUTES */}
           {disputed.length>0&&<Section title="Disputes" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}}>{disputed.length} open</span>}>
             <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
@@ -4394,7 +4410,8 @@ return (
           bws.addRow(["PYMT_PROD_TYPE_CODE","PYMT_MODE","DEBIT_ACC_NO","BNF_NAME","BENE_ACC_NO","BENE_IFSC","AMOUNT","DEBIT_NARR","CREDIT_NARR","MOBILE_NUM","EMAIL_ID","REMARK","PYMT_DATE","REF_NO","ADDL_INFO1","ADDL_INFO2","ADDL_INFO3","ADDL_INFO4","ADDL_INFO5"]);
           const bankRows = rowsData.filter(r=>r.account && r.ifsc);
           bankRows.forEach(r=>{
-            const br = bws.addRow(["PAB_VENDOR","NEFT",DEBIT_ACC_NO, r.beneficiary, r.account, r.ifsc, r.netPay, "","","","","", dateStr, "","","","","",""]);
+            const pymtMode = (r.ifsc||"").toUpperCase().startsWith("ICIC") ? "FT" : "NEFT"; // same-bank (ICICI) transfers use FT
+            const br = bws.addRow(["PAB_VENDOR",pymtMode,DEBIT_ACC_NO, r.beneficiary, r.account, r.ifsc, r.netPay, "","","","","", dateStr, "","","","","",""]);
             [3,5,6].forEach(ci=>{ br.getCell(ci).numFmt='@'; }); // debit acc, bene acc, ifsc as text
           });
           const bankBuf = await bwb.xlsx.writeBuffer();

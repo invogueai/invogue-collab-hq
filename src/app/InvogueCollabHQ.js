@@ -2297,6 +2297,7 @@ export default function InvogueCollabHQ() {
   };
 
   const skipPickup = (deal, histIdx, note) => {
+    if(role!=="admin") return notify("Only an admin can waive a pickup","err");
     const userName = loggedIn?.name||"You";
     const ts = new Date().toISOString();
     const shipHistory = (deal.shipHistory||[]).map((h,i)=>i===histIdx?{...h,status:"pickup_skipped",skippedBy:userName,skippedAt:ts,skipNote:note||"Low-value product / brand decision"}:h);
@@ -3162,6 +3163,19 @@ ${bodies}</body></html>`);
     notify(`Generated ${eligible.length} invoice${eligible.length>1?"s":""}${skipped?` · ${skipped} skipped`:""}`);
   };
 
+  // ── Product-recovery guard ──────────────────────────────────────────────
+  // Once a product has physically gone out to the creator, a collab cannot be
+  // finalized as "dropped" until that product comes back (picked up / returned)
+  // or logistics explicitly waives the pickup. Prevents silently writing off stock.
+  // Note: this gates only the FINAL drop (admin direct-drop + manager approval);
+  // a negotiator can still raise the drop request while a pickup is arranged.
+  const productDispatched = (d) =>
+    !!d.ship || (d.shipHistory||[]).some(h=>h.type==="reship"&&["re_dispatched","re_delivered"].includes(h.status));
+  const pickupResolved = (d) =>
+    (d.shipHistory||[]).some(h=>h.type==="pickup"&&["product_returned","pickup_skipped"].includes(h.status));
+  const productWithCreator = (d) => productDispatched(d) && !pickupResolved(d);
+  const DROP_BLOCK_MSG = "Product is still with the creator. Arrange a pickup and mark it returned (or skip the pickup) before the drop can be finalized.";
+
   const dropCollab = (d, reason) => {
     if(!reason || !reason.trim()) return notify("Drop reason is mandatory","err");
     const totalPaidAmount = totalPaid(d);
@@ -3169,7 +3183,8 @@ ${bodies}</body></html>`);
     const userName = loggedIn?.name||"You";
     const ts = new Date().toISOString();
     if(role==="admin") {
-      // Admin can drop directly
+      // Admin can drop directly — but not while the product is still out with the creator
+      if(productWithCreator(d)) return notify(DROP_BLOCK_MSG,"err");
       supabase.from('deals').update({status:'dropped'}).eq('id',d.id).then(({error})=>{if(error) console.error("Drop collab failed:",error);});
       upDeal(d.id,{status:"dropped",dropReason:reason});
       addLog(d.id,userName,"Collab dropped (admin)",`Reason: ${reason}`);
@@ -3188,6 +3203,7 @@ ${bodies}</body></html>`);
 
   const approveDropRequest = (d) => {
     if(role!=="approver"&&role!=="admin") return notify("Only Manager or Admin can approve drop requests","err");
+    if(productWithCreator(d)) return notify(DROP_BLOCK_MSG,"err");
     const userName = loggedIn?.name||"Manager";
     const ts = new Date().toISOString();
     supabase.from('deals').update({status:'dropped'}).eq('id',d.id).then(({error})=>{if(error) console.error("Drop approval failed:",error);});
@@ -3666,9 +3682,10 @@ return (
                 <div onClick={()=>{setSel(d);setModal("detail")}} style={{cursor:"pointer",flex:1}}>
                   <div style={{fontSize:"13px",fontWeight:700}}>{d.inf} <span style={{fontSize:"11px",fontWeight:400,color:T.sub}}>· {fAmt(d.amount)} · by {d.by}</span></div>
                   {(d.dropReason||d.renegotiationNote)&&<div style={{fontSize:"12px",color:T.sub,marginTop:"2px"}}>Reason: {d.dropReason||d.renegotiationNote}</div>}
+                  {productWithCreator(d)&&<div style={{fontSize:"11px",color:T.err,marginTop:"4px",fontWeight:600}}>⚠ Product still with creator — arrange pickup before approving</div>}
                 </div>
                 <div style={{display:"flex",gap:"6px"}}>
-                  <Btn v="ok" sm onClick={()=>approveDropRequest(d)}>✓ Approve Drop</Btn>
+                  <Btn v="ok" sm disabled={productWithCreator(d)} onClick={()=>approveDropRequest(d)}>✓ Approve Drop</Btn>
                   <Btn v="outline" sm onClick={()=>rejectDropRequest(d)}>✕ Reject</Btn>
                 </div>
               </div>
@@ -4198,9 +4215,10 @@ return (
                   <div style={{fontWeight:700,fontSize:"14px"}}>{d.inf} <span style={{color:T.sub,fontWeight:400}}>· {d.platform}</span></div>
                   <div style={{fontSize:"11px",color:T.sub,marginTop:"1px"}}>{d.product} · {fAmt(d.amount)} · by {d.by}</div>
                   {(d.dropReason||d.renegotiation_note)&&<div style={{fontSize:"12px",color:T.err,marginTop:"4px",padding:"4px 8px",background:"rgba(180,35,24,.08)",borderRadius:"2px"}}>Reason: {d.dropReason||d.renegotiation_note}</div>}
+                  {productWithCreator(d)&&<div style={{fontSize:"11px",color:T.err,marginTop:"4px",fontWeight:600}}>⚠ Product still with creator — arrange pickup before approving</div>}
                 </div>
                 <div style={{display:"flex",gap:"6px"}}>
-                  <Btn v="ok" sm onClick={()=>approveDropRequest(d)}>✓ Approve Drop</Btn>
+                  <Btn v="ok" sm disabled={productWithCreator(d)} onClick={()=>approveDropRequest(d)}>✓ Approve Drop</Btn>
                   <Btn v="outline" sm onClick={()=>rejectDropRequest(d)}>✕ Reject</Btn>
                 </div>
               </div>
@@ -7052,7 +7070,7 @@ return (
           </div>
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end"}}>
             <Btn v="outline" onClick={()=>setModal("detail")}>Cancel</Btn>
-            <Btn v="ghost" sm onClick={()=>{const sh=[...(sel.shipHistory||[]),{type:"pickup",reason:pickupF.reason,note:pickupF.note,status:"pickup_skipped",skippedBy:loggedIn?.name||"You",skippedAt:new Date().toISOString(),skipNote:"No pickup needed"}];supabase.from('deals').update({ship_history:sh}).eq('id',sel.id);upDeal(sel.id,{shipHistory:sh});addLog(sel.id,loggedIn?.name||"You","Pickup skipped","No pickup needed");setSel(prev=>prev?{...prev,shipHistory:sh}:null);setModal("detail");notify("Marked as no pickup needed")}}>Skip — No Pickup Needed</Btn>
+            {role==="admin"&&<Btn v="ghost" sm onClick={()=>{if(role!=="admin"){notify("Only an admin can waive a pickup","err");return;}const sh=[...(sel.shipHistory||[]),{type:"pickup",reason:pickupF.reason,note:pickupF.note,status:"pickup_skipped",skippedBy:loggedIn?.name||"You",skippedAt:new Date().toISOString(),skipNote:"No pickup needed (admin waiver)"}];supabase.from('deals').update({ship_history:sh}).eq('id',sel.id);upDeal(sel.id,{shipHistory:sh});addLog(sel.id,loggedIn?.name||"You","Pickup skipped (admin waiver)","No pickup needed");setSel(prev=>prev?{...prev,shipHistory:sh}:null);setModal("detail");notify("Marked as no pickup needed")}}>Skip — No Pickup Needed</Btn>}
             <Btn v="gold" onClick={()=>requestPickup(sel,pickupF.reason,pickupF.note)}>🔄 Send to Logistics</Btn>
           </div>
         </>}

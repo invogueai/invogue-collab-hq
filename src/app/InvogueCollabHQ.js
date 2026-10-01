@@ -123,6 +123,8 @@ async function loadFromSupabase() {
     id:c.id, name:c.name, budget:c.budget, target:c.target_influencers,
     status:c.status, created:c.created_at?.slice(0,10)||'', deadline:c.deadline,
     brief:c.brief||"", deleted:c.deleted||false, army:c.army||false,
+    agency:c.agency||false, agencyName:c.agency_name||"", agencyPayout:c.agency_payout||0,
+    agencyPaid:c.agency_paid||false, agencyPaidAt:c.agency_paid_at||null, agencyPaidBy:c.agency_paid_by||"",
   }));
 
   const influencers = (influencersRes.data||[]).map(i => ({
@@ -615,6 +617,8 @@ export default function InvogueCollabHQ() {
             id:c.id, name:c.name, budget:c.budget, target:c.target_influencers,
             status:c.status, created:c.created_at?.slice(0,10)||'', deadline:c.deadline,
             brief:c.brief||"", deleted:c.deleted||false, army:c.army||false,
+            agency:c.agency||false, agencyName:c.agency_name||"", agencyPayout:c.agency_payout||0,
+            agencyPaid:c.agency_paid||false, agencyPaidAt:c.agency_paid_at||null, agencyPaidBy:c.agency_paid_by||"",
           }));
           setCampaigns(mapped.filter(c=>!c.deleted));
           setDeletedCampaigns(mapped.filter(c=>c.deleted));
@@ -1013,6 +1017,8 @@ export default function InvogueCollabHQ() {
     return null;
   };
   const isPaymentEligible = (deal) => {
+    // Agency-managed collabs are paid as a lump sum to the agency at campaign level.
+    if(isAgencyDeal(deal)) return false;
     // Barter collabs (₹0) have no commercials — they never enter the payment flow.
     if(!(deal?.amount>0)) return false;
     const dels = deal?.dels || [];
@@ -1022,11 +1028,26 @@ export default function InvogueCollabHQ() {
     return check.every(d=>d.st==="live");
   };
   const getCamp = id => campaigns.find(c=>c.id===id);
+  // Agency-managed: a collab inherits "agency" from its campaign. These skip the
+  // confirmation email + acknowledgement and the per-creator payment flow entirely.
+  const isAgencyDeal = (d) => !!getCamp(d?.cid)?.agency;
+  const agencyNameFor = (d) => getCamp(d?.cid)?.agencyName || "the agency";
   const campCommitted = cid => deals.filter(d=>d.cid===cid&&!["rejected","pending","renegotiate","dropped"].includes(d.status)).reduce((s,d)=>s+d.amount,0);
   const campPaid = cid => deals.filter(d=>d.cid===cid).reduce((s,d)=>s+totalPaid(d),0);
   const campDeals = cid => deals.filter(d=>d.cid===cid);
   const campLocked = cid => deals.filter(d=>d.cid===cid&&!["rejected","pending","renegotiate","dropped"].includes(d.status)).length;
   const openCampDetail = c => { setSelCamp(c); setModal("campDetail"); };
+  const markAgencyPaid = async (camp) => {
+    if(role!=="finance"&&role!=="admin") return notify("Only Finance or Admin can mark the agency paid","err");
+    if(!(camp.agencyPayout>0)) return notify("Set the agency payout amount first (Edit Campaign).","err");
+    const ts=new Date().toISOString(); const userName=loggedIn?.name||"Finance";
+    const {error}=await supabase.from('campaigns').update({agency_paid:true,agency_paid_at:ts,agency_paid_by:userName}).eq('id',camp.id);
+    if(error){console.error("Mark agency paid failed:",error);return notify("Couldn't save: "+error.message,"err");}
+    const patch={agencyPaid:true,agencyPaidAt:ts,agencyPaidBy:userName};
+    setCampaigns(prev=>prev.map(c=>c.id===camp.id?{...c,...patch}:c));
+    setSelCamp(c=>c&&c.id===camp.id?{...c,...patch}:c);
+    notify("Agency marked as paid");
+  };
 
   // ── Per-member monthly budget (cap defaults to ₹50k; counts a creator's locked, non-barter collabs in a calendar month) ──
   const monthOf = (dateStr) => (dateStr||"").slice(0,7);            // "YYYY-MM"
@@ -1298,10 +1319,11 @@ export default function InvogueCollabHQ() {
     setFormErrors({});
     const errors = {};
 
+    const dealIsAgency = !!getCamp(nDeal.cid)?.agency;
     if(!nDeal.inf) errors.inf = "Influencer name is required";
     if(!nDeal.profile) errors.profile = "Influencer profile is mandatory";
     const hasProduct = (nDeal.products && nDeal.products.some(p=>p.name)) || nDeal.product;
-    if(!nDeal.amount) errors.amount = "Amount is required";
+    if(!dealIsAgency && !nDeal.amount) errors.amount = "Amount is required";
     if(!nDeal.deadline) errors.deadline = "Content deadline is required";
     if(!hasProduct) errors.products = "At least one product is required";
     if(!nDeal.email) errors.email = "Email is required";
@@ -1457,10 +1479,11 @@ export default function InvogueCollabHQ() {
     if(submittingDealRef.current) return;
     setFormErrors({});
     const errors = {};
+    const dealIsAgency = !!getCamp(nDeal.cid)?.agency;
     if(!nDeal.inf) errors.inf = "Influencer name is required";
     if(!nDeal.profile) errors.profile = "Influencer profile is mandatory";
     const hasProduct = (nDeal.products && nDeal.products.some(p=>p.name)) || nDeal.product;
-    if(!nDeal.amount) errors.amount = "Amount is required";
+    if(!dealIsAgency && !nDeal.amount) errors.amount = "Amount is required";
     if(!nDeal.deadline) errors.deadline = "Content deadline is required";
     if(!hasProduct) errors.products = "At least one product is required";
     if(!nDeal.email) errors.email = "Email is required";
@@ -1543,7 +1566,7 @@ export default function InvogueCollabHQ() {
 
   const openEditCampaign = (c) => {
     if(!(role==="admin"||role==="approver"||role==="finance")) return notify("Only admin / manager / finance can edit campaigns","err");
-    setNCamp({name:c.name, budget:c.budget!=null?String(c.budget):"", target:String(c.target||""), deadline:c.deadline||"", brief:c.brief||"", status:c.status||"active", army:!!c.army});
+    setNCamp({name:c.name, budget:c.budget!=null?String(c.budget):"", target:String(c.target||""), deadline:c.deadline||"", brief:c.brief||"", status:c.status||"active", army:!!c.army, agency:!!c.agency, agencyName:c.agencyName||"", agencyPayout:c.agencyPayout!=null?String(c.agencyPayout):""});
     setEditingCampId(c.id);
     setModal("newCamp");
   };
@@ -1552,14 +1575,17 @@ export default function InvogueCollabHQ() {
     if(!nCamp.name||!nCamp.target) return notify("Campaign name and target are required","err");
     if(+nCamp.budget < 0) return notify("Budget can't be negative","err");  // 0 = no campaign cap (budgets are per-member)
     if(+nCamp.target <= 0 || !Number.isInteger(+nCamp.target)) return notify("Target must be a positive whole number","err");
+    if(nCamp.agency && !(nCamp.agencyName||"").trim()) return notify("Agency name is required for an agency-managed campaign","err");
 
     // ── EDIT existing campaign ──
     if(editingCampId){
-      const patch = {name:nCamp.name, budget:+nCamp.budget, target_influencers:+nCamp.target, status:nCamp.status||"active", deadline:nCamp.deadline||null, brief:nCamp.brief||null, army:!!nCamp.army};
+      const agency=!!nCamp.agency, army=agency?false:!!nCamp.army;
+      const patch = {name:nCamp.name, budget:+nCamp.budget, target_influencers:+nCamp.target, status:nCamp.status||"active", deadline:nCamp.deadline||null, brief:nCamp.brief||null, army, agency, agency_name:agency?(nCamp.agencyName||null):null, agency_payout:agency?(+nCamp.agencyPayout||0):0};
       const {error} = await supabase.from('campaigns').update(patch).eq('id',editingCampId);
       if(error){ console.error("Campaign update failed:",error); return notify("Failed to update campaign: "+error.message,"err"); }
-      setCampaigns(prev=>prev.map(c=>c.id===editingCampId?{...c,name:nCamp.name,budget:+nCamp.budget,target:+nCamp.target,status:nCamp.status||"active",deadline:nCamp.deadline,brief:nCamp.brief,army:!!nCamp.army}:c));
-      if(selCamp&&selCamp.id===editingCampId) setSelCamp(c=>c?{...c,name:nCamp.name,budget:+nCamp.budget,target:+nCamp.target,status:nCamp.status||"active",deadline:nCamp.deadline,brief:nCamp.brief,army:!!nCamp.army}:c);
+      const localPatch={name:nCamp.name,budget:+nCamp.budget,target:+nCamp.target,status:nCamp.status||"active",deadline:nCamp.deadline,brief:nCamp.brief,army,agency,agencyName:agency?(nCamp.agencyName||""):"",agencyPayout:agency?(+nCamp.agencyPayout||0):0};
+      setCampaigns(prev=>prev.map(c=>c.id===editingCampId?{...c,...localPatch}:c));
+      if(selCamp&&selCamp.id===editingCampId) setSelCamp(c=>c?{...c,...localPatch}:c);
       setModal(null); setNCamp(null); setEditingCampId(null);
       return notify("Campaign updated!");
     }
@@ -1574,7 +1600,10 @@ export default function InvogueCollabHQ() {
         status:'active',
         deadline:nCamp.deadline||null,
         brief:nCamp.brief||null,
-        army:!!nCamp.army
+        army:!!nCamp.agency?false:!!nCamp.army,
+        agency:!!nCamp.agency,
+        agency_name:nCamp.agency?(nCamp.agencyName||null):null,
+        agency_payout:nCamp.agency?(+nCamp.agencyPayout||0):0
       });
       if(campErr) {
         console.error("Campaign insert failed:",campErr);
@@ -1593,7 +1622,11 @@ export default function InvogueCollabHQ() {
       created:new Date().toISOString().slice(0,10),
       deadline:nCamp.deadline,
       brief:nCamp.brief,
-      army:!!nCamp.army
+      army:!!nCamp.agency?false:!!nCamp.army,
+      agency:!!nCamp.agency,
+      agencyName:nCamp.agency?(nCamp.agencyName||""):"",
+      agencyPayout:nCamp.agency?(+nCamp.agencyPayout||0):0,
+      agencyPaid:false
     }]);
     setModal(null);
     setNCamp(null);
@@ -1640,12 +1673,16 @@ export default function InvogueCollabHQ() {
     }
 
     // Admin final approval (or single approval for ≤₹50K) — clear any re-approval change note.
-    supabase.from('deals').update({status:'approved',approved_by:userName,approved_at:ts,reapproval_note:null}).eq('id',d.id).then(({error})=>{if(error){console.error("Approve save failed:",error);notify("Couldn't save approval: "+(error.message||"unknown error"),"err");}});
-    upDeal(d.id,{status:"approved",appBy:userName,appAt:ts,reapprovalNote:""});
-    addLog(d.id,userName,needsDualApproval?"Admin approved (dual approval complete) & amount locked":"Approved & amount locked",fAmt(d.amount));
+    // Agency-managed collabs skip the confirmation email + acknowledgement, so they
+    // land straight in "Acknowledged" (ready for logistics to dispatch).
+    const agency = isAgencyDeal(d);
+    const finalStatus = agency ? "acknowledged" : "approved";
+    supabase.from('deals').update({status:finalStatus,approved_by:userName,approved_at:ts,reapproval_note:null,...(agency?{acknowledged_at:ts}:{})}).eq('id',d.id).then(({error})=>{if(error){console.error("Approve save failed:",error);notify("Couldn't save approval: "+(error.message||"unknown error"),"err");}});
+    upDeal(d.id,{status:finalStatus,appBy:userName,appAt:ts,reapprovalNote:"",...(agency?{ackAt:ts}:{})});
+    addLog(d.id,userName,needsDualApproval?"Admin approved (dual approval complete)":"Approved",agency?"Agency-managed — confirmation email & acknowledgement skipped":fAmt(d.amount));
     setSel(null);
     setModal(null);
-    notify("Approved! "+fAmt(d.amount)+" locked");
+    notify(agency?"Approved — agency-managed, ready to dispatch":"Approved! "+fAmt(d.amount)+" locked");
   };
 
   const rejectDeal = (d, reason) => {
@@ -2040,6 +2077,7 @@ export default function InvogueCollabHQ() {
   };
 
   const sendEmail = async (d, isResend=false, overrideEmail=null) => {
+    if(isAgencyDeal(d)) return notify("Agency-managed campaign — the confirmation email is handled by the agency, not sent per creator.","err");
     const toEmail = (overrideEmail || d.email || "").trim();
     if(!toEmail) return notify("Influencer email is missing. Add it to the deal first.","err");
     const userName = loggedIn?.name||"Negotiator";
@@ -2751,6 +2789,7 @@ export default function InvogueCollabHQ() {
 
   const recordPayment = () => {
     if(role!=="finance"&&role!=="admin") return notify("Only Finance or Admin can record payments","err");
+    if(isAgencyDeal(sel)) return notify("Agency-managed collab — payment is made to the agency at campaign level, not per creator.","err");
     if(!payF.amount) return notify("Enter amount","err");
     if(+payF.amount <= 0) return notify("Amount must be positive","err");
     const amt = +payF.amount;
@@ -2778,7 +2817,7 @@ export default function InvogueCollabHQ() {
   const bulkMarkPaid = async () => {
     if(role!=="finance"&&role!=="admin") return notify("Only Finance or Admin can record payments","err");
     const selected = deals.filter(d=>batchSelected[d.id]);
-    const payable = selected.filter(d=>remaining(d)>0 && !["pending","renegotiate","rejected","dropped","drop_requested","disputed","paid"].includes(d.status));
+    const payable = selected.filter(d=>remaining(d)>0 && !isAgencyDeal(d) && !["pending","renegotiate","rejected","dropped","drop_requested","disputed","paid"].includes(d.status));
     if(payable.length===0) return notify("None of the selected collabs are payable.","err");
     const ts = new Date().toISOString();
     const userName = loggedIn?.name||"You (Finance)";
@@ -3756,7 +3795,7 @@ return (
           </Section>}
 
           {/* CAMPAIGN BUDGETS */}
-          <Section title="Campaign Budgets" action={<Btn v="gold" sm onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:false});setModal("newCamp")}}>+ New Campaign</Btn>}>
+          <Section title="Campaign Budgets" action={<Btn v="gold" sm onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:false,agency:false,agencyName:"",agencyPayout:""});setModal("newCamp")}}>+ New Campaign</Btn>}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"14px"}}>
               {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"18px",cursor:"pointer"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"10px"}}><span style={{fontWeight:600,fontSize:"14px"}}>{c.name}</span><span style={{fontFamily:T.display,fontSize:"16px",fontWeight:600,color:pct>90?T.err:T.text}}>{pct}%</span></div>
@@ -4308,7 +4347,7 @@ return (
       {((view==="dashboard"&&role==="finance")||(view==="payments"&&role==="admin"))&&(()=>{
         const pendingPayments = deals.filter(d=>d.amount>0&&["invoice_ok","payment_details_received","payment_requested","payment_approved","partial_paid"].includes(d.status)&&remaining(d)>0);
         const disputed = deals.filter(d=>d.status==="disputed");
-        const advanceDue = deals.filter(d=>["approved","email_sent","acknowledged","shipped","delivered_prod"].includes(d.status)&&totalPaid(d)===0);
+        const advanceDue = deals.filter(d=>d.amount>0&&!isAgencyDeal(d)&&["approved","email_sent","acknowledged","shipped","delivered_prod"].includes(d.status)&&totalPaid(d)===0);
         const recentPaid = deals.filter(d=>d.status==="paid").slice(0,5);
         const totalOutstanding = deals.filter(d=>!["rejected","pending","renegotiate","paid","dropped","drop_requested"].includes(d.status)).reduce((s,d)=>s+remaining(d),0);
 
@@ -5833,18 +5872,18 @@ return (
               <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{campaigns.filter(c=>c.status==="active").length} active · {f(campaigns.reduce((s,c)=>s+campCommitted(c.id),0))} committed</div>
               <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Campaigns</div>
             </div>
-            {(role==="approver"||role==="finance"||role==="admin")&&<Btn v="gold" onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:campKind==="army"});setModal("newCamp")}}>+ New Campaign</Btn>}
+            {(role==="approver"||role==="finance"||role==="admin")&&<Btn v="gold" onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:campKind==="army",agency:campKind==="agency",agencyName:"",agencyPayout:""});setModal("newCamp")}}>+ New Campaign</Btn>}
           </div>
           <div style={{display:"flex",gap:"7px",marginBottom:"16px"}}>
-            {[{k:"regular",l:"Regular"},{k:"army",l:"🎖 Creator Army"},{k:"all",l:"All"}].map(t=><button key={t.k} onClick={()=>setCampKind(t.k)} style={{padding:"6px 12px",border:`1px solid ${campKind===t.k?T.brand:T.border}`,borderRadius:"2px",background:campKind===t.k?T.brand:T.surface,color:campKind===t.k?"#fff":T.sub,fontSize:"10px",fontWeight:700,letterSpacing:"0.5px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui}}>{t.l} ({campaigns.filter(c=>t.k==="all"?true:(t.k==="army"?c.army:!c.army)).length})</button>)}
+            {(()=>{const kindOf=c=>c.army?"army":c.agency?"agency":"regular";const kcount=k=>campaigns.filter(c=>k==="all"?true:kindOf(c)===k).length;return [{k:"regular",l:"Regular"},{k:"army",l:"🎖 Creator Army"},{k:"agency",l:"🏢 Agency"},{k:"all",l:"All"}].map(t=><button key={t.k} onClick={()=>setCampKind(t.k)} style={{padding:"6px 12px",border:`1px solid ${campKind===t.k?T.brand:T.border}`,borderRadius:"2px",background:campKind===t.k?T.brand:T.surface,color:campKind===t.k?"#fff":T.sub,fontSize:"10px",fontWeight:700,letterSpacing:"0.5px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui}}>{t.l} ({kcount(t.k)})</button>)})()}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:"18px"}}>
-            {campaigns.filter(c=>campKind==="all"?true:(campKind==="army"?c.army:!c.army)).map(c=>{
+            {campaigns.filter(c=>{const k=c.army?"army":c.agency?"agency":"regular";return campKind==="all"?true:k===campKind}).map(c=>{
               const comm=campCommitted(c.id),pd=campPaid(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0,lk=campLocked(c.id);
               const over=comm>c.budget&&c.budget>0;
               return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${over?"#E8C9C6":T.border}`,borderTop:over?`2px solid ${T.err}`:undefined,borderRadius:"2px",padding:"22px",cursor:"pointer"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
-                  <div style={{fontFamily:DISPLAY,fontSize:"20px",fontWeight:600,lineHeight:1.15}}>{c.army&&<span style={{fontSize:"12px"}}>🎖 </span>}{c.name}</div>
+                  <div style={{fontFamily:DISPLAY,fontSize:"20px",fontWeight:600,lineHeight:1.15}}>{c.army&&<span style={{fontSize:"12px"}}>🎖 </span>}{c.agency&&<span style={{fontSize:"12px"}}>🏢 </span>}{c.name}{c.agency&&c.agencyName&&<span style={{fontSize:"11px",color:T.sub,fontFamily:T.ui,fontWeight:400}}> · {c.agencyName}</span>}</div>
                   <span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,padding:"3px 8px",borderRadius:"2px",whiteSpace:"nowrap",color:c.status==="active"?T.ok:c.status==="planning"?T.warn:T.sub,background:c.status==="active"?T.okBg:c.status==="planning"?T.warnBg:"#F2EEE4"}}>{c.status}</span>
                 </div>
                 <div style={{fontSize:"10px",color:c.deadline?T.sub:T.faint,marginBottom:"18px",fontStyle:c.deadline?"normal":"italic",fontFamily:c.deadline?T.ui:DISPLAY}}>{c.deadline?`Deadline · ${c.deadline}`:"No deadline set"}</div>
@@ -6103,7 +6142,8 @@ return (
         {nDeal&&<>
           {nDeal.creatorArmy&&<div style={{padding:"8px 12px",background:T.goldSoft,border:`1px solid ${T.gold}44`,borderRadius:"2px",marginBottom:"12px",fontSize:"12px",color:T.brand,fontWeight:600}}>🎖 Creator Army collab · {nDeal.armyMonth}</div>}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 10px"}}>
-            <Field label={nDeal.creatorArmy?"Army Campaign *":"Campaign *"}><Sel value={nDeal.cid} onChange={e=>setNDeal({...nDeal,cid:e.target.value})} options={campaigns.filter(c=>!!c.army===!!nDeal.creatorArmy).map(c=>({v:c.id,l:c.name}))}/></Field>
+            <Field label={nDeal.creatorArmy?"Army Campaign *":"Campaign *"}><Sel value={nDeal.cid} onChange={e=>{const cid=e.target.value;const ag=!!getCamp(cid)?.agency;setNDeal({...nDeal,cid,...(ag?{amount:"0"}:{})})}} options={campaigns.filter(c=>!!c.army===!!nDeal.creatorArmy).map(c=>({v:c.id,l:c.agency?`🏢 ${c.name}`:c.name}))}/></Field>
+            {!!getCamp(nDeal.cid)?.agency&&<div style={{padding:"8px 12px",background:T.goldSoft,border:`1px solid ${T.gold}44`,borderRadius:"2px",marginBottom:"10px",fontSize:"12px",color:T.brand,fontWeight:600}}>🏢 Agency-managed campaign ({getCamp(nDeal.cid)?.agencyName||"agency"}) · no confirmation email, no per-creator payment. Amount is handled at campaign level.</div>}
             <Field label="Influencer *"><Inp value={nDeal.inf} onChange={e=>setNDeal({...nDeal,inf:e.target.value})} placeholder="Priya Sharma" error={formErrors.inf}/></Field>
             <Field label="Influencer Email" required><Inp value={nDeal.email} onChange={e=>setNDeal({...nDeal,email:e.target.value})} placeholder="influencer@gmail.com" error={formErrors.email}/></Field>
             <Field label="Profile" required><Inp value={nDeal.profile} onChange={e=>setNDeal({...nDeal,profile:e.target.value})} placeholder="instagram.com/handle" error={formErrors.profile}/></Field>
@@ -6159,8 +6199,8 @@ return (
             {formErrors.products&&<div style={{fontSize:"10px",color:T.err,marginTop:"4px"}}>At least one product name is required</div>}
           </div>
 
-          <Field label="Amount (INR) *"><Inp value={nDeal.amount} onChange={e=>setNDeal({...nDeal,amount:e.target.value})} type="number" prefix="₹" error={formErrors.amount}/></Field>
-          <Field label="Payment Terms"><Sel value={nDeal.paymentTerms||"next_15th"} onChange={e=>setNDeal({...nDeal,paymentTerms:e.target.value})} options={[{v:"next_15th",l:"Next 15th after going live"},{v:"45_days",l:"45 days after going live"},{v:"60_days",l:"60 days after going live"},{v:"immediate",l:"Immediate (on going live)"},{v:"advance",l:"Advance (before going live)"},{v:"custom",l:"Custom"}]}/></Field>
+          {!getCamp(nDeal.cid)?.agency&&<><Field label="Amount (INR) *"><Inp value={nDeal.amount} onChange={e=>setNDeal({...nDeal,amount:e.target.value})} type="number" prefix="₹" error={formErrors.amount}/></Field>
+          <Field label="Payment Terms"><Sel value={nDeal.paymentTerms||"next_15th"} onChange={e=>setNDeal({...nDeal,paymentTerms:e.target.value})} options={[{v:"next_15th",l:"Next 15th after going live"},{v:"45_days",l:"45 days after going live"},{v:"60_days",l:"60 days after going live"},{v:"immediate",l:"Immediate (on going live)"},{v:"advance",l:"Advance (before going live)"},{v:"custom",l:"Custom"}]}/></Field></>}
 
           {/* Deliverables */}
           <div style={{marginTop:"12px",padding:"12px",background:formErrors.dels?T.errBg:T.goldSoft,borderRadius:"2px",border:formErrors.dels?`1px solid ${T.err}`:"none"}}>
@@ -6193,10 +6233,18 @@ return (
           <Field label="Status"><Sel value={nCamp.status||"active"} onChange={e=>setNCamp({...nCamp,status:e.target.value})} options={[{v:"active",l:"Active"},{v:"planning",l:"Planning"},{v:"completed",l:"Completed"}]}/></Field>
           <Field label="Deadline"><Inp value={nCamp.deadline} onChange={e=>setNCamp({...nCamp,deadline:e.target.value})} type="date"/></Field>
           <Field label="Campaign Brief"><Textarea value={nCamp.brief} onChange={e=>setNCamp({...nCamp,brief:e.target.value})} placeholder="Describe the campaign objectives, target audience, key messages..." rows={4}/></Field>
-          <label style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",background:nCamp.army?T.goldSoft:"transparent",border:`1px solid ${nCamp.army?T.gold:T.border}`,borderRadius:"2px",cursor:"pointer",fontSize:"13px",marginTop:"4px"}}>
-            <input type="checkbox" checked={!!nCamp.army} onChange={e=>setNCamp({...nCamp,army:e.target.checked})} style={{cursor:"pointer"}}/>
+          <label style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",background:nCamp.army?T.goldSoft:"transparent",border:`1px solid ${nCamp.army?T.gold:T.border}`,borderRadius:"2px",cursor:nCamp.agency?"not-allowed":"pointer",fontSize:"13px",marginTop:"4px",opacity:nCamp.agency?0.5:1}}>
+            <input type="checkbox" checked={!!nCamp.army} disabled={!!nCamp.agency} onChange={e=>setNCamp({...nCamp,army:e.target.checked,...(e.target.checked?{agency:false}:{})})} style={{cursor:"pointer"}}/>
             <span>🎖 <b>Creator Army campaign</b> — used only for Creator Army monthly collabs</span>
           </label>
+          <label style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",background:nCamp.agency?T.goldSoft:"transparent",border:`1px solid ${nCamp.agency?T.gold:T.border}`,borderRadius:"2px",cursor:nCamp.army?"not-allowed":"pointer",fontSize:"13px",marginTop:"6px",opacity:nCamp.army?0.5:1}}>
+            <input type="checkbox" checked={!!nCamp.agency} disabled={!!nCamp.army} onChange={e=>setNCamp({...nCamp,agency:e.target.checked,...(e.target.checked?{army:false}:{})})} style={{cursor:"pointer"}}/>
+            <span>🏢 <b>Agency-managed campaign</b> — collabs skip the confirmation email & per-creator payment; payment is due to the agency at campaign end</span>
+          </label>
+          {nCamp.agency&&<div style={{marginTop:"8px",padding:"10px 12px",background:T.goldSoft,border:`1px solid ${T.gold}44`,borderRadius:"2px"}}>
+            <Field label="Agency Name *"><Inp value={nCamp.agencyName||""} onChange={e=>setNCamp({...nCamp,agencyName:e.target.value})} placeholder="e.g. Kreatik Media"/></Field>
+            <Field label="Agency Payout (optional)"><Inp value={nCamp.agencyPayout||""} onChange={e=>setNCamp({...nCamp,agencyPayout:e.target.value})} type="number" prefix="₹"/><div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>Lump sum due to the agency at campaign end. Can be set later. Individual collab amounts are not tracked for agency campaigns.</div></Field>
+          </div>}
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"12px"}}><Btn v="outline" onClick={()=>{setModal(null);setEditingCampId(null);setNCamp(null)}}>Cancel</Btn><Btn v="gold" onClick={createCampaign}>{editingCampId?"Save Changes":"Create"}</Btn></div>
         </>}
       </Modal>
@@ -6225,8 +6273,28 @@ return (
               <Btn v="outline" sm onClick={()=>openEditCampaign(selCamp)}>✎ Edit Campaign</Btn>
               {role==="admin"&&<Btn v="danger" sm onClick={()=>{const c=selCamp;setModal(null);setSelCamp(null);deleteCampaignAdmin(c);}}>🗑 Delete</Btn>}
             </div>}
-            {/* Budget overview */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"8px",marginBottom:"14px"}}>
+            {/* Agency panel (agency-managed campaigns) */}
+            {selCamp.agency&&<div style={{border:`1px solid ${T.gold}55`,background:T.goldSoft,borderRadius:"2px",padding:"14px",marginBottom:"14px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"10px"}}>
+                <div>
+                  <div style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,fontWeight:700}}>🏢 Agency-managed</div>
+                  <div style={{fontSize:"18px",fontWeight:800,fontFamily:DISPLAY}}>{selCamp.agencyName||"Agency"}</div>
+                  <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{cd.length} collab{cd.length===1?"":"s"} · per-creator email & payment skipped</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,fontWeight:700}}>Agency Payout</div>
+                  <div style={{fontSize:"22px",fontWeight:800,color:T.brand,fontFamily:DISPLAY}}>{selCamp.agencyPayout>0?f(selCamp.agencyPayout):"—"}</div>
+                  {selCamp.agencyPaid
+                    ? <div style={{fontSize:"11px",color:T.ok,fontWeight:700,marginTop:"2px"}}>✓ Paid{selCamp.agencyPaidAt?` · ${toDateOnly(selCamp.agencyPaidAt)}`:""}{selCamp.agencyPaidBy?` · ${selCamp.agencyPaidBy}`:""}</div>
+                    : <div style={{fontSize:"11px",color:T.warn,fontWeight:700,marginTop:"2px"}}>Unpaid</div>}
+                </div>
+              </div>
+              {(role==="finance"||role==="admin")&&!selCamp.agencyPaid&&<div style={{marginTop:"10px",textAlign:"right"}}>
+                <Btn v="ok" sm onClick={()=>setConfirmAction({title:"Mark Agency Paid",msg:`Mark ${selCamp.agencyName||"the agency"} as paid ${selCamp.agencyPayout>0?f(selCamp.agencyPayout):""} for this campaign?`,onConfirm:()=>{markAgencyPaid(selCamp);setConfirmAction(null)}})}>💰 Mark Agency Paid</Btn>
+              </div>}
+            </div>}
+            {/* Budget overview (non-agency) */}
+            {!selCamp.agency&&<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"8px",marginBottom:"14px"}}>
               <div style={{background:T.surfaceAlt,borderRadius:"2px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>BUDGET</div><div style={{fontSize:"16px",fontWeight:800}}>{f(selCamp.budget)}</div></div>
               <div style={{background:T.surfaceAlt,borderRadius:"2px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>COMMITTED</div><div style={{fontSize:"16px",fontWeight:800,color:T.gold}}>{f(comm)}</div></div>
               <div style={{background:T.surfaceAlt,borderRadius:"2px",padding:"10px",textAlign:"center"}}><div style={{fontSize:"10px",color:T.sub,fontWeight:700}}>PAID OUT</div><div style={{fontSize:"16px",fontWeight:800,color:T.ok}}>{f(pd)}</div></div>
@@ -6235,7 +6303,7 @@ return (
             <div style={{marginBottom:"14px"}}>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:"11px",color:T.sub,marginBottom:"3px"}}><span>{lk}/{selCamp.target} influencers locked</span><span style={{color:pct>90?T.err:T.sub}}>{pct}% budget used</span></div>
               <div style={{height:"6px",borderRadius:"2px",background:T.border,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.warn:T.ok,borderRadius:"2px",transition:"width .3s"}}/></div>
-            </div>
+            </div></>}
             {selCamp.brief&&<div style={{padding:"10px 12px",background:T.surfaceAlt,borderRadius:"2px",marginBottom:"14px",fontSize:"12px",color:T.sub,lineHeight:1.6}}><b style={{color:T.text}}>Brief:</b> {selCamp.brief}</div>}
             {selCamp.deadline&&<div style={{fontSize:"12px",color:T.sub,marginBottom:"14px"}}>Deadline: <b>{selCamp.deadline}</b></div>}
 
@@ -6262,7 +6330,7 @@ return (
                   return <div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{display:"grid",gridTemplateColumns:"1.6fr 1fr 0.8fr 0.8fr 1.2fr",padding:"8px 12px",borderBottom:`1px solid ${T.border}`,fontSize:"12px",cursor:"pointer",transition:"background .1s",alignItems:"center"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceAlt} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     <div><div style={{fontWeight:700}}>{d.inf}</div><div style={{fontSize:"10px",color:T.sub}}>{d.collabId}</div></div>
                     <div style={{color:T.sub}}>{d.platform}</div>
-                    <div style={{fontWeight:700}}>{fAmt(d.amount)}</div>
+                    <div style={{fontWeight:700}}>{isAgencyDeal(d)?<span style={{color:T.sub,fontWeight:400}}>—</span>:fAmt(d.amount)}</div>
                     <div style={{color:paidAmt>0?T.ok:T.sub,fontWeight:paidAmt>0?700:400}}>{paidAmt>0?f(paidAmt):"—"}</div>
                     <div><span style={{padding:"2px 8px",borderRadius:"2px",fontSize:"10px",fontWeight:700,background:sc.bg,color:sc.c}}>{sc.i} {sc.l}</span></div>
                   </div>;
@@ -6559,8 +6627,11 @@ return (
                   <div style={{fontSize:"11px",color:T.sub,marginTop:"5px"}}>{subline}</div>
                 </div>
                 {!perfHide&&<div style={{textAlign:"right",flexShrink:0}}>
-                  <div style={{fontFamily:T.display,fontSize:"24px",fontWeight:600,color:Number(sel.amount)===0?T.gold:undefined}}>{fAmt(sel.amount)}</div>
-                  <div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginTop:"2px"}}>{Number(sel.amount)===0?"Product-only collab":(locked?"Amount Locked":"Proposed")}{paid>0?` · ${f(paid)} paid`:""}</div>
+                  {isAgencyDeal(sel)
+                    ? <><div style={{fontFamily:T.display,fontSize:"18px",fontWeight:600,color:T.gold}}>🏢 {agencyNameFor(sel)}</div>
+                        <div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginTop:"2px"}}>Agency-managed · paid at campaign level</div></>
+                    : <><div style={{fontFamily:T.display,fontSize:"24px",fontWeight:600,color:Number(sel.amount)===0?T.gold:undefined}}>{fAmt(sel.amount)}</div>
+                        <div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginTop:"2px"}}>{Number(sel.amount)===0?"Product-only collab":(locked?"Amount Locked":"Proposed")}{paid>0?` · ${f(paid)} paid`:""}</div></>}
                 </div>}
               </div>
               <div style={{display:"flex",gap:"22px",flexWrap:"wrap"}}>
@@ -6972,8 +7043,9 @@ return (
               {(role==="negotiator"||role==="admin")&&sel.status==="renegotiate"&&<>
                 <Btn v="gold" onClick={()=>openResubmitModal(sel)}>↩ Review & Resubmit</Btn>
               </>}
-              {(role==="negotiator"||role==="admin")&&sel.status==="approved"&&<Btn v="gold" onClick={()=>sendEmail(sel)}>✉ Send Confirmation Email</Btn>}
-              {(role==="negotiator"||role==="admin")&&["email_sent","acknowledged","shipped","delivered_prod","partial_live","live","invoice_ok","disputed"].includes(sel.status)&&<Btn v="ghost" sm onClick={()=>confirmAndResendEmail(sel)}>🔁 Resend Confirmation Email</Btn>}
+              {(role==="negotiator"||role==="admin")&&sel.status==="approved"&&!isAgencyDeal(sel)&&<Btn v="gold" onClick={()=>sendEmail(sel)}>✉ Send Confirmation Email</Btn>}
+              {(role==="negotiator"||role==="admin")&&!isAgencyDeal(sel)&&["email_sent","acknowledged","shipped","delivered_prod","partial_live","live","invoice_ok","disputed"].includes(sel.status)&&<Btn v="ghost" sm onClick={()=>confirmAndResendEmail(sel)}>🔁 Resend Confirmation Email</Btn>}
+              {isAgencyDeal(sel)&&["acknowledged","shipped","delivered_prod","partial_live","live"].includes(sel.status)&&<div style={{fontSize:"12px",color:T.brand,fontWeight:600,padding:"6px 10px",background:T.goldSoft,border:`1px solid ${T.gold}44`,borderRadius:"2px"}}>🏢 Agency-managed — confirmation email & per-creator payment skipped. Payment is due to {agencyNameFor(sel)} at campaign end.</div>}
               {(role==="negotiator"||role==="admin")&&["pending","renegotiate","approved","manager_approved","email_sent","acknowledged","shipped","delivered_prod","partial_live"].includes(sel.status)&&totalPaid(sel)===0&&<Btn v="danger" sm onClick={()=>openDropModal(sel)}>🚫 Drop Collab</Btn>}
               {(role==="logistics"||role==="admin")&&sel.status==="acknowledged"&&!sel.ship&&<Btn v="purple" onClick={()=>{setShipF({track:"",carrier:"DTDC",orderId:""});setModal("ship")}}>📦 Dispatch</Btn>}
               {(role==="negotiator"||role==="logistics"||role==="admin")&&sel.status==="acknowledged"&&!sel.ship&&!sel.productOnHand&&<Btn v="outline" sm onClick={()=>skipShipment(sel)}>⏭ Already has product — skip shipment</Btn>}
@@ -6986,7 +7058,7 @@ return (
               {sel.status==="manager_approved"&&<div style={{fontSize:"12px",color:T.info,fontWeight:700,padding:"6px 10px",background:T.infoBg,borderRadius:"2px"}}>✅ Manager approved — awaiting admin final approval (₹50K+ deal)</div>}
               {sel.status==="drop_requested"&&(role==="approver"||role==="admin")&&<div style={{display:"flex",gap:"6px"}}><Btn v="ok" sm onClick={()=>approveDropRequest(sel)}>✓ Approve Drop</Btn><Btn v="outline" sm onClick={()=>rejectDropRequest(sel)}>✕ Reject Drop</Btn></div>}
               {sel.status==="drop_requested"&&role==="negotiator"&&<div style={{fontSize:"12px",color:T.warn,fontWeight:700,padding:"6px 10px",background:T.warnBg,borderRadius:"2px"}}>⏳ Drop request pending manager approval</div>}
-              {(role==="finance"||role==="admin")&&!["pending","renegotiate","rejected","dropped"].includes(sel.status)&&rem>0&&<Btn v="ok" onClick={()=>{setPayF({type:paid===0?"advance":"partial",amount:"",note:""});setModal("payment")}}>💰 Record Payment</Btn>}
+              {(role==="finance"||role==="admin")&&!isAgencyDeal(sel)&&!["pending","renegotiate","rejected","dropped"].includes(sel.status)&&rem>0&&<Btn v="ok" onClick={()=>{setPayF({type:paid===0?"advance":"partial",amount:"",note:""});setModal("payment")}}>💰 Record Payment</Btn>}
               {(role==="finance"||role==="admin")&&sel.status==="disputed"&&<>
                 <Btn v="ok" sm onClick={()=>{setPayF({type:"final",amount:String(sel.amount-paid),note:"Paying approved amount per dispute resolution"});setModal("payment")}}>Pay Approved Amount</Btn>
                 <Btn v="danger" sm onClick={()=>notify("Escalated to founder","warn")}>Escalate</Btn>

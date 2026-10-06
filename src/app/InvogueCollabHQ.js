@@ -126,6 +126,7 @@ async function loadFromSupabase() {
     agency:c.agency||false, agencyName:c.agency_name||"", agencyPayout:c.agency_payout||0,
     agencyPaid:c.agency_paid||false, agencyPaidAt:c.agency_paid_at||null, agencyPaidBy:c.agency_paid_by||"",
     enabled:c.enabled!==false, months:Array.isArray(c.active_months)?c.active_months:[],
+    noAdRights:c.no_ad_rights||false,
   }));
 
   const influencers = (influencersRes.data||[]).map(i => ({
@@ -622,6 +623,7 @@ export default function InvogueCollabHQ() {
             agency:c.agency||false, agencyName:c.agency_name||"", agencyPayout:c.agency_payout||0,
             agencyPaid:c.agency_paid||false, agencyPaidAt:c.agency_paid_at||null, agencyPaidBy:c.agency_paid_by||"",
             enabled:c.enabled!==false, months:Array.isArray(c.active_months)?c.active_months:[],
+            noAdRights:c.no_ad_rights||false,
           }));
           setCampaigns(mapped.filter(c=>!c.deleted));
           setDeletedCampaigns(mapped.filter(c=>c.deleted));
@@ -1035,6 +1037,10 @@ export default function InvogueCollabHQ() {
   // confirmation email + acknowledgement and the per-creator payment flow entirely.
   const isAgencyDeal = (d) => !!getCamp(d?.cid)?.agency;
   const agencyNameFor = (d) => getCamp(d?.cid)?.agencyName || "the agency";
+  // No ad rights is PER-COLLAB: it's the collab's own Usage Rights set to "No ad rights".
+  // Such a collab gets no usage window and never enters the ad / Creative Hub pipeline.
+  // (The campaign's noAdRights flag only sets the DEFAULT for new collabs — see the New Deal form.)
+  const noAdRightsDeal = (d) => (d?.usage||"").trim().toLowerCase()==="no ad rights";
   const campCommitted = cid => deals.filter(d=>d.cid===cid&&!["rejected","pending","renegotiate","dropped"].includes(d.status)).reduce((s,d)=>s+d.amount,0);
   const campPaid = cid => deals.filter(d=>d.cid===cid).reduce((s,d)=>s+totalPaid(d),0);
   const campDeals = cid => deals.filter(d=>d.cid===cid);
@@ -1581,7 +1587,7 @@ export default function InvogueCollabHQ() {
 
   const openEditCampaign = (c) => {
     if(!(role==="admin"||role==="approver"||role==="finance")) return notify("Only admin / manager / finance can edit campaigns","err");
-    setNCamp({name:c.name, budget:c.budget!=null?String(c.budget):"", target:String(c.target||""), deadline:c.deadline||"", brief:c.brief||"", status:c.status||"active", army:!!c.army, agency:!!c.agency, agencyName:c.agencyName||"", agencyPayout:c.agencyPayout!=null?String(c.agencyPayout):"", enabled:c.enabled!==false, months:Array.isArray(c.months)?[...c.months]:[]});
+    setNCamp({name:c.name, budget:c.budget!=null?String(c.budget):"", target:String(c.target||""), deadline:c.deadline||"", brief:c.brief||"", status:c.status||"active", army:!!c.army, agency:!!c.agency, agencyName:c.agencyName||"", agencyPayout:c.agencyPayout!=null?String(c.agencyPayout):"", enabled:c.enabled!==false, months:Array.isArray(c.months)?[...c.months]:[], noAdRights:!!c.noAdRights});
     setEditingCampId(c.id);
     setModal("newCamp");
   };
@@ -1596,10 +1602,11 @@ export default function InvogueCollabHQ() {
     if(editingCampId){
       const agency=!!nCamp.agency, army=agency?false:!!nCamp.army;
       const months=Array.isArray(nCamp.months)?nCamp.months:[];
-      const patch = {name:nCamp.name, budget:+nCamp.budget, target_influencers:+nCamp.target, status:nCamp.status||"active", deadline:nCamp.deadline||null, brief:nCamp.brief||null, army, agency, agency_name:agency?(nCamp.agencyName||null):null, agency_payout:agency?(+nCamp.agencyPayout||0):0, enabled:nCamp.enabled!==false, active_months:months};
+      const noAdRights=agency?!!nCamp.noAdRights:false;
+      const patch = {name:nCamp.name, budget:+nCamp.budget, target_influencers:+nCamp.target, status:nCamp.status||"active", deadline:nCamp.deadline||null, brief:nCamp.brief||null, army, agency, agency_name:agency?(nCamp.agencyName||null):null, agency_payout:agency?(+nCamp.agencyPayout||0):0, enabled:nCamp.enabled!==false, active_months:months, no_ad_rights:noAdRights};
       const {error} = await supabase.from('campaigns').update(patch).eq('id',editingCampId);
       if(error){ console.error("Campaign update failed:",error); return notify("Failed to update campaign: "+error.message,"err"); }
-      const localPatch={name:nCamp.name,budget:+nCamp.budget,target:+nCamp.target,status:nCamp.status||"active",deadline:nCamp.deadline,brief:nCamp.brief,army,agency,agencyName:agency?(nCamp.agencyName||""):"",agencyPayout:agency?(+nCamp.agencyPayout||0):0,enabled:nCamp.enabled!==false,months};
+      const localPatch={name:nCamp.name,budget:+nCamp.budget,target:+nCamp.target,status:nCamp.status||"active",deadline:nCamp.deadline,brief:nCamp.brief,army,agency,agencyName:agency?(nCamp.agencyName||""):"",agencyPayout:agency?(+nCamp.agencyPayout||0):0,enabled:nCamp.enabled!==false,months,noAdRights};
       setCampaigns(prev=>prev.map(c=>c.id===editingCampId?{...c,...localPatch}:c));
       if(selCamp&&selCamp.id===editingCampId) setSelCamp(c=>c?{...c,...localPatch}:c);
       setModal(null); setNCamp(null); setEditingCampId(null);
@@ -1621,7 +1628,8 @@ export default function InvogueCollabHQ() {
         agency_name:nCamp.agency?(nCamp.agencyName||null):null,
         agency_payout:nCamp.agency?(+nCamp.agencyPayout||0):0,
         enabled:nCamp.enabled!==false,
-        active_months:Array.isArray(nCamp.months)?nCamp.months:[]
+        active_months:Array.isArray(nCamp.months)?nCamp.months:[],
+        no_ad_rights:!!nCamp.agency&&!!nCamp.noAdRights
       });
       if(campErr) {
         console.error("Campaign insert failed:",campErr);
@@ -1646,7 +1654,8 @@ export default function InvogueCollabHQ() {
       agencyPayout:nCamp.agency?(+nCamp.agencyPayout||0):0,
       agencyPaid:false,
       enabled:nCamp.enabled!==false,
-      months:Array.isArray(nCamp.months)?nCamp.months:[]
+      months:Array.isArray(nCamp.months)?nCamp.months:[],
+      noAdRights:!!nCamp.agency&&!!nCamp.noAdRights
     }]);
     setModal(null);
     setNCamp(null);
@@ -2479,10 +2488,11 @@ export default function InvogueCollabHQ() {
     // Auto-set ad_status when deal first goes live; usage_end_date only if usageDays is set
     const dealUpdates = shouldUpdateStatus ? {status:newStatus} : {};
     const localUpdates = {};
-    if(newStatus==="live"&&!deal.adStatus) {
+    if(newStatus==="live"&&!deal.adStatus&&!noAdRightsDeal(deal)) {
       dealUpdates.ad_status = 'fresh';
       localUpdates.adStatus = 'fresh';
       // Usage window is NOT started here — it begins only when the ad starts running.
+      // No-ad-rights collabs never enter the ad pipeline at all.
     }
     // Auto-calculate payment due date when deal goes fully live
     if(newStatus==="live"&&!deal.paymentDueDate) {
@@ -2629,6 +2639,7 @@ export default function InvogueCollabHQ() {
 
   // ─── PERFORMANCE MARKETER FUNCTIONS ───
   const updateAdStatus = (deal, newAdStatus) => {
+    if(noAdRightsDeal(deal)) return notify("This campaign has no ad rights — ad tracking is disabled.","err");
     const userName = loggedIn?.name||"You";
     const updates = {ad_status:newAdStatus};
     const patch = {adStatus:newAdStatus};
@@ -2655,6 +2666,7 @@ export default function InvogueCollabHQ() {
   };
 
   const requestReuse = (deal) => {
+    if(noAdRightsDeal(deal)) return notify("This campaign has no ad rights — reuse doesn't apply.","err");
     const userName = loggedIn?.name||"You (Perf Marketer)";
     const ts = new Date().toISOString();
     supabase.from('deals').update({reuse_requested:true, reuse_requested_at:ts, reuse_requested_by:userName}).eq('id',deal.id).then(({error})=>{if(error){console.error("Reuse request failed:",error);notify("Failed to request reuse","err");}});
@@ -3815,7 +3827,7 @@ return (
           </Section>}
 
           {/* CAMPAIGN BUDGETS */}
-          <Section title="Campaign Budgets" action={<Btn v="gold" sm onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:false,agency:false,agencyName:"",agencyPayout:"",enabled:true,months:[]});setModal("newCamp")}}>+ New Campaign</Btn>}>
+          <Section title="Campaign Budgets" action={<Btn v="gold" sm onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:false,agency:false,agencyName:"",agencyPayout:"",enabled:true,months:[],noAdRights:false});setModal("newCamp")}}>+ New Campaign</Btn>}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"14px"}}>
               {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"18px",cursor:"pointer"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"10px"}}><span style={{fontWeight:600,fontSize:"14px"}}>{c.name}</span><span style={{fontFamily:T.display,fontSize:"16px",fontWeight:600,color:pct>90?T.err:T.text}}>{pct}%</span></div>
@@ -4947,6 +4959,7 @@ return (
         // Stories aren't usable ad creatives, so a story-only-live collab never appears.
         const allCreatives = deals.filter(d=>
           !["dropped","drop_requested","rejected","pending","renegotiate"].includes(d.status)
+          && !noAdRightsDeal(d)   // no ad rights → content can't be used as a paid creative
           && (d.dels||[]).some(dl=>!STORY_RE.test(dl.type||"") && dl.st==="live")
         );
 
@@ -5892,7 +5905,7 @@ return (
               <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{campaigns.filter(c=>c.status==="active").length} active · {f(campaigns.reduce((s,c)=>s+campCommitted(c.id),0))} committed</div>
               <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Campaigns</div>
             </div>
-            {(role==="approver"||role==="finance"||role==="admin")&&<Btn v="gold" onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:campKind==="army",agency:campKind==="agency",agencyName:"",agencyPayout:"",enabled:true,months:[]});setModal("newCamp")}}>+ New Campaign</Btn>}
+            {(role==="approver"||role==="finance"||role==="admin")&&<Btn v="gold" onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:campKind==="army",agency:campKind==="agency",agencyName:"",agencyPayout:"",enabled:true,months:[],noAdRights:false});setModal("newCamp")}}>+ New Campaign</Btn>}
           </div>
           <div style={{display:"flex",gap:"7px",marginBottom:"16px"}}>
             {(()=>{const kindOf=c=>c.army?"army":c.agency?"agency":"regular";const kcount=k=>campaigns.filter(c=>k==="all"?true:kindOf(c)===k).length;return [{k:"regular",l:"Regular"},{k:"army",l:"🎖 Creator Army"},{k:"agency",l:"🏢 Agency"},{k:"all",l:"All"}].map(t=><button key={t.k} onClick={()=>setCampKind(t.k)} style={{padding:"6px 12px",border:`1px solid ${campKind===t.k?T.brand:T.border}`,borderRadius:"2px",background:campKind===t.k?T.brand:T.surface,color:campKind===t.k?"#fff":T.sub,fontSize:"10px",fontWeight:700,letterSpacing:"0.5px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui}}>{t.l} ({kcount(t.k)})</button>)})()}
@@ -6167,14 +6180,14 @@ return (
         {nDeal&&<>
           {nDeal.creatorArmy&&<div style={{padding:"8px 12px",background:T.goldSoft,border:`1px solid ${T.gold}44`,borderRadius:"2px",marginBottom:"12px",fontSize:"12px",color:T.brand,fontWeight:600}}>🎖 Creator Army collab · {nDeal.armyMonth}</div>}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 10px"}}>
-            <Field label={nDeal.creatorArmy?"Army Campaign *":"Campaign *"}><Sel value={nDeal.cid} onChange={e=>{const cid=e.target.value;const ag=!!getCamp(cid)?.agency;setNDeal({...nDeal,cid,...(ag?{amount:"0"}:{})})}} options={campaigns.filter(c=>!!c.army===!!nDeal.creatorArmy&&(c.enabled!==false||c.id===nDeal.cid)).map(c=>({v:c.id,l:(c.agency?`🏢 ${c.name}`:c.name)+(c.enabled===false?" (inactive)":"")}))}/></Field>
+            <Field label={nDeal.creatorArmy?"Army Campaign *":"Campaign *"}><Sel value={nDeal.cid} onChange={e=>{const cid=e.target.value;const c=getCamp(cid);setNDeal({...nDeal,cid,...(c?.agency?{amount:"0"}:{}),...(c?.noAdRights?{usage:"No ad rights"}:{})})}} options={campaigns.filter(c=>!!c.army===!!nDeal.creatorArmy&&(c.enabled!==false||c.id===nDeal.cid)).map(c=>({v:c.id,l:(c.agency?`🏢 ${c.name}`:c.name)+(c.enabled===false?" (inactive)":"")}))}/></Field>
             {!!getCamp(nDeal.cid)?.agency&&<div style={{padding:"8px 12px",background:T.goldSoft,border:`1px solid ${T.gold}44`,borderRadius:"2px",marginBottom:"10px",fontSize:"12px",color:T.brand,fontWeight:600}}>🏢 Agency-managed campaign ({getCamp(nDeal.cid)?.agencyName||"agency"}) · no confirmation email, no per-creator payment. Amount is handled at campaign level.</div>}
             <Field label="Influencer *"><Inp value={nDeal.inf} onChange={e=>setNDeal({...nDeal,inf:e.target.value})} placeholder="Priya Sharma" error={formErrors.inf}/></Field>
             <Field label="Influencer Email" required><Inp value={nDeal.email} onChange={e=>setNDeal({...nDeal,email:e.target.value})} placeholder="influencer@gmail.com" error={formErrors.email}/></Field>
             <Field label="Profile" required><Inp value={nDeal.profile} onChange={e=>setNDeal({...nDeal,profile:e.target.value})} placeholder="instagram.com/handle" error={formErrors.profile}/></Field>
             <Field label="Platform"><Sel value={nDeal.platform} onChange={e=>setNDeal({...nDeal,platform:e.target.value})} options={[{v:"Instagram",l:"Instagram"},{v:"YouTube",l:"YouTube"},{v:"Other",l:"Other"}]}/></Field>
             <Field label="Followers"><Inp value={nDeal.followers} onChange={e=>setNDeal({...nDeal,followers:e.target.value})} placeholder="125K"/></Field>
-            <Field label="Usage Rights"><Sel value={nDeal.usage} onChange={e=>setNDeal({...nDeal,usage:e.target.value})} options={[{v:"3 months",l:"3 months"},{v:"6 months",l:"6 months"},{v:"12 months",l:"12 months"},{v:"Perpetual",l:"Perpetual"}]}/></Field>
+            <Field label="Usage Rights"><Sel value={nDeal.usage} onChange={e=>setNDeal({...nDeal,usage:e.target.value})} options={[{v:"3 months",l:"3 months"},{v:"6 months",l:"6 months"},{v:"12 months",l:"12 months"},{v:"Perpetual",l:"Perpetual"},{v:"No ad rights",l:"🚫 No ad rights"}]}/>{(nDeal.usage||"").trim().toLowerCase()==="no ad rights"&&<div style={{fontSize:"11px",color:T.err,marginTop:"4px",fontWeight:600}}>No paid-ad usage — no usage window, won't appear in the Creative Hub.</div>}</Field>
             <Field label="Deadline *"><Inp value={nDeal.deadline} onChange={e=>setNDeal({...nDeal,deadline:e.target.value})} type="date" error={formErrors.deadline}/></Field>
             <Field label="Phone *"><Inp value={nDeal.phone} onChange={e=>setNDeal({...nDeal,phone:e.target.value})} placeholder="+91 98765 43210" error={formErrors.phone}/></Field>
             <Field label="Street Address *"><Inp value={nDeal.address?.street||""} onChange={e=>setNDeal({...nDeal,address:{...nDeal.address,street:e.target.value}})} placeholder="House/Flat, Building, Street" error={formErrors.address}/></Field>
@@ -6283,6 +6296,10 @@ return (
           {nCamp.agency&&<div style={{marginTop:"8px",padding:"10px 12px",background:T.goldSoft,border:`1px solid ${T.gold}44`,borderRadius:"2px"}}>
             <Field label="Agency Name *"><Inp value={nCamp.agencyName||""} onChange={e=>setNCamp({...nCamp,agencyName:e.target.value})} placeholder="e.g. Kreatik Media"/></Field>
             <Field label="Agency Payout (optional)"><Inp value={nCamp.agencyPayout||""} onChange={e=>setNCamp({...nCamp,agencyPayout:e.target.value})} type="number" prefix="₹"/><div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>Lump sum due to the agency at campaign end. Can be set later. Individual collab amounts are not tracked for agency campaigns.</div></Field>
+            <label style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",background:nCamp.noAdRights?"#FBEAE8":"transparent",border:`1px solid ${nCamp.noAdRights?T.err:T.border}`,borderRadius:"2px",cursor:"pointer",fontSize:"13px",marginTop:"6px"}}>
+              <input type="checkbox" checked={!!nCamp.noAdRights} onChange={e=>setNCamp({...nCamp,noAdRights:e.target.checked})} style={{cursor:"pointer"}}/>
+              <span>🚫 <b>Default new collabs to "No ad rights"</b> — pre-selects no paid-ad usage when adding a collab here. Still editable per collab, so some can keep ad rights.</span>
+            </label>
           </div>}
           <div style={{display:"flex",gap:"7px",justifyContent:"flex-end",marginTop:"12px"}}><Btn v="outline" onClick={()=>{setModal(null);setEditingCampId(null);setNCamp(null)}}>Cancel</Btn><Btn v="gold" onClick={createCampaign}>{editingCampId?"Save Changes":"Create"}</Btn></div>
         </>}
@@ -6325,7 +6342,7 @@ return (
                 <div>
                   <div style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,fontWeight:700}}>🏢 Agency-managed</div>
                   <div style={{fontSize:"18px",fontWeight:800,fontFamily:DISPLAY}}>{selCamp.agencyName||"Agency"}</div>
-                  <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{cd.length} collab{cd.length===1?"":"s"} · per-creator email & payment skipped</div>
+                  <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>{cd.length} collab{cd.length===1?"":"s"} · per-creator email & payment skipped{selCamp.noAdRights?" · 🚫 no ad rights (default)":""}</div>
                 </div>
                 <div style={{textAlign:"right"}}>
                   <div style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,fontWeight:700}}>Agency Payout</div>

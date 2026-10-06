@@ -125,6 +125,7 @@ async function loadFromSupabase() {
     brief:c.brief||"", deleted:c.deleted||false, army:c.army||false,
     agency:c.agency||false, agencyName:c.agency_name||"", agencyPayout:c.agency_payout||0,
     agencyPaid:c.agency_paid||false, agencyPaidAt:c.agency_paid_at||null, agencyPaidBy:c.agency_paid_by||"",
+    enabled:c.enabled!==false, months:Array.isArray(c.active_months)?c.active_months:[],
   }));
 
   const influencers = (influencersRes.data||[]).map(i => ({
@@ -402,6 +403,7 @@ export default function InvogueCollabHQ() {
   const [nCamp, setNCamp] = useState(null);
   const [editingCampId, setEditingCampId] = useState(null);
   const [campKind, setCampKind] = useState("regular"); // regular | army | all
+  const [campMonthDraft, setCampMonthDraft] = useState(""); // month picker draft in campaign form
   const [shipF, setShipF] = useState({track:"",carrier:"DTDC",orderId:""});
   const [payF, setPayF] = useState({type:"advance",amount:"",note:""});
   const [invF, setInvF] = useState("");
@@ -619,6 +621,7 @@ export default function InvogueCollabHQ() {
             brief:c.brief||"", deleted:c.deleted||false, army:c.army||false,
             agency:c.agency||false, agencyName:c.agency_name||"", agencyPayout:c.agency_payout||0,
             agencyPaid:c.agency_paid||false, agencyPaidAt:c.agency_paid_at||null, agencyPaidBy:c.agency_paid_by||"",
+            enabled:c.enabled!==false, months:Array.isArray(c.active_months)?c.active_months:[],
           }));
           setCampaigns(mapped.filter(c=>!c.deleted));
           setDeletedCampaigns(mapped.filter(c=>c.deleted));
@@ -1047,6 +1050,18 @@ export default function InvogueCollabHQ() {
     setCampaigns(prev=>prev.map(c=>c.id===camp.id?{...c,...patch}:c));
     setSelCamp(c=>c&&c.id===camp.id?{...c,...patch}:c);
     notify("Agency marked as paid");
+  };
+  // "YYYY-MM" → "Oct 2026"
+  const monthLabel = (m) => { if(!m||!/^\d{4}-\d{2}$/.test(m)) return m||""; const [y,mo]=m.split("-"); return new Date(+y,+mo-1,1).toLocaleDateString("en-US",{month:"short",year:"numeric"}); };
+  // Quick enable/disable a campaign for new-deal creation (no need to open the editor).
+  const toggleCampaignEnabled = async (camp) => {
+    if(!(role==="admin"||role==="approver"||role==="finance")) return notify("Only Manager, Finance or Admin can turn campaigns on/off","err");
+    const next = camp.enabled===false ? true : false;
+    const {error} = await supabase.from('campaigns').update({enabled:next}).eq('id',camp.id);
+    if(error){ console.error("Toggle campaign failed:",error); return notify("Couldn't update: "+error.message,"err"); }
+    setCampaigns(prev=>prev.map(c=>c.id===camp.id?{...c,enabled:next}:c));
+    setSelCamp(c=>c&&c.id===camp.id?{...c,enabled:next}:c);
+    notify(next?`"${camp.name}" is now active for new deals`:`"${camp.name}" is now inactive — hidden when creating deals`);
   };
 
   // ── Per-member monthly budget (cap defaults to ₹50k; counts a creator's locked, non-barter collabs in a calendar month) ──
@@ -1566,7 +1581,7 @@ export default function InvogueCollabHQ() {
 
   const openEditCampaign = (c) => {
     if(!(role==="admin"||role==="approver"||role==="finance")) return notify("Only admin / manager / finance can edit campaigns","err");
-    setNCamp({name:c.name, budget:c.budget!=null?String(c.budget):"", target:String(c.target||""), deadline:c.deadline||"", brief:c.brief||"", status:c.status||"active", army:!!c.army, agency:!!c.agency, agencyName:c.agencyName||"", agencyPayout:c.agencyPayout!=null?String(c.agencyPayout):""});
+    setNCamp({name:c.name, budget:c.budget!=null?String(c.budget):"", target:String(c.target||""), deadline:c.deadline||"", brief:c.brief||"", status:c.status||"active", army:!!c.army, agency:!!c.agency, agencyName:c.agencyName||"", agencyPayout:c.agencyPayout!=null?String(c.agencyPayout):"", enabled:c.enabled!==false, months:Array.isArray(c.months)?[...c.months]:[]});
     setEditingCampId(c.id);
     setModal("newCamp");
   };
@@ -1580,10 +1595,11 @@ export default function InvogueCollabHQ() {
     // ── EDIT existing campaign ──
     if(editingCampId){
       const agency=!!nCamp.agency, army=agency?false:!!nCamp.army;
-      const patch = {name:nCamp.name, budget:+nCamp.budget, target_influencers:+nCamp.target, status:nCamp.status||"active", deadline:nCamp.deadline||null, brief:nCamp.brief||null, army, agency, agency_name:agency?(nCamp.agencyName||null):null, agency_payout:agency?(+nCamp.agencyPayout||0):0};
+      const months=Array.isArray(nCamp.months)?nCamp.months:[];
+      const patch = {name:nCamp.name, budget:+nCamp.budget, target_influencers:+nCamp.target, status:nCamp.status||"active", deadline:nCamp.deadline||null, brief:nCamp.brief||null, army, agency, agency_name:agency?(nCamp.agencyName||null):null, agency_payout:agency?(+nCamp.agencyPayout||0):0, enabled:nCamp.enabled!==false, active_months:months};
       const {error} = await supabase.from('campaigns').update(patch).eq('id',editingCampId);
       if(error){ console.error("Campaign update failed:",error); return notify("Failed to update campaign: "+error.message,"err"); }
-      const localPatch={name:nCamp.name,budget:+nCamp.budget,target:+nCamp.target,status:nCamp.status||"active",deadline:nCamp.deadline,brief:nCamp.brief,army,agency,agencyName:agency?(nCamp.agencyName||""):"",agencyPayout:agency?(+nCamp.agencyPayout||0):0};
+      const localPatch={name:nCamp.name,budget:+nCamp.budget,target:+nCamp.target,status:nCamp.status||"active",deadline:nCamp.deadline,brief:nCamp.brief,army,agency,agencyName:agency?(nCamp.agencyName||""):"",agencyPayout:agency?(+nCamp.agencyPayout||0):0,enabled:nCamp.enabled!==false,months};
       setCampaigns(prev=>prev.map(c=>c.id===editingCampId?{...c,...localPatch}:c));
       if(selCamp&&selCamp.id===editingCampId) setSelCamp(c=>c?{...c,...localPatch}:c);
       setModal(null); setNCamp(null); setEditingCampId(null);
@@ -1603,7 +1619,9 @@ export default function InvogueCollabHQ() {
         army:!!nCamp.agency?false:!!nCamp.army,
         agency:!!nCamp.agency,
         agency_name:nCamp.agency?(nCamp.agencyName||null):null,
-        agency_payout:nCamp.agency?(+nCamp.agencyPayout||0):0
+        agency_payout:nCamp.agency?(+nCamp.agencyPayout||0):0,
+        enabled:nCamp.enabled!==false,
+        active_months:Array.isArray(nCamp.months)?nCamp.months:[]
       });
       if(campErr) {
         console.error("Campaign insert failed:",campErr);
@@ -1626,7 +1644,9 @@ export default function InvogueCollabHQ() {
       agency:!!nCamp.agency,
       agencyName:nCamp.agency?(nCamp.agencyName||""):"",
       agencyPayout:nCamp.agency?(+nCamp.agencyPayout||0):0,
-      agencyPaid:false
+      agencyPaid:false,
+      enabled:nCamp.enabled!==false,
+      months:Array.isArray(nCamp.months)?nCamp.months:[]
     }]);
     setModal(null);
     setNCamp(null);
@@ -3795,7 +3815,7 @@ return (
           </Section>}
 
           {/* CAMPAIGN BUDGETS */}
-          <Section title="Campaign Budgets" action={<Btn v="gold" sm onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:false,agency:false,agencyName:"",agencyPayout:""});setModal("newCamp")}}>+ New Campaign</Btn>}>
+          <Section title="Campaign Budgets" action={<Btn v="gold" sm onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:false,agency:false,agencyName:"",agencyPayout:"",enabled:true,months:[]});setModal("newCamp")}}>+ New Campaign</Btn>}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"14px"}}>
               {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"18px",cursor:"pointer"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"10px"}}><span style={{fontWeight:600,fontSize:"14px"}}>{c.name}</span><span style={{fontFamily:T.display,fontSize:"16px",fontWeight:600,color:pct>90?T.err:T.text}}>{pct}%</span></div>
@@ -5872,7 +5892,7 @@ return (
               <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{campaigns.filter(c=>c.status==="active").length} active · {f(campaigns.reduce((s,c)=>s+campCommitted(c.id),0))} committed</div>
               <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Campaigns</div>
             </div>
-            {(role==="approver"||role==="finance"||role==="admin")&&<Btn v="gold" onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:campKind==="army",agency:campKind==="agency",agencyName:"",agencyPayout:""});setModal("newCamp")}}>+ New Campaign</Btn>}
+            {(role==="approver"||role==="finance"||role==="admin")&&<Btn v="gold" onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:campKind==="army",agency:campKind==="agency",agencyName:"",agencyPayout:"",enabled:true,months:[]});setModal("newCamp")}}>+ New Campaign</Btn>}
           </div>
           <div style={{display:"flex",gap:"7px",marginBottom:"16px"}}>
             {(()=>{const kindOf=c=>c.army?"army":c.agency?"agency":"regular";const kcount=k=>campaigns.filter(c=>k==="all"?true:kindOf(c)===k).length;return [{k:"regular",l:"Regular"},{k:"army",l:"🎖 Creator Army"},{k:"agency",l:"🏢 Agency"},{k:"all",l:"All"}].map(t=><button key={t.k} onClick={()=>setCampKind(t.k)} style={{padding:"6px 12px",border:`1px solid ${campKind===t.k?T.brand:T.border}`,borderRadius:"2px",background:campKind===t.k?T.brand:T.surface,color:campKind===t.k?"#fff":T.sub,fontSize:"10px",fontWeight:700,letterSpacing:"0.5px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui}}>{t.l} ({kcount(t.k)})</button>)})()}
@@ -5881,12 +5901,16 @@ return (
             {campaigns.filter(c=>{const k=c.army?"army":c.agency?"agency":"regular";return campKind==="all"?true:k===campKind}).map(c=>{
               const comm=campCommitted(c.id),pd=campPaid(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0,lk=campLocked(c.id);
               const over=comm>c.budget&&c.budget>0;
-              return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${over?"#E8C9C6":T.border}`,borderTop:over?`2px solid ${T.err}`:undefined,borderRadius:"2px",padding:"22px",cursor:"pointer"}}>
+              return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${c.enabled===false?T.border:over?"#E8C9C6":T.border}`,borderTop:over?`2px solid ${T.err}`:undefined,borderLeft:c.enabled===false?`3px solid ${T.faint}`:undefined,borderRadius:"2px",padding:"22px",cursor:"pointer",opacity:c.enabled===false?0.6:1}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
                   <div style={{fontFamily:DISPLAY,fontSize:"20px",fontWeight:600,lineHeight:1.15}}>{c.army&&<span style={{fontSize:"12px"}}>🎖 </span>}{c.agency&&<span style={{fontSize:"12px"}}>🏢 </span>}{c.name}{c.agency&&c.agencyName&&<span style={{fontSize:"11px",color:T.sub,fontFamily:T.ui,fontWeight:400}}> · {c.agencyName}</span>}</div>
-                  <span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,padding:"3px 8px",borderRadius:"2px",whiteSpace:"nowrap",color:c.status==="active"?T.ok:c.status==="planning"?T.warn:T.sub,background:c.status==="active"?T.okBg:c.status==="planning"?T.warnBg:"#F2EEE4"}}>{c.status}</span>
+                  <div style={{display:"flex",gap:"5px",alignItems:"center",flexShrink:0}}>
+                    {c.enabled===false&&<span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,padding:"3px 8px",borderRadius:"2px",whiteSpace:"nowrap",color:T.err,background:T.errBg}}>Inactive</span>}
+                    <span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,padding:"3px 8px",borderRadius:"2px",whiteSpace:"nowrap",color:c.status==="active"?T.ok:c.status==="planning"?T.warn:T.sub,background:c.status==="active"?T.okBg:c.status==="planning"?T.warnBg:"#F2EEE4"}}>{c.status}</span>
+                  </div>
                 </div>
-                <div style={{fontSize:"10px",color:c.deadline?T.sub:T.faint,marginBottom:"18px",fontStyle:c.deadline?"normal":"italic",fontFamily:c.deadline?T.ui:DISPLAY}}>{c.deadline?`Deadline · ${c.deadline}`:"No deadline set"}</div>
+                <div style={{fontSize:"10px",color:c.deadline?T.sub:T.faint,marginBottom:(c.months&&c.months.length)?"8px":"18px",fontStyle:c.deadline?"normal":"italic",fontFamily:c.deadline?T.ui:DISPLAY}}>{c.deadline?`Deadline · ${c.deadline}`:"No deadline set"}</div>
+                {c.months&&c.months.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:"4px",marginBottom:"18px"}}>{c.months.map(m=><span key={m} style={{fontSize:"9px",fontWeight:700,letterSpacing:"0.5px",textTransform:"uppercase",padding:"2px 7px",borderRadius:"2px",background:T.goldSoft,color:T.brand}}>{monthLabel(m)}</span>)}</div>}
                 <div style={{display:"flex",borderTop:`1px solid ${T.borderSoft}`,borderBottom:`1px solid ${T.borderSoft}`,marginBottom:"14px"}}>
                   <div style={{flex:1,padding:"12px 0"}}><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px"}}>Budget</div><div style={{fontFamily:DISPLAY,fontSize:"16px",fontWeight:600}}>{f(c.budget)}</div></div>
                   <div style={{flex:1,padding:"12px 0"}}><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,marginBottom:"4px"}}>Committed</div><div style={{fontFamily:DISPLAY,fontSize:"16px",fontWeight:600,color:over?T.err:comm>0?T.gold:T.faint}}>{f(comm)}</div></div>
@@ -5902,6 +5926,7 @@ return (
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px"}}>
                   <div style={{fontSize:"11px",color:T.sub}}>{lk}/{c.target} influencers locked · <b style={{color:T.text}}>{campDeals(c.id).length} deals</b></div>
                   <div style={{display:"flex",gap:"10px",flex:"none"}}>
+                    {(role==="admin"||role==="approver"||role==="finance")&&<span onClick={(e)=>{e.stopPropagation();toggleCampaignEnabled(c)}} style={{fontSize:"10px",letterSpacing:"0.5px",textTransform:"uppercase",fontWeight:700,color:c.enabled===false?T.ok:T.sub,cursor:"pointer"}}>{c.enabled===false?"● Activate":"○ Deactivate"}</span>}
                     {(role==="admin"||role==="approver"||role==="finance")&&<span onClick={(e)=>{e.stopPropagation();openEditCampaign(c)}} style={{fontSize:"10px",letterSpacing:"0.5px",textTransform:"uppercase",fontWeight:700,color:T.brand,cursor:"pointer"}}>✎ Edit</span>}
                     {role==="admin"&&<span onClick={(e)=>{e.stopPropagation();deleteCampaignAdmin(c)}} style={{fontSize:"10px",letterSpacing:"0.5px",textTransform:"uppercase",fontWeight:700,color:T.err,cursor:"pointer"}}>🗑 Delete</span>}
                   </div>
@@ -6142,7 +6167,7 @@ return (
         {nDeal&&<>
           {nDeal.creatorArmy&&<div style={{padding:"8px 12px",background:T.goldSoft,border:`1px solid ${T.gold}44`,borderRadius:"2px",marginBottom:"12px",fontSize:"12px",color:T.brand,fontWeight:600}}>🎖 Creator Army collab · {nDeal.armyMonth}</div>}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 10px"}}>
-            <Field label={nDeal.creatorArmy?"Army Campaign *":"Campaign *"}><Sel value={nDeal.cid} onChange={e=>{const cid=e.target.value;const ag=!!getCamp(cid)?.agency;setNDeal({...nDeal,cid,...(ag?{amount:"0"}:{})})}} options={campaigns.filter(c=>!!c.army===!!nDeal.creatorArmy).map(c=>({v:c.id,l:c.agency?`🏢 ${c.name}`:c.name}))}/></Field>
+            <Field label={nDeal.creatorArmy?"Army Campaign *":"Campaign *"}><Sel value={nDeal.cid} onChange={e=>{const cid=e.target.value;const ag=!!getCamp(cid)?.agency;setNDeal({...nDeal,cid,...(ag?{amount:"0"}:{})})}} options={campaigns.filter(c=>!!c.army===!!nDeal.creatorArmy&&(c.enabled!==false||c.id===nDeal.cid)).map(c=>({v:c.id,l:(c.agency?`🏢 ${c.name}`:c.name)+(c.enabled===false?" (inactive)":"")}))}/></Field>
             {!!getCamp(nDeal.cid)?.agency&&<div style={{padding:"8px 12px",background:T.goldSoft,border:`1px solid ${T.gold}44`,borderRadius:"2px",marginBottom:"10px",fontSize:"12px",color:T.brand,fontWeight:600}}>🏢 Agency-managed campaign ({getCamp(nDeal.cid)?.agencyName||"agency"}) · no confirmation email, no per-creator payment. Amount is handled at campaign level.</div>}
             <Field label="Influencer *"><Inp value={nDeal.inf} onChange={e=>setNDeal({...nDeal,inf:e.target.value})} placeholder="Priya Sharma" error={formErrors.inf}/></Field>
             <Field label="Influencer Email" required><Inp value={nDeal.email} onChange={e=>setNDeal({...nDeal,email:e.target.value})} placeholder="influencer@gmail.com" error={formErrors.email}/></Field>
@@ -6232,6 +6257,20 @@ return (
           <Field label="Target Influencers *"><Inp value={nCamp.target} onChange={e=>setNCamp({...nCamp,target:e.target.value})} type="number"/></Field>
           <Field label="Status"><Sel value={nCamp.status||"active"} onChange={e=>setNCamp({...nCamp,status:e.target.value})} options={[{v:"active",l:"Active"},{v:"planning",l:"Planning"},{v:"completed",l:"Completed"}]}/></Field>
           <Field label="Deadline"><Inp value={nCamp.deadline} onChange={e=>setNCamp({...nCamp,deadline:e.target.value})} type="date"/></Field>
+          <label style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",background:nCamp.enabled!==false?T.okBg:T.errBg,border:`1px solid ${nCamp.enabled!==false?T.ok:T.err}44`,borderRadius:"2px",cursor:"pointer",fontSize:"13px",marginTop:"4px"}}>
+            <input type="checkbox" checked={nCamp.enabled!==false} onChange={e=>setNCamp({...nCamp,enabled:e.target.checked})} style={{cursor:"pointer"}}/>
+            <span><b>{nCamp.enabled!==false?"Active":"Inactive"} for new deals</b> — {nCamp.enabled!==false?"shows up when negotiators create a deal":"hidden from the deal-creation dropdown"}</span>
+          </label>
+          <Field label="Active Month(s) — optional">
+            <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+              <input type="month" value={campMonthDraft} onChange={e=>setCampMonthDraft(e.target.value)} style={{flex:1,padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:"2px",fontSize:"14px",fontFamily:"Archivo,sans-serif",color:T.text,outline:"none"}}/>
+              <Btn v="outline" sm onClick={()=>{if(!campMonthDraft)return;const cur=Array.isArray(nCamp.months)?nCamp.months:[];if(cur.includes(campMonthDraft))return;setNCamp({...nCamp,months:[...cur,campMonthDraft].sort()});setCampMonthDraft("")}}>+ Add</Btn>
+            </div>
+            {(nCamp.months||[]).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:"5px",marginTop:"7px"}}>
+              {(nCamp.months||[]).map(m=><span key={m} style={{display:"inline-flex",alignItems:"center",gap:"5px",padding:"3px 8px",background:T.goldSoft,border:`1px solid ${T.gold}44`,borderRadius:"2px",fontSize:"11px",fontWeight:600}}>{monthLabel(m)}<span onClick={()=>setNCamp({...nCamp,months:(nCamp.months||[]).filter(x=>x!==m)})} style={{cursor:"pointer",color:T.err,fontWeight:700}}>×</span></span>)}
+            </div>}
+            <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>Just a label for which month(s) this campaign runs — doesn't affect the dropdown.</div>
+          </Field>
           <Field label="Campaign Brief"><Textarea value={nCamp.brief} onChange={e=>setNCamp({...nCamp,brief:e.target.value})} placeholder="Describe the campaign objectives, target audience, key messages..." rows={4}/></Field>
           <label style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",background:nCamp.army?T.goldSoft:"transparent",border:`1px solid ${nCamp.army?T.gold:T.border}`,borderRadius:"2px",cursor:nCamp.agency?"not-allowed":"pointer",fontSize:"13px",marginTop:"4px",opacity:nCamp.agency?0.5:1}}>
             <input type="checkbox" checked={!!nCamp.army} disabled={!!nCamp.agency} onChange={e=>setNCamp({...nCamp,army:e.target.checked,...(e.target.checked?{agency:false}:{})})} style={{cursor:"pointer"}}/>
@@ -6269,9 +6308,16 @@ return (
           const dropped = cd.filter(d=>["dropped","drop_requested","rejected"].includes(d.status));
 
           return <>
-            {(role==="admin"||role==="approver"||role==="finance")&&<div style={{display:"flex",justifyContent:"flex-end",gap:"6px",marginBottom:"12px"}}>
-              <Btn v="outline" sm onClick={()=>openEditCampaign(selCamp)}>✎ Edit Campaign</Btn>
-              {role==="admin"&&<Btn v="danger" sm onClick={()=>{const c=selCamp;setModal(null);setSelCamp(null);deleteCampaignAdmin(c);}}>🗑 Delete</Btn>}
+            {(role==="admin"||role==="approver"||role==="finance")&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"6px",marginBottom:"12px",flexWrap:"wrap"}}>
+              <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                <span style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,padding:"4px 9px",borderRadius:"2px",color:selCamp.enabled===false?T.err:T.ok,background:selCamp.enabled===false?T.errBg:T.okBg}}>{selCamp.enabled===false?"Inactive for new deals":"Active for new deals"}</span>
+                {selCamp.months&&selCamp.months.length>0&&<span style={{fontSize:"11px",color:T.sub}}>· {selCamp.months.map(monthLabel).join(", ")}</span>}
+              </div>
+              <div style={{display:"flex",gap:"6px"}}>
+                <Btn v={selCamp.enabled===false?"ok":"outline"} sm onClick={()=>toggleCampaignEnabled(selCamp)}>{selCamp.enabled===false?"● Activate":"○ Deactivate"}</Btn>
+                <Btn v="outline" sm onClick={()=>openEditCampaign(selCamp)}>✎ Edit Campaign</Btn>
+                {role==="admin"&&<Btn v="danger" sm onClick={()=>{const c=selCamp;setModal(null);setSelCamp(null);deleteCampaignAdmin(c);}}>🗑 Delete</Btn>}
+              </div>
             </div>}
             {/* Agency panel (agency-managed campaigns) */}
             {selCamp.agency&&<div style={{border:`1px solid ${T.gold}55`,background:T.goldSoft,borderRadius:"2px",padding:"14px",marginBottom:"14px"}}>

@@ -1172,10 +1172,16 @@ export default function InvogueCollabHQ() {
 
   const stats = useMemo(()=>{
     const active = deals.filter(d=>!["rejected","pending","renegotiate","dropped"].includes(d.status));
+    // Approved-but-not-live (work in progress) vs live-but-not-paid (money owed now).
+    const PIPELINE_ST = ["manager_approved","approved","email_sent","acknowledged","shipped","delivered_prod"];
+    const LIVE_UNPAID_ST = ["partial_live","live","payment_details_received","invoice_ok","invoice_pending_approval","payment_requested","payment_approved","partial_paid","disputed"];
+    const liveUnpaid = deals.filter(d=>LIVE_UNPAID_ST.includes(d.status)&&remaining(d)>0);
     return {
       committed: active.reduce((s,d)=>s+d.amount,0),
       paid: deals.reduce((s,d)=>s+totalPaid(d),0),
-      pipeline: deals.reduce((s,d)=>s+d.amount,0),
+      pipelineDue: deals.filter(d=>PIPELINE_ST.includes(d.status)&&remaining(d)>0).reduce((s,d)=>s+remaining(d),0),
+      actualDue: liveUnpaid.reduce((s,d)=>s+remaining(d),0),
+      actualDueN: liveUnpaid.length,
       pendingN: deals.filter(d=>d.status==="pending"||d.status==="renegotiate").length,
       disputed: deals.filter(d=>d.status==="disputed").length,
       dropped: deals.filter(d=>d.status==="dropped").length,
@@ -3701,7 +3707,6 @@ return (
             {[
               {l:"Active Collabs",v:activeCount,c:T.text,sub:`${deals.length} total`},
               {l:"Pending Approval",v:pendingApproval.length,c:pendingApproval.length>0?T.brand:T.text,sub:stats.disputed>0?`${stats.disputed} disputes`:"all clear"},
-              {l:"Payments Due",v:f(totalOutstanding),c:T.text,sub:`${needPayment.length} collabs`},
               {l:"Live This Month",v:liveCount,c:T.text,sub:`${campaigns.length} campaigns`},
             ].map((m,i,arr)=><div key={i} style={{flex:"1 1 180px",padding:"20px 24px",borderRight:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
               <div style={{fontSize:"10px",letterSpacing:"2px",textTransform:"uppercase",color:T.sub,marginBottom:"10px"}}>{m.l}</div>
@@ -3712,8 +3717,9 @@ return (
           {/* Secondary metrics */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"10px",marginBottom:"30px"}}>
             <StatBox l="Total Committed" v={f(stats.committed)}/>
+            <StatBox l="In Pipeline" v={f(stats.pipelineDue)} sub="approved · not live yet"/>
+            <StatBox l="Actual Due" v={f(stats.actualDue)} c={T.warn} sub="live · not paid yet"/>
             <StatBox l="Total Paid" v={f(stats.paid)} c={T.ok}/>
-            <StatBox l="Total Pipeline" v={f(stats.pipeline)}/>
             <StatBox l="Active Team" v={activeUsers.length} sub={`${users.length} total`}/>
             <StatBox l="Pending Shipments" v={stats.pendingShip}/>
           </div>
@@ -3774,18 +3780,7 @@ return (
             </div>
           </Section>}
 
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"32px"}}>
-            {/* PAYMENTS DUE */}
-            <Section title="Payments Due" action={<span style={{fontSize:"11px",color:T.sub,fontStyle:"italic",fontFamily:T.display}}>{f(totalOutstanding)} total</span>}>
-              {needPayment.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>All clear</div>}
-              {needPayment.length>0&&<div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
-                {needPayment.slice(0,6).map((d,i,arr)=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",cursor:"pointer"}}>
-                  <div><div style={{fontSize:"13px",fontWeight:600}}>{d.inf}</div><div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{d.agencyManaged?"Agency · invoice":(d.paymentDetailsAt?"Details in · ready":"Awaiting details")}</div></div>
-                  <div style={{textAlign:"right"}}><div style={{fontFamily:T.display,fontSize:"16px",fontWeight:600}}>{f(remaining(d))}</div><div style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,marginTop:"2px",color:d.paymentDueDate&&new Date(d.paymentDueDate)<new Date()?T.err:T.sub}}>{d.paymentDueDate?(new Date(d.paymentDueDate)<new Date()?"Overdue":"Due "+new Date(d.paymentDueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})):"Unscheduled"}</div></div>
-                </div>)}
-              </div>}
-            </Section>
-
+          <div style={{display:"grid",gridTemplateColumns:"1fr",gap:"32px"}}>
             {/* SHIPMENTS */}
             <Section title="Shipments" action={<Btn v="ghost" sm onClick={()=>setView("shipments")}>View all →</Btn>}>
               {pendingShip.length===0&&inTransit.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>All shipped &amp; delivered</div>}

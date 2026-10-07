@@ -306,6 +306,7 @@ const CONTENT_STAGES = [
 
 // ─── CONTENT DELIVERABLES PIPELINE COMPONENT ───
 const ContentPipeline = ({deals:dls, onClickDeal}) => {
+  const [selStage, setSelStage] = useState(null);
   const allDels = [];
   dls.forEach(d=>{
     if(!d.dels) return;
@@ -318,27 +319,31 @@ const ContentPipeline = ({deals:dls, onClickDeal}) => {
   const grouped = {};
   CONTENT_STAGES.forEach(s=>grouped[s.key]=[]);
   allDels.forEach(dl=>{ if(grouped[dl.st]) grouped[dl.st].push(dl); });
-  const nonEmpty = CONTENT_STAGES.filter(s=>grouped[s.key].length>0);
-  if(nonEmpty.length===0) return null;
+  const sel = selStage ? CONTENT_STAGES.find(s=>s.key===selStage) : null;
+  const selList = sel ? grouped[sel.key] : [];
   return <div>
     <div style={{display:"flex",gap:"8px",marginBottom:"18px",flexWrap:"wrap"}}>
-      {CONTENT_STAGES.map(s=>{const ct=grouped[s.key].length;return <div key={s.key} style={{flex:"1 1 110px",padding:"14px 16px",borderRadius:"2px",background:T.surface,border:`1px solid ${T.border}`,opacity:ct>0?1:.55}}>
+      {CONTENT_STAGES.map(s=>{const ct=grouped[s.key].length;const on=selStage===s.key;return <div key={s.key} onClick={()=>{if(ct>0)setSelStage(on?null:s.key)}} style={{flex:"1 1 110px",padding:"14px 16px",borderRadius:"2px",background:on?s.bg:T.surface,border:`1px solid ${on?s.c:T.border}`,opacity:ct>0?1:.55,cursor:ct>0?"pointer":"default",transition:"all .12s"}}>
         <div style={{fontFamily:T.display,fontSize:"28px",fontWeight:500,lineHeight:1,color:ct>0?s.c:T.sub}}>{ct}</div>
         <div style={{fontSize:"9px",fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:"1px",lineHeight:"1.3",marginTop:"6px"}}>{s.label}</div>
       </div>;})}
     </div>
-    {nonEmpty.map(s=><div key={s.key} style={{marginBottom:"16px"}}>
-      <div style={{fontSize:"11px",fontWeight:700,color:T.text,textTransform:"uppercase",letterSpacing:"1.5px",marginBottom:"8px"}}>{s.label} <span style={{color:s.c}}>{grouped[s.key].length}</span></div>
+    {!sel&&<div style={{fontSize:"12px",color:T.sub,padding:"6px 2px",fontStyle:"italic"}}>Click a stage above to see those collabs.</div>}
+    {sel&&<div style={{marginBottom:"16px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
+        <div style={{fontSize:"11px",fontWeight:700,color:T.text,textTransform:"uppercase",letterSpacing:"1.5px"}}>{sel.label} <span style={{color:sel.c}}>{selList.length}</span></div>
+        <span onClick={()=>setSelStage(null)} style={{fontSize:"10px",letterSpacing:"0.5px",textTransform:"uppercase",fontWeight:700,color:T.sub,cursor:"pointer"}}>✕ Clear</span>
+      </div>
       <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
-      {grouped[s.key].map((dl,i,arr)=><div key={dl.dealId+"-"+i} onClick={()=>onClickDeal&&onClickDeal(dl.deal)} style={{padding:"12px 16px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:onClickDeal?"pointer":"default"}}>
+      {selList.map((dl,i,arr)=><div key={dl.dealId+"-"+i} onClick={()=>onClickDeal&&onClickDeal(dl.deal)} style={{padding:"12px 16px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",fontSize:"13px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:onClickDeal?"pointer":"default"}}>
         <div><b style={{fontWeight:600}}>{dl.inf}</b> <span style={{color:T.sub}}>· {dl.type}: {dl.desc||"—"}</span></div>
         <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
           {dl.link&&<a href={dl.link.startsWith("http")?dl.link:"https://"+dl.link} target="_blank" rel="noreferrer" style={{fontSize:"10px",letterSpacing:"0.5px",textTransform:"uppercase",color:T.info,fontWeight:700}} onClick={e=>e.stopPropagation()}>Link</a>}
-          <span style={{padding:"4px 9px",borderRadius:"2px",fontSize:"9px",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",color:s.c,background:s.bg}}>{s.label}</span>
+          <span style={{padding:"4px 9px",borderRadius:"2px",fontSize:"9px",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",color:sel.c,background:sel.bg}}>{sel.label}</span>
         </div>
       </div>)}
       </div>
-    </div>)}
+    </div>}
   </div>;
 };
 
@@ -3780,17 +3785,6 @@ return (
             </div>
           </Section>}
 
-          <div style={{display:"grid",gridTemplateColumns:"1fr",gap:"32px"}}>
-            {/* SHIPMENTS */}
-            <Section title="Shipments" action={<Btn v="ghost" sm onClick={()=>setView("shipments")}>View all →</Btn>}>
-              {pendingShip.length===0&&inTransit.length===0&&<div style={{fontSize:"13px",color:T.sub,padding:"8px 0"}}>All shipped &amp; delivered</div>}
-              {(pendingShip.length>0||inTransit.length>0)&&<div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
-                {pendingShip.map(d=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:`1px solid ${T.borderSoft}`,cursor:"pointer"}}><div><div style={{fontSize:"13px",fontWeight:600}}>{d.inf}</div><div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{d.product}</div></div><span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.warn,fontWeight:700}}>Awaiting dispatch</span></div>)}
-                {inTransit.map((d,i,arr)=><div key={d.id} onClick={()=>{setSel(d);setModal("detail")}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",cursor:"pointer"}}><div><div style={{fontSize:"13px",fontWeight:600}}>{d.inf}</div><div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{d.ship.carrier} · {d.ship.track}</div></div><span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.info,fontWeight:700}}>In transit</span></div>)}
-              </div>}
-            </Section>
-          </div>
-
           {/* TEAM PERFORMANCE */}
           <Section title="Team Performance" action={<Btn v="ghost" sm onClick={()=>setView("users")}>Manage →</Btn>}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"10px"}}>
@@ -3821,17 +3815,6 @@ return (
               </div>)}
             </div>
           </Section>}
-
-          {/* CAMPAIGN BUDGETS */}
-          <Section title="Campaign Budgets" action={<Btn v="gold" sm onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:false,agency:false,agencyName:"",agencyPayout:"",enabled:true,months:[],noAdRights:false});setModal("newCamp")}}>+ New Campaign</Btn>}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"14px"}}>
-              {campaigns.map(c=>{const comm=campCommitted(c.id),pct=c.budget>0?Math.round(comm/c.budget*100):0;return <div key={c.id} onClick={()=>openCampDetail(c)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"18px",cursor:"pointer"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"10px"}}><span style={{fontWeight:600,fontSize:"14px"}}>{c.name}</span><span style={{fontFamily:T.display,fontSize:"16px",fontWeight:600,color:pct>90?T.err:T.text}}>{pct}%</span></div>
-                <div style={{height:"6px",borderRadius:"3px",background:T.goldSoft,overflow:"hidden",marginBottom:"8px"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:pct>90?T.err:pct>70?T.gold:T.brand,borderRadius:"3px"}}/></div>
-                <div style={{fontSize:"11px",color:T.sub}}>{f(comm)} / {f(c.budget)} · {campLocked(c.id)}/{c.target} influencers</div>
-              </div>;})}
-            </div>
-          </Section>
 
           {/* CONTENT DELIVERABLES PIPELINE */}
           <Section title="Content Pipeline" icon="🎬">

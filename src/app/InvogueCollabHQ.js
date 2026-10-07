@@ -464,6 +464,7 @@ export default function InvogueCollabHQ() {
     {id:'p17',name:'Zipper Shapewear Swimsuit',sizes:['S','M','L','XL','2XL','3XL'],colors:[]},
     {id:'p18',name:'Plunge Neck Shapewear Swimsuit',sizes:['XS','S','M','L','XL','2XL','3XL'],colors:[]},
     {id:'p19',name:'Thong: Malaika X Invogue',sizes:['S','M','L','XL','2XL','3XL'],colors:['Black','Olive','Red','Pink']},
+    {id:'p20',name:'Tank Bodysuit Bodyshaper',sizes:['XS/S','M/L','XL/2XL','3XL/4XL'],colors:['Brown','White']},
   ]);
   const [showProductMgmt, setShowProductMgmt] = useState(false);
   const [newProduct, setNewProduct] = useState({name:'',sizes:'',colors:''});
@@ -1347,7 +1348,7 @@ export default function InvogueCollabHQ() {
     if(!dealIsAgency && !nDeal.amount) errors.amount = "Amount is required";
     if(!nDeal.deadline) errors.deadline = "Content deadline is required";
     if(!hasProduct) errors.products = "At least one product is required";
-    if(!nDeal.email) errors.email = "Email is required";
+    if(!dealIsAgency && !nDeal.email) errors.email = "Email is required";
     if(nDeal.dels.length===0) errors.dels = "Add at least one deliverable";
 
     // Check deliverables have descriptions
@@ -1507,7 +1508,7 @@ export default function InvogueCollabHQ() {
     if(!dealIsAgency && !nDeal.amount) errors.amount = "Amount is required";
     if(!nDeal.deadline) errors.deadline = "Content deadline is required";
     if(!hasProduct) errors.products = "At least one product is required";
-    if(!nDeal.email) errors.email = "Email is required";
+    if(!dealIsAgency && !nDeal.email) errors.email = "Email is required";
     if(!nDeal.dels||nDeal.dels.length===0) errors.dels = "Add at least one deliverable";
     if((nDeal.dels||[]).some(d=>!d.desc)) errors.dels = "All deliverables must have descriptions";
     if(nDeal.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nDeal.email)) errors.email = "Invalid email format";
@@ -6183,7 +6184,7 @@ return (
             <Field label={nDeal.creatorArmy?"Army Campaign *":"Campaign *"}><Sel value={nDeal.cid} onChange={e=>{const cid=e.target.value;const c=getCamp(cid);setNDeal({...nDeal,cid,...(c?.agency?{amount:"0"}:{}),...(c?.noAdRights?{usage:"No ad rights"}:{})})}} options={campaigns.filter(c=>!!c.army===!!nDeal.creatorArmy&&(c.enabled!==false||c.id===nDeal.cid)).map(c=>({v:c.id,l:(c.agency?`🏢 ${c.name}`:c.name)+(c.enabled===false?" (inactive)":"")}))}/></Field>
             {!!getCamp(nDeal.cid)?.agency&&<div style={{padding:"8px 12px",background:T.goldSoft,border:`1px solid ${T.gold}44`,borderRadius:"2px",marginBottom:"10px",fontSize:"12px",color:T.brand,fontWeight:600}}>🏢 Agency-managed campaign ({getCamp(nDeal.cid)?.agencyName||"agency"}) · no confirmation email, no per-creator payment. Amount is handled at campaign level.</div>}
             <Field label="Influencer *"><Inp value={nDeal.inf} onChange={e=>setNDeal({...nDeal,inf:e.target.value})} placeholder="Priya Sharma" error={formErrors.inf}/></Field>
-            <Field label="Influencer Email" required><Inp value={nDeal.email} onChange={e=>setNDeal({...nDeal,email:e.target.value})} placeholder="influencer@gmail.com" error={formErrors.email}/></Field>
+            <Field label={getCamp(nDeal.cid)?.agency?"Influencer Email (optional)":"Influencer Email"} required={!getCamp(nDeal.cid)?.agency}><Inp value={nDeal.email} onChange={e=>setNDeal({...nDeal,email:e.target.value})} placeholder={getCamp(nDeal.cid)?.agency?"optional — agency-managed":"influencer@gmail.com"} error={formErrors.email}/></Field>
             <Field label="Profile" required><Inp value={nDeal.profile} onChange={e=>setNDeal({...nDeal,profile:e.target.value})} placeholder="instagram.com/handle" error={formErrors.profile}/></Field>
             <Field label="Platform"><Sel value={nDeal.platform} onChange={e=>setNDeal({...nDeal,platform:e.target.value})} options={[{v:"Instagram",l:"Instagram"},{v:"YouTube",l:"YouTube"},{v:"Other",l:"Other"}]}/></Field>
             <Field label="Followers"><Inp value={nDeal.followers} onChange={e=>setNDeal({...nDeal,followers:e.target.value})} placeholder="125K"/></Field>

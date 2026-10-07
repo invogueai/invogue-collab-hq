@@ -3807,15 +3807,6 @@ return (
             </div>
           </Section>
 
-          {/* OVERDUE DELIVERABLES */}
-          {overdueDels.length>0&&<Section title="Overdue Deliverables" action={<span style={{fontSize:"11px",color:T.err,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}}>{overdueDels.length} overdue</span>}>
-            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px"}}>
-              {overdueDels.map((d,i,arr)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",fontSize:"13px"}}>
-                <span><b style={{fontWeight:600}}>{d.inf}</b> <span style={{color:T.sub}}>· {d.type}: {d.desc||"—"}</span></span><span style={{fontSize:"9px",letterSpacing:"1px",textTransform:"uppercase",color:T.err,fontWeight:700}}>Due {d.deadline}</span>
-              </div>)}
-            </div>
-          </Section>}
-
           {/* CONTENT DELIVERABLES PIPELINE */}
           <Section title="Content Pipeline" icon="🎬">
             <ContentPipeline deals={deals} onClickDeal={d=>{setSel(d);setModal("detail")}}/>

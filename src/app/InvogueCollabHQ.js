@@ -1952,6 +1952,17 @@ export default function InvogueCollabHQ() {
       <li>All final videos must be approved before going live.</li>
     </ul>
 
+    <div style="margin:22px 0 10px;font-size:13px;font-weight:700;color:#770A1C;text-transform:uppercase;letter-spacing:1px;">Terms of Collaboration</div>
+    <p style="font-size:14px;line-height:1.65;color:#444;margin:0 0 10px;">Please keep the following guidelines in mind while creating your content:</p>
+    <div style="font-size:13px;color:#444;line-height:1.7;margin:0 0 18px;">
+      <p style="margin:0 0 10px;"><b>Video Quality:</b> Ensure the video is shot in good natural lighting with a clear, high-quality camera setup. The product should be clearly visible throughout the video.</p>
+      <p style="margin:0 0 10px;"><b>Content guidelines:</b> The product should be the key highlight of the video, and the final content must align with the concept, key talking points, and guidelines discussed and agreed upon by both the brand and the creator.</p>
+      <p style="margin:0 0 10px;"><b>Review &amp; Approval:</b> The final video must be shared with the brand for approval before publishing. Any trial reel, test reel, or video uploaded without prior approval will not be considered a valid deliverable. If a video is posted without being approved, a new video would be required in its place to be considered as a deliverable.</p>
+      <p style="margin:0 0 10px;"><b>Posting Timeline:</b> The content must be published within the mutually agreed timeline. In case of any delay, please inform your designated POC in advance. Failure to communicate updates may be treated as non-responsiveness and could affect the collaboration.</p>
+      <p style="margin:0 0 10px;"><b>Final Content Quality:</b> Ensure clear audio, minimal filters or edits that alter the product's actual appearance, and a clean presentation. Any feedback shared by the brand must be incorporated, and the revised draft must be approved before going live.</p>
+      <p style="margin:0;"><b>Reshoots:</b> A reshoot may be required if the creator does not follow the agreed script/concept, or if the execution of the same is not satisfactory.</p>
+    </div>
+
     <div style="margin:28px 0;text-align:center;">
       <p style="font-size:14px;color:#444;margin:0 0 14px;">If the above details look correct, please confirm by clicking the button below:</p>
       <a href="${typeof window!=='undefined'?window.location.origin:(process.env.NEXT_PUBLIC_APP_URL||'https://invogue-collab-hq.vercel.app')}/api/acknowledge?token=${ackToken}" target="_blank" style="display:inline-block;background:#770A1C;color:#fff;font-size:15px;font-weight:700;text-decoration:none;padding:14px 36px;border-radius:6px;letter-spacing:.3px;">I Agree to the Terms</a>

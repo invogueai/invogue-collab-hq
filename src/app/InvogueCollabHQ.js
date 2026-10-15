@@ -373,6 +373,7 @@ export default function InvogueCollabHQ() {
   const [dealTab, setDealTab] = useState("overview"); // overview|deliverables|shipment|payment|activity
   const [anFrom, setAnFrom] = useState(""); const [anTo, setAnTo] = useState(""); const [anCamp, setAnCamp] = useState(""); // analytics filters
   const [anExclArmy, setAnExclArmy] = useState(false); // analytics: exclude Creator Army campaigns
+  const [anExclAgency, setAnExclAgency] = useState(false); // analytics: exclude Agency-managed campaigns
   const [mgrNoteEdit, setMgrNoteEdit] = useState(null); // dealId being edited
   const [mgrNoteF, setMgrNoteF] = useState("");
   const [loggedIn, setLoggedIn] = useState(null); // null = login screen, user object = app
@@ -5574,7 +5575,7 @@ return (
 
           // ── Filter (creation date range + campaign) ──
           const inRange=(d)=>{const day=(d.at||"").slice(0,10); if(anFrom&&day<anFrom) return false; if(anTo&&day>anTo) return false; return true;};
-          const fdeals = deals.filter(d=>(!anCamp||d.cid===anCamp)&&(!anExclArmy||!getCamp(d.cid)?.army)&&inRange(d));
+          const fdeals = deals.filter(d=>(!anCamp||d.cid===anCamp)&&(!anExclArmy||!getCamp(d.cid)?.army)&&(!anExclAgency||!getCamp(d.cid)?.agency)&&inRange(d));
           const REAL = fdeals.filter(d=>!["rejected","dropped","drop_requested"].includes(d.status));   // real pipeline
           const committed = REAL.filter(d=>!["pending","renegotiate","manager_approved"].includes(d.status)); // locked
           const liveDeals = fdeals.filter(d=>LIVE_SET.includes(d.status));
@@ -5643,7 +5644,7 @@ return (
           return <>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:"22px",flexWrap:"wrap",gap:"12px"}}>
               <div>
-                <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{anFrom||anTo?`${anFrom||"start"} → ${anTo||"now"}`:`${getCurrentFY().label} · to date`}{anCamp?` · ${getCamp(anCamp)?.name||""}`:""}{anExclArmy?` · excl. Creator Army`:""}</div>
+                <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{anFrom||anTo?`${anFrom||"start"} → ${anTo||"now"}`:`${getCurrentFY().label} · to date`}{anCamp?` · ${getCamp(anCamp)?.name||""}`:""}{anExclArmy?` · excl. Creator Army`:""}{anExclAgency?` · excl. Agency`:""}</div>
                 <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Analytics</div>
               </div>
             </div>
@@ -5656,7 +5657,10 @@ return (
               <label style={{display:"flex",alignItems:"center",gap:"7px",fontSize:"12px",fontWeight:600,color:anExclArmy?T.brand:T.sub,cursor:anCamp?"not-allowed":"pointer",padding:"8px 10px",background:anExclArmy?T.goldSoft:"transparent",border:`1px solid ${anExclArmy?T.gold:T.border}`,borderRadius:"2px",opacity:anCamp?0.5:1,whiteSpace:"nowrap"}}>
                 <input type="checkbox" checked={anExclArmy} disabled={!!anCamp} onChange={e=>setAnExclArmy(e.target.checked)} style={{cursor:"pointer"}}/>🎖 Exclude Creator Army
               </label>
-              {(anFrom||anTo||anCamp||anExclArmy)&&<Btn v="outline" sm onClick={()=>{setAnFrom("");setAnTo("");setAnCamp("");setAnExclArmy(false)}}>Clear</Btn>}
+              <label style={{display:"flex",alignItems:"center",gap:"7px",fontSize:"12px",fontWeight:600,color:anExclAgency?T.brand:T.sub,cursor:anCamp?"not-allowed":"pointer",padding:"8px 10px",background:anExclAgency?T.goldSoft:"transparent",border:`1px solid ${anExclAgency?T.gold:T.border}`,borderRadius:"2px",opacity:anCamp?0.5:1,whiteSpace:"nowrap"}}>
+                <input type="checkbox" checked={anExclAgency} disabled={!!anCamp} onChange={e=>setAnExclAgency(e.target.checked)} style={{cursor:"pointer"}}/>🏢 Exclude Agency
+              </label>
+              {(anFrom||anTo||anCamp||anExclArmy||anExclAgency)&&<Btn v="outline" sm onClick={()=>{setAnFrom("");setAnTo("");setAnCamp("");setAnExclArmy(false);setAnExclAgency(false)}}>Clear</Btn>}
               <span style={{marginLeft:"auto",fontSize:"11px",color:T.sub,fontStyle:"italic",fontFamily:DISPLAY}}>Filtered by collab creation date</span>
             </div>
 
@@ -5722,7 +5726,7 @@ return (
             {/* Campaign Performance (filtered) */}
             <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"2px",padding:"22px",marginBottom:"28px"}}>
               <div style={{fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:"16px"}}>Campaign performance</div>
-              {campaigns.filter(c=>(!anCamp||c.id===anCamp)&&(!anExclArmy||!c.army)).map(c=>{
+              {campaigns.filter(c=>(!anCamp||c.id===anCamp)&&(!anExclArmy||!c.army)&&(!anExclAgency||!c.agency)).map(c=>{
                 const cf=fdeals.filter(d=>d.cid===c.id); const spent=cf.reduce((s,d)=>s+totalPaid(d),0); const comm=cf.filter(d=>!["rejected","dropped","drop_requested","pending","renegotiate"].includes(d.status)).reduce((s,d)=>s+d.amount,0);
                 const pct=c.budget>0?Math.round(comm/c.budget*100):0;
                 return <div key={c.id} style={{marginBottom:"12px"}}>
@@ -5748,7 +5752,7 @@ return (
             {/* Export */}
             <div style={{textAlign:"right"}}>
               <Btn v="gold" onClick={()=>{
-                const rows=[["Metric","Value"],["Range",`${anFrom||"start"} to ${anTo||"now"}`],["Campaign",anCamp?(getCamp(anCamp)?.name||anCamp):(anExclArmy?"All (excl. Creator Army)":"All")],["Total deals",REAL.length],["Live deals",liveDeals.length],["In progress",inProgress.length],["Paid/closed",paidClosed.length],["Total spend",totalSpend],["Committed value",committedVal],["Outstanding",outstanding],["Avg deal value",avgDeal],["Go-live rate %",goLiveRate],["Videos live",videosLive],["Unique creators",uniqueCreators],[],["Executive","Deals closed","Money spent","Videos live","Go-live %"],...execs.map(e=>[e.name,e.closed,e.spent,e.videosLive,e.goLive])];
+                const rows=[["Metric","Value"],["Range",`${anFrom||"start"} to ${anTo||"now"}`],["Campaign",anCamp?(getCamp(anCamp)?.name||anCamp):("All"+[anExclArmy?"excl. Creator Army":null,anExclAgency?"excl. Agency":null].filter(Boolean).length?` (${[anExclArmy?"excl. Creator Army":null,anExclAgency?"excl. Agency":null].filter(Boolean).join(", ")})`:"")],["Total deals",REAL.length],["Live deals",liveDeals.length],["In progress",inProgress.length],["Paid/closed",paidClosed.length],["Total spend",totalSpend],["Committed value",committedVal],["Outstanding",outstanding],["Avg deal value",avgDeal],["Go-live rate %",goLiveRate],["Videos live",videosLive],["Unique creators",uniqueCreators],[],["Executive","Deals closed","Money spent","Videos live","Go-live %"],...execs.map(e=>[e.name,e.closed,e.spent,e.videosLive,e.goLive])];
                 const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
                 const blob=new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8;"}); const link=document.createElement("a"); link.href=URL.createObjectURL(blob); link.download=`analytics_${new Date().toISOString().slice(0,10)}.csv`; link.click();
                 notify("Report exported!");

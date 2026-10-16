@@ -172,6 +172,7 @@ async function loadFromSupabase() {
     product:d.product, amount:d.amount, status:d.status, cid:d.campaign_id,
     usage:d.usage_rights, deadline:d.deadline, profile:d.profile_link,
     phone:d.phone, address:d.address, by:d.created_by, at:d.created_at,
+    assignedTo:d.assigned_to||null, transferredFrom:d.transferred_from||null, transferredAt:d.transferred_at||null, transferredBy:d.transferred_by||null,
     appBy:d.approved_by, appAt:d.approved_at, ackAt:d.acknowledged_at, ackToken:d.acknowledge_token,
     adStatus:d.ad_status||null, usageDays:d.usage_days||null, usageEndDate:d.usage_end_date||null,
     adNotes:d.ad_notes||"", adPlatformLink:d.ad_platform_link||"",
@@ -388,10 +389,15 @@ export default function InvogueCollabHQ() {
   // & Users) can create Creator Army campaigns ONLY.
   const canCreateAnyCampaign = role==="approver"||role==="finance"||role==="admin";
   const canCreateArmyCampaign = canCreateAnyCampaign || !!loggedIn?.canCreateArmyCampaigns;
-  // Negotiators only ever see their own collabs. This is keyed on the REAL identity,
-  // so an admin previewing the negotiator view still sees everything.
+  // The person currently handling a collab: the handover assignee if transferred,
+  // otherwise the original creator. Analytics still use `by` (original creator).
+  const ownerOf = (d) => d?.assignedTo || d?.by;
+  // Collabs that can be handed over: active and not yet live (excludes live/paid & dead).
+  const TRANSFERABLE_STATUSES = ["pending","renegotiate","manager_approved","approved","email_sent","acknowledged","shipped","delivered_prod"];
+  // Negotiators only ever see the collabs they currently own. This is keyed on the
+  // REAL identity, so an admin previewing the negotiator view still sees everything.
   const deals = useMemo(
-    () => (realRole==="negotiator" && loggedIn?.name) ? rawDeals.filter(d=>d.by===loggedIn.name) : rawDeals,
+    () => (realRole==="negotiator" && loggedIn?.name) ? rawDeals.filter(d=>(d.assignedTo||d.by)===loggedIn.name) : rawDeals,
     [rawDeals, realRole, loggedIn]
   );
   const [view, setView] = useState("dashboard");
@@ -419,6 +425,7 @@ export default function InvogueCollabHQ() {
   const [campKind, setCampKind] = useState("regular"); // regular | army | all
   const [campMonthDraft, setCampMonthDraft] = useState(""); // month picker draft in campaign form
   const [shipF, setShipF] = useState({track:"",carrier:"DTDC",orderId:""});
+  const [handoverF, setHandoverF] = useState({from:"",to:"",sel:{}}); // deal handover module
   const [payF, setPayF] = useState({type:"advance",amount:"",note:""});
   const [invF, setInvF] = useState("");
   const [linkF, setLinkF] = useState("");
@@ -598,6 +605,7 @@ export default function InvogueCollabHQ() {
             product:d.product, amount:d.amount, status:d.status, cid:d.campaign_id,
             usage:d.usage_rights, deadline:d.deadline, profile:d.profile_link,
             phone:d.phone, address:d.address, by:d.created_by, at:d.created_at,
+            assignedTo:d.assigned_to||null, transferredFrom:d.transferred_from||null, transferredAt:d.transferred_at||null, transferredBy:d.transferred_by||null,
             appBy:d.approved_by, appAt:d.approved_at, ackAt:d.acknowledged_at, ackToken:d.acknowledge_token,
     adStatus:d.ad_status||null, usageDays:d.usage_days||null, usageEndDate:d.usage_end_date||null,
     adNotes:d.ad_notes||"", adPlatformLink:d.ad_platform_link||"",
@@ -836,6 +844,24 @@ export default function InvogueCollabHQ() {
     setDeals(ds=>ds.map(d=>d.id===id?{...d,logs:[...d.logs,{t:ts,u:user,a:action,d:detail}]}:d));
     supabase.from('audit_log').insert({deal_id:id,user_name:user,action,detail,created_at:ts}).then(({error})=>{if(error) console.error("Audit log insert failed:",error);});
   },[]);
+
+  // ── Deal handover: reassign a team member's pre-live collabs to another member.
+  // Ownership (assigned_to) changes so the new owner sees them in My Collabs, but
+  // analytics stay keyed to the original created_by, so the receiver gets no credit.
+  const transferDeals = async (dealIds, fromName, toName) => {
+    if(role!=="admin") return notify("Only an admin can transfer collabs","err");
+    if(!fromName||!toName) return notify("Pick both the from and to team members","err");
+    if(fromName===toName) return notify("Pick two different team members","err");
+    if(!dealIds||dealIds.length===0) return notify("Select at least one collab to transfer","err");
+    const ts = new Date().toISOString();
+    const admin = loggedIn?.name||"Admin";
+    const { error } = await supabase.from('deals').update({assigned_to:toName, transferred_from:fromName, transferred_at:ts, transferred_by:admin}).in('id',dealIds);
+    if(error){ console.error("Transfer failed:",error); return notify("Couldn't transfer: "+error.message,"err"); }
+    setDeals(ds=>ds.map(d=>dealIds.includes(d.id)?{...d, assignedTo:toName, transferredFrom:fromName, transferredAt:ts, transferredBy:admin}:d));
+    dealIds.forEach(id=>addLog(id, admin, "Collab transferred", `${fromName} → ${toName}`));
+    setModal(null); setHandoverF({from:"",to:"",sel:{}});
+    notify(`Transferred ${dealIds.length} collab${dealIds.length===1?"":"s"} from ${fromName} to ${toName}`);
+  };
 
   // ── Admin soft-delete (collabs & campaigns) — hidden from all budgets/analytics, restorable ──
   const deleteCollab = (d) => {
@@ -3900,7 +3926,10 @@ return (
               <div style={{fontSize:"30px",fontWeight:500,fontFamily:DISPLAY,letterSpacing:"-0.5px"}}>Team & User Management</div>
               <div style={{fontSize:"13px",color:T.sub}}>Create users, assign roles, manage access</div>
             </div>
-            <Btn v="gold" onClick={()=>{setUserF({name:"",email:"",role:"negotiator"});setModal("newUser")}}>+ Add Team Member</Btn>
+            <div style={{display:"flex",gap:"8px"}}>
+              <Btn v="outline" onClick={()=>{setHandoverF({from:"",to:"",sel:{}});setModal("handover")}}>🔁 Initiate Handover</Btn>
+              <Btn v="gold" onClick={()=>{setUserF({name:"",email:"",role:"negotiator"});setModal("newUser")}}>+ Add Team Member</Btn>
+            </div>
           </div>
 
           {/* Role summary */}
@@ -6501,6 +6530,42 @@ return (
       </Modal>
 
       {/* NEW USER */}
+      <Modal open={modal==="handover"} onClose={()=>{setModal(null);setHandoverF({from:"",to:"",sel:{}})}} title="🔁 Collab Handover" w={640} noBackdropClose>
+        {(()=>{
+          const activeNames = users.filter(u=>u.status==="active").map(u=>u.name).sort((a,b)=>a.localeCompare(b));
+          const fromName = handoverF.from;
+          const transferable = fromName ? rawDeals.filter(d=>!d.deleted && ownerOf(d)===fromName && TRANSFERABLE_STATUSES.includes(d.status)) : [];
+          const selIds = Object.keys(handoverF.sel).filter(id=>handoverF.sel[id]);
+          const allSelected = transferable.length>0 && transferable.every(d=>handoverF.sel[d.id]);
+          return <>
+            <div style={{fontSize:"12px",color:T.sub,marginBottom:"14px",lineHeight:1.6}}>Move a team member's active, not-yet-live collabs to another member. The new owner takes over the work and sees them in their collabs; analytics credit stays with the original creator, so the receiver isn't credited for closing them.</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px",marginBottom:"14px"}}>
+              <Field label="Transfer FROM *"><Sel value={handoverF.from} onChange={e=>setHandoverF({from:e.target.value,to:handoverF.to,sel:{}})} options={[{v:"",l:"Select employee…"},...activeNames.map(n=>({v:n,l:n}))]}/></Field>
+              <Field label="Transfer TO *"><Sel value={handoverF.to} onChange={e=>setHandoverF({...handoverF,to:e.target.value})} options={[{v:"",l:"Select employee…"},...activeNames.filter(n=>n!==handoverF.from).map(n=>({v:n,l:n}))]}/></Field>
+            </div>
+            {!fromName && <div style={{fontSize:"13px",color:T.sub,padding:"10px 0"}}>Pick an employee above to see their transferable collabs.</div>}
+            {fromName && transferable.length===0 && <div style={{fontSize:"13px",color:T.sub,padding:"10px 0"}}>{fromName} has no active, not-yet-live collabs to transfer.</div>}
+            {fromName && transferable.length>0 && <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}}>
+                <div style={{fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"1px",color:T.sub}}>Collabs · {selIds.length}/{transferable.length} selected</div>
+                <span onClick={()=>{const next={};if(!allSelected)transferable.forEach(d=>next[d.id]=true);setHandoverF(h=>({...h,sel:next}))}} style={{fontSize:"11px",fontWeight:700,color:T.brand,cursor:"pointer"}}>{allSelected?"Clear all":"Select all"}</span>
+              </div>
+              <div style={{border:`1px solid ${T.border}`,borderRadius:"2px",maxHeight:"300px",overflowY:"auto"}}>
+                {transferable.map((d,i,arr)=><label key={d.id} style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",borderBottom:i<arr.length-1?`1px solid ${T.borderSoft}`:"none",cursor:"pointer",fontSize:"13px"}}>
+                  <input type="checkbox" checked={!!handoverF.sel[d.id]} onChange={e=>setHandoverF(h=>({...h,sel:{...h.sel,[d.id]:e.target.checked}}))} style={{cursor:"pointer"}}/>
+                  <div style={{flex:1,minWidth:0}}><b>{d.inf}</b> <span style={{color:T.sub}}>· {d.collabId||"—"} · {d.products?d.products.map(p=>p.name).join(", "):(d.product||"—")}</span></div>
+                  <Badge s={d.status}/>
+                </label>)}
+              </div>
+            </div>}
+            <div style={{display:"flex",justifyContent:"flex-end",gap:"8px",marginTop:"16px"}}>
+              <Btn v="outline" onClick={()=>{setModal(null);setHandoverF({from:"",to:"",sel:{}})}}>Cancel</Btn>
+              <Btn v="gold" disabled={!handoverF.from||!handoverF.to||selIds.length===0} onClick={()=>transferDeals(selIds,handoverF.from,handoverF.to)}>Transfer{selIds.length>0?` ${selIds.length} collab${selIds.length===1?"":"s"}`:""}</Btn>
+            </div>
+          </>;
+        })()}
+      </Modal>
+
       <Modal open={modal==="newUser"} onClose={()=>setModal(null)} title="Add Team Member" w={440} noBackdropClose>
         <Field label="Full Name *"><Inp value={userF.name} onChange={e=>setUserF({...userF,name:e.target.value})} placeholder="Priya Mehta"/></Field>
         <Field label="Email *"><Inp value={userF.email} onChange={e=>setUserF({...userF,email:e.target.value})} placeholder="priya@invogue.shop" type="email"/></Field>
@@ -6695,6 +6760,7 @@ return (
                 <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
                   <span style={{fontSize:"10px",letterSpacing:"2.5px",textTransform:"uppercase",color:T.gold,fontWeight:600}}>Collab · {sel.collabId||"—"}</span>
                   {infRec&&<span onClick={()=>{setModal(null);setSel(null);setInfProfile(infRec)}} style={{fontSize:"10px",letterSpacing:"1px",textTransform:"uppercase",color:T.sub,cursor:"pointer",fontWeight:700}}>★ Profile</span>}
+                  {sel.assignedTo&&<span title={sel.transferredAt?`Transferred ${toDateOnly(sel.transferredAt)}${sel.transferredBy?` by ${sel.transferredBy}`:""}`:""} style={{fontSize:"9px",letterSpacing:"0.5px",textTransform:"uppercase",fontWeight:700,color:T.info,background:T.infoBg,padding:"3px 8px",borderRadius:"2px"}}>🔁 Transferred: {sel.transferredFrom||sel.by} → {sel.assignedTo}</span>}
                 </div>
                 <button onClick={()=>{setModal(null);setSel(null)}} style={{background:"transparent",border:"none",fontSize:"18px",cursor:"pointer",color:T.faint,lineHeight:1}}>×</button>
               </div>

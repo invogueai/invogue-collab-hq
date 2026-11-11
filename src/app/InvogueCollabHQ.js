@@ -118,6 +118,7 @@ async function loadFromSupabase() {
     role:u.role, status:u.status, avatar:u.avatar||u.name?.slice(0,2).toUpperCase(),
     created:u.created_at?.slice(0,10)||'', monthlyBudget:u.monthly_budget??50000,
     canCreateArmyCampaigns:u.can_create_army_campaigns||false,
+    canCreateRegularCampaigns:u.can_create_regular_campaigns||false,
   }));
 
   const campaigns = (campaignsRes.data||[]).map(c => ({
@@ -387,8 +388,9 @@ export default function InvogueCollabHQ() {
   // Campaign-creation access. Manager/Finance/Admin can create any campaign type.
   // Any user with the per-user "can_create_army_campaigns" permission (set in Team
   // & Users) can create Creator Army campaigns ONLY.
-  const canCreateAnyCampaign = role==="approver"||role==="finance"||role==="admin";
-  const canCreateArmyCampaign = canCreateAnyCampaign || !!loggedIn?.canCreateArmyCampaigns;
+  const canCreateAnyCampaign = role==="approver"||role==="finance"||role==="admin"; // all types incl. agency
+  const canCreateRegularCampaign = canCreateAnyCampaign || !!loggedIn?.canCreateRegularCampaigns; // regular (+army)
+  const canCreateArmyCampaign = canCreateRegularCampaign || !!loggedIn?.canCreateArmyCampaigns; // any campaign access
   // The person currently handling a collab: the handover assignee if transferred,
   // otherwise the original creator. Analytics still use `by` (original creator).
   const ownerOf = (d) => d?.assignedTo || d?.by;
@@ -658,6 +660,7 @@ export default function InvogueCollabHQ() {
           role:u.role, status:u.status, avatar:u.avatar||u.name?.slice(0,2).toUpperCase(),
           created:u.created_at?.slice(0,10)||'', monthlyBudget:u.monthly_budget??50000,
           canCreateArmyCampaigns:u.can_create_army_campaigns||false,
+          canCreateRegularCampaigns:u.can_create_regular_campaigns||false,
         })));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'influencers' }, async () => {
@@ -1640,12 +1643,13 @@ export default function InvogueCollabHQ() {
   };
 
   const createCampaign = async () => {
-    // Access control: Manager/Finance/Admin can create or edit any campaign;
-    // granted negotiators (e.g. Ishika Jain) can create Creator Army campaigns only.
+    // Access control: Manager/Finance/Admin can create or edit any campaign (incl. agency);
+    // granted users can create regular (+army) or army-only, per their per-user permission.
     if(!canCreateArmyCampaign) return notify("You don't have access to create campaigns","err");
     if(!canCreateAnyCampaign){
       if(editingCampId) return notify("You don't have access to edit campaigns","err");
-      if(!nCamp.army || nCamp.agency) return notify("You can only create Creator Army campaigns","err");
+      if(nCamp.agency) return notify("You don't have access to create agency campaigns","err");
+      if(!nCamp.army && !canCreateRegularCampaign) return notify("You can only create Creator Army campaigns","err");
     }
     if(!nCamp.name||!nCamp.target) return notify("Campaign name and target are required","err");
     if(+nCamp.budget < 0) return notify("Budget can't be negative","err");  // 0 = no campaign cap (budgets are per-member)
@@ -3920,6 +3924,12 @@ return (
           notify(val?"Granted Creator Army campaign access":"Revoked Creator Army campaign access");
         };
 
+        const setRegularAccess = (userId,val) => {
+          supabase.from('users').update({can_create_regular_campaigns:val}).eq('id',userId).then(({error})=>{if(error){console.error("Regular access update failed:",error);notify("Failed to update access","err");}});
+          setUsers(prev=>prev.map(u=>u.id===userId?{...u,canCreateRegularCampaigns:val}:u));
+          notify(val?"Granted regular campaign access (also covers Army)":"Revoked regular campaign access");
+        };
+
         return <>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px"}}>
             <div>
@@ -4001,7 +4011,8 @@ return (
                 </div>
                 <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
                   <Btn v={u.status==="active"?"outline":"ok"} sm onClick={()=>toggleUserStatus(u.id)}>{u.status==="active"?"Deactivate":"Activate"}</Btn>
-                  {!["approver","finance","admin"].includes(u.role)&&<Btn v={u.canCreateArmyCampaigns?"gold":"outline"} sm onClick={()=>setArmyAccess(u.id,!u.canCreateArmyCampaigns)}>{u.canCreateArmyCampaigns?"🎖 Army ✓":"🎖 Army access"}</Btn>}
+                  {!["approver","finance","admin"].includes(u.role)&&<Btn v={u.canCreateRegularCampaigns?"gold":"outline"} sm onClick={()=>setRegularAccess(u.id,!u.canCreateRegularCampaigns)}>{u.canCreateRegularCampaigns?"🎯 Campaigns ✓":"🎯 Campaign access"}</Btn>}
+                  {!["approver","finance","admin"].includes(u.role)&&!u.canCreateRegularCampaigns&&<Btn v={u.canCreateArmyCampaigns?"gold":"outline"} sm onClick={()=>setArmyAccess(u.id,!u.canCreateArmyCampaigns)}>{u.canCreateArmyCampaigns?"🎖 Army ✓":"🎖 Army only"}</Btn>}
                 </div>
               </div>;
             })}
@@ -5944,7 +5955,7 @@ return (
               <div style={{fontSize:"10px",letterSpacing:"3px",textTransform:"uppercase",color:T.gold,fontWeight:600,marginBottom:"10px"}}>{campaigns.filter(c=>c.status==="active").length} active · {f(campaigns.reduce((s,c)=>s+campCommitted(c.id),0))} committed</div>
               <div style={{fontFamily:DISPLAY,fontSize:"32px",fontWeight:500,letterSpacing:"-0.5px"}}>Campaigns</div>
             </div>
-            {canCreateArmyCampaign&&<Btn v="gold" onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:canCreateAnyCampaign?campKind==="army":true,agency:canCreateAnyCampaign?campKind==="agency":false,agencyName:"",agencyPayout:"",enabled:true,months:[],noAdRights:false});setModal("newCamp")}}>{canCreateAnyCampaign?"+ New Campaign":"+ New Army Campaign"}</Btn>}
+            {canCreateArmyCampaign&&<Btn v="gold" onClick={()=>{setEditingCampId(null);setNCamp({name:"",budget:"",target:"",deadline:"",brief:"",status:"active",army:canCreateRegularCampaign?campKind==="army":true,agency:canCreateAnyCampaign?campKind==="agency":false,agencyName:"",agencyPayout:"",enabled:true,months:[],noAdRights:false});setModal("newCamp")}}>{canCreateRegularCampaign?"+ New Campaign":"+ New Army Campaign"}</Btn>}
           </div>
           <div style={{display:"flex",gap:"7px",marginBottom:"16px"}}>
             {(()=>{const kindOf=c=>c.army?"army":c.agency?"agency":"regular";const kcount=k=>campaigns.filter(c=>k==="all"?true:kindOf(c)===k).length;return [{k:"regular",l:"Regular"},{k:"army",l:"🎖 Creator Army"},{k:"agency",l:"🏢 Agency"},{k:"all",l:"All"}].map(t=><button key={t.k} onClick={()=>setCampKind(t.k)} style={{padding:"6px 12px",border:`1px solid ${campKind===t.k?T.brand:T.border}`,borderRadius:"2px",background:campKind===t.k?T.brand:T.surface,color:campKind===t.k?"#fff":T.sub,fontSize:"10px",fontWeight:700,letterSpacing:"0.5px",textTransform:"uppercase",cursor:"pointer",fontFamily:T.ui}}>{t.l} ({kcount(t.k)})</button>)})()}
@@ -6333,7 +6344,10 @@ return (
             <input type="checkbox" checked={!!nCamp.agency} disabled={!!nCamp.army} onChange={e=>setNCamp({...nCamp,agency:e.target.checked,...(e.target.checked?{agency:false}:{})})} style={{cursor:"pointer"}}/>
             <span>🏢 <b>Agency-managed campaign</b> — collabs skip the confirmation email & per-creator payment; payment is due to the agency at campaign end</span>
           </label>
-          </> : <div style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",background:T.goldSoft,border:`1px solid ${T.gold}`,borderRadius:"2px",fontSize:"13px",marginTop:"4px"}}>
+          </> : canCreateRegularCampaign ? <label style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",background:nCamp.army?T.goldSoft:"transparent",border:`1px solid ${nCamp.army?T.gold:T.border}`,borderRadius:"2px",cursor:"pointer",fontSize:"13px",marginTop:"4px"}}>
+            <input type="checkbox" checked={!!nCamp.army} onChange={e=>setNCamp({...nCamp,army:e.target.checked,agency:false})} style={{cursor:"pointer"}}/>
+            <span>🎖 <b>Creator Army campaign</b> — tick for a Creator Army campaign; leave unticked for a regular one. (Agency campaigns need Manager/Finance/Admin.)</span>
+          </label> : <div style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",background:T.goldSoft,border:`1px solid ${T.gold}`,borderRadius:"2px",fontSize:"13px",marginTop:"4px"}}>
             <span>🎖 <b>Creator Army campaign</b> — your access is limited to creating Army campaigns.</span>
           </div>}
           {nCamp.agency&&<div style={{marginTop:"8px",padding:"10px 12px",background:T.goldSoft,border:`1px solid ${T.gold}44`,borderRadius:"2px"}}>

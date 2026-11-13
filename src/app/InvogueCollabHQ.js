@@ -848,6 +848,28 @@ export default function InvogueCollabHQ() {
     supabase.from('audit_log').insert({deal_id:id,user_name:user,action,detail,created_at:ts}).then(({error})=>{if(error) console.error("Audit log insert failed:",error);});
   },[]);
 
+  // ── Product catalog persistence (DB-backed; was a hardcoded list that reset on reload) ──
+  const loadProducts = useCallback(async () => {
+    const {data,error} = await supabase.from('products').select('*').order('created_at',{ascending:true});
+    if(error){ console.error("Load products failed:",error); return; }
+    if(data && data.length) setProductCatalog(data.map(p=>({id:p.id,name:p.name,sizes:p.sizes||[],colors:p.colors||[],...(Array.isArray(p.cuts)&&p.cuts.length?{cuts:p.cuts}:{})})));
+  },[]);
+  useEffect(()=>{ if(loggedIn) loadProducts(); },[loggedIn,loadProducts]);
+  const addProductDB = async (prod) => {
+    const {error} = await supabase.from('products').insert({id:prod.id,name:prod.name,sizes:prod.sizes||[],colors:prod.colors||[],cuts:prod.cuts||[]});
+    if(error){ console.error("Add product failed:",error); notify("Failed to save product: "+(error.message||"error"),"err"); return false; }
+    setProductCatalog(prev=>[...prev,prod]); return true;
+  };
+  const deleteProductDB = async (id) => {
+    const {error} = await supabase.from('products').delete().eq('id',id);
+    if(error){ console.error("Delete product failed:",error); notify("Failed to remove product","err"); return; }
+    setProductCatalog(prev=>prev.filter(x=>x.id!==id));
+  };
+  const persistProductFields = (id, patch) => {
+    setProductCatalog(prev=>prev.map(x=>x.id===id?{...x,...patch}:x));
+    supabase.from('products').update(patch).eq('id',id).then(({error})=>{if(error){console.error("Product update failed:",error);notify("Failed to save product change","err");}});
+  };
+
   // ── Deal handover: reassign a team member's pre-live collabs to another member.
   // Ownership (assigned_to) changes so the new owner sees them in My Collabs, but
   // analytics stay keyed to the original created_by, so the receiver gets no credit.
@@ -4914,11 +4936,12 @@ return (
                 <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Name</label><Inp value={newProduct.name} onChange={e=>setNewProduct({...newProduct,name:e.target.value})} placeholder="Product name"/></div>
                 <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Sizes (comma-sep)</label><Inp value={newProduct.sizes} onChange={e=>setNewProduct({...newProduct,sizes:e.target.value})} placeholder="XS,S,M,L,XL"/></div>
                 <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Colors (comma-sep)</label><Inp value={newProduct.colors} onChange={e=>setNewProduct({...newProduct,colors:e.target.value})} placeholder="Black,Beige"/></div>
-                <Btn v="ok" sm onClick={()=>{
+                <Btn v="ok" sm onClick={async ()=>{
                   if(!newProduct.name) return notify("Product name required","err");
                   if(productCatalog.some(x=>x.name.toLowerCase()===newProduct.name.trim().toLowerCase())) return notify("Product already exists","err");
-                  const p = {id:uid(),name:newProduct.name.trim(),sizes:newProduct.sizes.split(',').map(s=>s.trim()).filter(Boolean),colors:newProduct.colors.split(',').map(s=>s.trim()).filter(Boolean)};
-                  setProductCatalog(prev=>[...prev,p]);
+                  const p = {id:uid(),name:newProduct.name.trim(),sizes:newProduct.sizes.split(',').map(s=>s.trim()).filter(Boolean),colors:newProduct.colors.split(',').map(s=>s.trim()).filter(Boolean),cuts:[]};
+                  const ok = await addProductDB(p);
+                  if(!ok) return;
                   setNewProduct({name:'',sizes:'',colors:''});
                   notify("Product added!");
                 }}>+ Add</Btn>
@@ -4930,17 +4953,17 @@ return (
                   <div style={{fontWeight:700,fontSize:"13px"}}>{p.name}</div>
                   {showProductMgmt&&<div style={{display:"flex",gap:"4px"}}>
                     <Btn v="gold" sm onClick={()=>{setEditingProduct(editingProduct===p.id?null:p.id);setEditVariant({size:'',color:''})}}>{editingProduct===p.id?"Done":"Edit"}</Btn>
-                    <Btn v="danger" sm onClick={()=>{if(confirm("Remove "+p.name+"?"))setProductCatalog(prev=>prev.filter(x=>x.id!==p.id))}}>✕</Btn>
+                    <Btn v="danger" sm onClick={()=>{if(confirm("Remove "+p.name+"?"))deleteProductDB(p.id)}}>✕</Btn>
                   </div>}
                 </div>
                 <div style={{fontSize:"11px",color:T.sub,marginTop:"4px"}}>
-                  <span style={{fontWeight:600}}>Sizes:</span> {p.sizes.length?p.sizes.map((s,i)=><span key={s} style={{display:"inline-block",background:T.surfaceAlt,borderRadius:"3px",padding:"1px 5px",margin:"1px 2px",fontSize:"10px"}}>{s}{editingProduct===p.id&&<span onClick={()=>{if(p.sizes.length<=1) return notify("Need at least 1 size","err");setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,sizes:x.sizes.filter((_,j)=>j!==i)}:x))}} style={{cursor:"pointer",color:T.err,marginLeft:"3px",fontWeight:700}}>×</span>}</span>):<span style={{color:T.sub,fontStyle:"italic"}}>None</span>}
+                  <span style={{fontWeight:600}}>Sizes:</span> {p.sizes.length?p.sizes.map((s,i)=><span key={s} style={{display:"inline-block",background:T.surfaceAlt,borderRadius:"3px",padding:"1px 5px",margin:"1px 2px",fontSize:"10px"}}>{s}{editingProduct===p.id&&<span onClick={()=>{if(p.sizes.length<=1) return notify("Need at least 1 size","err");persistProductFields(p.id,{sizes:p.sizes.filter((_,j)=>j!==i)})}} style={{cursor:"pointer",color:T.err,marginLeft:"3px",fontWeight:700}}>×</span>}</span>):<span style={{color:T.sub,fontStyle:"italic"}}>None</span>}
                 </div>
                 <div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>
-                  <span style={{fontWeight:600}}>Colors:</span> {p.colors.length?p.colors.map((c,i)=><span key={c} style={{display:"inline-block",background:T.surfaceAlt,borderRadius:"3px",padding:"1px 5px",margin:"1px 2px",fontSize:"10px"}}>{c}{editingProduct===p.id&&<span onClick={()=>{setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,colors:x.colors.filter((_,j)=>j!==i)}:x))}} style={{cursor:"pointer",color:T.err,marginLeft:"3px",fontWeight:700}}>×</span>}</span>):<span style={{color:T.sub,fontStyle:"italic"}}>None</span>}
+                  <span style={{fontWeight:600}}>Colors:</span> {p.colors.length?p.colors.map((c,i)=><span key={c} style={{display:"inline-block",background:T.surfaceAlt,borderRadius:"3px",padding:"1px 5px",margin:"1px 2px",fontSize:"10px"}}>{c}{editingProduct===p.id&&<span onClick={()=>{persistProductFields(p.id,{colors:p.colors.filter((_,j)=>j!==i)})}} style={{cursor:"pointer",color:T.err,marginLeft:"3px",fontWeight:700}}>×</span>}</span>):<span style={{color:T.sub,fontStyle:"italic"}}>None</span>}
                 </div>
                 {((p.cuts&&p.cuts.length)||editingProduct===p.id)?<div style={{fontSize:"11px",color:T.sub,marginTop:"2px"}}>
-                  <span style={{fontWeight:600}}>Cuts:</span> {(p.cuts&&p.cuts.length)?p.cuts.map((c,i)=><span key={c} style={{display:"inline-block",background:T.surfaceAlt,borderRadius:"3px",padding:"1px 5px",margin:"1px 2px",fontSize:"10px"}}>{c}{editingProduct===p.id&&<span onClick={()=>{setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,cuts:(x.cuts||[]).filter((_,j)=>j!==i)}:x))}} style={{cursor:"pointer",color:T.err,marginLeft:"3px",fontWeight:700}}>×</span>}</span>):<span style={{color:T.sub,fontStyle:"italic"}}>None</span>}
+                  <span style={{fontWeight:600}}>Cuts:</span> {(p.cuts&&p.cuts.length)?p.cuts.map((c,i)=><span key={c} style={{display:"inline-block",background:T.surfaceAlt,borderRadius:"3px",padding:"1px 5px",margin:"1px 2px",fontSize:"10px"}}>{c}{editingProduct===p.id&&<span onClick={()=>{persistProductFields(p.id,{cuts:(p.cuts||[]).filter((_,j)=>j!==i)})}} style={{cursor:"pointer",color:T.err,marginLeft:"3px",fontWeight:700}}>×</span>}</span>):<span style={{color:T.sub,fontStyle:"italic"}}>None</span>}
                 </div>:null}
                 <div style={{fontSize:"10px",color:T.sub,marginTop:"2px"}}>{p.sizes.length*(p.colors.length||1)*((p.cuts&&p.cuts.length)||1)} variant{p.sizes.length*(p.colors.length||1)*((p.cuts&&p.cuts.length)||1)!==1?'s':''}</div>
                 {editingProduct===p.id&&<div style={{marginTop:"8px",padding:"8px",background:T.surfaceAlt,borderRadius:"2px",border:`1px dashed ${T.gold}`}}>
@@ -4950,21 +4973,21 @@ return (
                     <Btn v="ok" sm onClick={()=>{
                       const s=editVariant.size.trim();if(!s) return notify("Enter a size","err");
                       if(p.sizes.some(x=>x.toLowerCase()===s.toLowerCase())) return notify("Size already exists","err");
-                      setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,sizes:[...x.sizes,s]}:x));
+                      persistProductFields(p.id,{sizes:[...p.sizes,s]});
                       setEditVariant({...editVariant,size:''});notify("Size "+s+" added!");
                     }}>+ Size</Btn>
                     <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>New Color</label><Inp value={editVariant.color} onChange={e=>setEditVariant({...editVariant,color:e.target.value})} placeholder="e.g. White" style={{width:"100px"}}/></div>
                     <Btn v="ok" sm onClick={()=>{
                       const c=editVariant.color.trim();if(!c) return notify("Enter a color","err");
                       if(p.colors.some(x=>x.toLowerCase()===c.toLowerCase())) return notify("Color already exists","err");
-                      setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,colors:[...x.colors,c]}:x));
+                      persistProductFields(p.id,{colors:[...p.colors,c]});
                       setEditVariant({...editVariant,color:''});notify("Color "+c+" added!");
                     }}>+ Color</Btn>
                     <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>New Cut</label><Inp value={editVariant.cut||''} onChange={e=>setEditVariant({...editVariant,cut:e.target.value})} placeholder="e.g. Brief Style" style={{width:"120px"}}/></div>
                     <Btn v="ok" sm onClick={()=>{
                       const c=(editVariant.cut||'').trim();if(!c) return notify("Enter a cut","err");
                       if((p.cuts||[]).some(x=>x.toLowerCase()===c.toLowerCase())) return notify("Cut already exists","err");
-                      setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,cuts:[...(x.cuts||[]),c]}:x));
+                      persistProductFields(p.id,{cuts:[...(p.cuts||[]),c]});
                       setEditVariant({...editVariant,cut:''});notify("Cut "+c+" added!");
                     }}>+ Cut</Btn>
                   </div>
@@ -4974,7 +4997,7 @@ return (
                       const raw=editVariant.bulkSizes||'';const arr=raw.split(',').map(s=>s.trim()).filter(Boolean);if(!arr.length) return notify("Enter sizes","err");
                       const existing=new Set(p.sizes.map(s=>s.toLowerCase()));const fresh=arr.filter(s=>!existing.has(s.toLowerCase()));
                       if(!fresh.length) return notify("All sizes already exist","err");
-                      setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,sizes:[...x.sizes,...fresh]}:x));
+                      persistProductFields(p.id,{sizes:[...p.sizes,...fresh]});
                       setEditVariant({...editVariant,bulkSizes:''});notify(fresh.length+" size(s) added!");
                     }}>+ Bulk Add</Btn>
                     <div><label style={{fontSize:"10px",fontWeight:700,color:T.sub}}>Bulk Colors (comma-sep)</label><Inp value={editVariant.bulkColors||''} onChange={e=>setEditVariant({...editVariant,bulkColors:e.target.value})} placeholder="Black,Beige,Brown" style={{width:"200px"}}/></div>
@@ -4982,7 +5005,7 @@ return (
                       const raw=editVariant.bulkColors||'';const arr=raw.split(',').map(s=>s.trim()).filter(Boolean);if(!arr.length) return notify("Enter colors","err");
                       const existing=new Set(p.colors.map(c=>c.toLowerCase()));const fresh=arr.filter(c=>!existing.has(c.toLowerCase()));
                       if(!fresh.length) return notify("All colors already exist","err");
-                      setProductCatalog(prev=>prev.map(x=>x.id===p.id?{...x,colors:[...x.colors,...fresh]}:x));
+                      persistProductFields(p.id,{colors:[...p.colors,...fresh]});
                       setEditVariant({...editVariant,bulkColors:''});notify(fresh.length+" color(s) added!");
                     }}>+ Bulk Add</Btn>
                   </div>

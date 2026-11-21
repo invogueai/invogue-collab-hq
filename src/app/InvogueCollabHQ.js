@@ -82,6 +82,11 @@ const genCollabId = () => "INV-" + Date.now().toString(36).toUpperCase().slice(-
 // ─── INPUT VALIDATION HELPERS ───
 const validPhone = v => { const d = (v||'').replace(/[\s\-+]/g,'').replace(/^91/,''); return /^\d{10}$/.test(d); };
 const cleanPhone = v => { const d = (v||'').replace(/[\s\-+]/g,'').replace(/^91/,''); return /^\d{10}$/.test(d) ? d : v; };
+// Stable identity key for a creator: last 10 digits of the phone. Used to link a
+// creator's collabs even when the name was typed differently across deals.
+const phoneKey = v => { const d = (v||'').replace(/\D/g,''); return d.length>=10 ? d.slice(-10) : ''; };
+// Two deals/records are the same creator if their phones match; otherwise fall back to name.
+const sameCreator = (a,b) => { const pa=phoneKey(a?.phone), pb=phoneKey(b?.phone); if(pa&&pb) return pa===pb; return (a?.inf||a?.name||'').trim().toLowerCase() === (b?.inf||b?.name||'').trim().toLowerCase(); };
 const validUrl = v => { if(!v) return false; const s = v.trim(); return /^https?:\/\/.+/.test(s) || /^[a-zA-Z0-9][\w\-]*\.[a-zA-Z]{2,}/.test(s); };
 
 // ─── SUPABASE DATA LAYER ───
@@ -6271,7 +6276,7 @@ return (
 
           {/* Historical rates for returning influencer */}
           {nDeal.inf && nDeal.inf.length > 2 && (()=>{
-            const pastDeals = deals.filter(d => d.inf?.toLowerCase() === nDeal.inf?.toLowerCase() && d.status !== 'rejected' && d.status !== 'dropped');
+            const pastDeals = deals.filter(d => sameCreator(d, nDeal) && d.status !== 'rejected' && d.status !== 'dropped');
             if(pastDeals.length === 0) return null;
             const avgRate = Math.round(pastDeals.reduce((s,d)=>s+d.amount,0)/pastDeals.length);
             return <div style={{padding:"10px 12px",background:T.infoBg,border:`1px solid ${T.info}33`,borderRadius:"2px",marginBottom:"8px",fontSize:"12px"}}>
@@ -6857,7 +6862,7 @@ return (
               {sel.address&&!perfHide&&<div style={{padding:"10px 12px",background:T.infoBg,borderRadius:"2px",marginBottom:"20px",fontSize:"13px"}}><span style={{fontWeight:700,color:T.info}}>📍 Address:</span> {sel.address}</div>}
               {(()=>{
                 // All other collaborations with this creator (any status, any date), most recent first.
-                const past = deals.filter(x=>x.inf===sel.inf && x.id!==sel.id).sort((a,b)=>new Date(b.at)-new Date(a.at));
+                const past = deals.filter(x=>sameCreator(x,sel) && x.id!==sel.id).sort((a,b)=>new Date(b.at)-new Date(a.at));
                 return <div style={{marginBottom:"22px"}}>
                   <div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:"10px"}}>Previous Collaborations <span style={{color:T.gold}}>({past.length})</span></div>
                   {past.length===0

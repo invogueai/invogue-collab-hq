@@ -179,6 +179,7 @@ async function loadFromSupabase() {
     usage:d.usage_rights, deadline:d.deadline, profile:d.profile_link,
     phone:d.phone, address:d.address, by:d.created_by, at:d.created_at,
     assignedTo:d.assigned_to||null, transferredFrom:d.transferred_from||null, transferredAt:d.transferred_at||null, transferredBy:d.transferred_by||null,
+    statusBeforeDrop:d.status_before_drop||null,
     appBy:d.approved_by, appAt:d.approved_at, ackAt:d.acknowledged_at, ackToken:d.acknowledge_token,
     adStatus:d.ad_status||null, usageDays:d.usage_days||null, usageEndDate:d.usage_end_date||null,
     adNotes:d.ad_notes||"", adPlatformLink:d.ad_platform_link||"",
@@ -613,6 +614,7 @@ export default function InvogueCollabHQ() {
             usage:d.usage_rights, deadline:d.deadline, profile:d.profile_link,
             phone:d.phone, address:d.address, by:d.created_by, at:d.created_at,
             assignedTo:d.assigned_to||null, transferredFrom:d.transferred_from||null, transferredAt:d.transferred_at||null, transferredBy:d.transferred_by||null,
+            statusBeforeDrop:d.status_before_drop||null,
             appBy:d.approved_by, appAt:d.approved_at, ackAt:d.acknowledged_at, ackToken:d.acknowledge_token,
     adStatus:d.ad_status||null, usageDays:d.usage_days||null, usageEndDate:d.usage_end_date||null,
     adNotes:d.ad_notes||"", adPlatformLink:d.ad_platform_link||"",
@@ -2577,7 +2579,7 @@ export default function InvogueCollabHQ() {
     const allRequiredLive = checkDels.every(dl=>dl.st==="live");
     const newStatus = allRequiredLive ? "live" : "partial_live";
     // Only advance the collab once a required (Reel) deliverable is actually live.
-    const shouldUpdateStatus = anyRequiredLive && ["email_sent","acknowledged","shipped","delivered_prod","partial_live"].includes(deal.status);
+    const shouldUpdateStatus = anyRequiredLive && ["manager_approved","approved","email_sent","acknowledged","shipped","delivered_prod","partial_live"].includes(deal.status);
     const delId = deal.dels[delIdx].id;
 
     supabase.from('deliverables').update({status:'live',live_link:link,marked_live_at:liveTs,history:liveHistory}).eq('id',delId).then(({error})=>{if(error) console.error("Mark live save failed:",error);});
@@ -3357,9 +3359,10 @@ ${bodies}</body></html>`);
       addLog(d.id,userName,"Collab dropped (admin)",`Reason: ${reason}`);
       notify("Collab dropped","warn");
     } else {
-      // Negotiator: request drop → needs manager approval
-      supabase.from('deals').update({status:'drop_requested',renegotiation_note:reason}).eq('id',d.id).then(({error})=>{if(error) console.error("Drop request failed:",error);});
-      upDeal(d.id,{status:"drop_requested",dropReason:reason});
+      // Negotiator: request drop → needs manager approval. Remember the current stage
+      // so a rejection restores it (instead of downgrading to 'approved').
+      supabase.from('deals').update({status:'drop_requested',status_before_drop:d.status,renegotiation_note:reason}).eq('id',d.id).then(({error})=>{if(error) console.error("Drop request failed:",error);});
+      upDeal(d.id,{status:"drop_requested",statusBeforeDrop:d.status,dropReason:reason});
       addLog(d.id,userName,"Drop requested — awaiting manager approval",`Reason: ${reason}`);
       notify("Drop request sent to manager for approval");
     }
@@ -3385,9 +3388,9 @@ ${bodies}</body></html>`);
     if(role!=="approver"&&role!=="admin") return notify("Only Manager or Admin can reject drop requests","err");
     const userName = loggedIn?.name||"Manager";
     const prevStatus = d.statusBeforeDrop || "approved";
-    supabase.from('deals').update({status:'approved',renegotiation_note:null}).eq('id',d.id).then(({error})=>{if(error) console.error("Drop rejection failed:",error);});
-    upDeal(d.id,{status:"approved",dropReason:null});
-    addLog(d.id,userName,"Drop request rejected — collab restored","");
+    supabase.from('deals').update({status:prevStatus,status_before_drop:null,renegotiation_note:null}).eq('id',d.id).then(({error})=>{if(error) console.error("Drop rejection failed:",error);});
+    upDeal(d.id,{status:prevStatus,statusBeforeDrop:null,dropReason:null});
+    addLog(d.id,userName,"Drop request rejected — collab restored",prevStatus!=="approved"?`Restored to ${STATUS_CFG[prevStatus]?.l||prevStatus}`:"");
     setSel(null);
     setModal(null);
     notify("Drop request rejected — collab restored");
